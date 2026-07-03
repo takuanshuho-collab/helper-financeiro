@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditoria Técnica — Helper Financeiro v2</title>
+<style>
+  :root{
+    --paper:#FAFBFD; --panel:#FFFFFF; --ink:#182430; --ink-2:#44566A; --ink-3:#7A8A9B;
+    --line:#DDE4EC; --primary:#1F4E79; --primary-soft:#EAF1F8;
+    --good:#2E7D5B; --good-bg:#EAF5F0; --warn:#A97417; --warn-bg:#FBF3E3; --crit:#A93A3A; --crit-bg:#F9ECEC;
+    --mono:"Cascadia Code",Consolas,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font:15px/1.65 "Segoe UI","Segoe UI Variable",system-ui,-apple-system,sans-serif;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding:0 24px 96px}
+  a{color:var(--primary)}
+  code{font-family:var(--mono); font-size:.86em; background:var(--primary-soft); padding:.1em .35em; border-radius:3px; white-space:nowrap}
+  h2{font-size:22px; margin:0 0 6px; letter-spacing:-.01em; text-wrap:balance}
+  h3{font-size:16px; margin:26px 0 8px}
+  p{margin:.6em 0; max-width:72ch}
+  section{margin-top:56px}
+  .eyebrow{
+    font-size:11px; font-weight:600; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--primary); margin-bottom:10px; display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::after{content:""; flex:1; height:1px; background:var(--line)}
+  .muted{color:var(--ink-2)}
+  .small{font-size:13px; color:var(--ink-3)}
+
+  /* header */
+  header{border-bottom:3px solid var(--primary); padding:52px 0 30px; margin-bottom:40px}
+  header .kicker{font-size:12px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--primary)}
+  header h1{font-size:clamp(28px,5vw,40px); line-height:1.15; margin:10px 0 8px; letter-spacing:-.02em; text-wrap:balance}
+  header .sub{font-size:16px; color:var(--ink-2); max-width:62ch}
+  .meta{display:flex; flex-wrap:wrap; gap:8px 28px; margin-top:20px; font-size:13px; color:var(--ink-3)}
+  .meta b{color:var(--ink-2); font-weight:600}
+
+  /* scorecard */
+  .scores{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-top:20px}
+  .score{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 16px}
+  .score .lbl{font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3)}
+  .score .val{font:600 26px/1.2 var(--mono); font-variant-numeric:tabular-nums; margin-top:4px}
+  .score .note{font-size:12px; color:var(--ink-2); margin-top:2px}
+  .v-good{color:var(--good)} .v-warn{color:var(--warn)} .v-crit{color:var(--crit)}
+
+  /* pills */
+  .pill{display:inline-block; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+        padding:2px 9px; border-radius:99px; vertical-align:middle}
+  .pill-good{background:var(--good-bg); color:var(--good)}
+  .pill-warn{background:var(--warn-bg); color:var(--warn)}
+  .pill-crit{background:var(--crit-bg); color:var(--crit)}
+  .pill-info{background:var(--primary-soft); color:var(--primary)}
+
+  /* cards de achados */
+  .finding{background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--line);
+           border-radius:5px; padding:16px 18px; margin:12px 0}
+  .finding.crit{border-left-color:var(--crit)}
+  .finding.warn{border-left-color:var(--warn)}
+  .finding.good{border-left-color:var(--good)}
+  .finding .head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+  .finding .head b{font-size:15px}
+  .finding p{margin:.5em 0 0; font-size:14px; color:var(--ink-2)}
+  .finding .ev{font-family:var(--mono); font-size:12px; color:var(--ink-3); margin-top:8px}
+
+  /* tabelas */
+  .tblwrap{overflow-x:auto; border:1px solid var(--line); border-radius:6px; background:var(--panel); margin:14px 0}
+  table{border-collapse:collapse; width:100%; font-size:13.5px}
+  th{background:var(--primary-soft); color:var(--primary); text-align:left; font-size:11px;
+     letter-spacing:.08em; text-transform:uppercase; padding:9px 14px; white-space:nowrap}
+  td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top}
+  td:first-child{white-space:nowrap}
+  .num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+
+  /* roadmap */
+  .phase{position:relative; padding:0 0 28px 34px; border-left:2px solid var(--line); margin-left:8px}
+  .phase:last-child{padding-bottom:4px}
+  .phase::before{content:""; position:absolute; left:-8px; top:4px; width:14px; height:14px;
+                 border-radius:50%; background:var(--paper); border:3px solid var(--primary)}
+  .phase.now::before{background:var(--primary)}
+  .phase h3{margin:0 0 2px; font-size:16px}
+  .phase .when{font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3)}
+  .phase ul{margin:8px 0 0; padding-left:18px; font-size:14px; color:var(--ink-2)}
+  .phase li{margin:4px 0}
+  .phase li::marker{color:var(--primary)}
+
+  ul.clean{padding-left:20px} ul.clean li{margin:6px 0}
+  .callout{background:var(--primary-soft); border:1px solid #C9DAEB; border-radius:6px; padding:14px 18px; margin:18px 0}
+  .callout p{margin:.4em 0; font-size:14px}
+  .verdict{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:20px 22px; margin-top:18px}
+  .verdict p{font-size:15px}
+  footer{margin-top:72px; padding-top:18px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-3)}
+  @media (max-width:560px){ .scores{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="kicker">Relatório de auditoria técnica</div>
+  <h1>Helper Financeiro v2 — pontos fortes, fracos e roadmap</h1>
+  <p class="sub">Análise independente do código, da stack e da aderência às metodologias
+  Spec-Driven Development e Harness-Driven Development declaradas pelo próprio projeto.</p>
+  <div class="meta">
+    <span><b>Data:</b> 03/07/2026</span>
+    <span><b>Escopo:</b> C:\helper_financeiro (~2.400 linhas Python, 9 docs SDD, 3 ADRs)</span>
+    <span><b>Verificação:</b> suíte executada — <span class="num">20/20 testes verdes em 0,20s</span>, offline</span>
+  </div>
+</header>
+
+<!-- ===================== SUMÁRIO EXECUTIVO ===================== -->
+<section id="sumario">
+  <div class="eyebrow">1 · Sumário executivo</div>
+  <h2>Um esqueleto excepcional — mas ainda um esqueleto</h2>
+  <p>O Helper Financeiro é um app desktop (tkinter) de diagnóstico de dívidas que gera planilha,
+  relatório e cartas de negociação, com uma camada v2 de IA ("CONSELHEIRO") governada por
+  guardrails. A qualidade da <em>governança</em> é rara de se ver em projetos desse porte:
+  constituição com princípios invioláveis, SPEC em sintaxe EARS com REQ-IDs, plano de arquitetura,
+  tasks rastreáveis e um harness de testes que realmente roda offline.</p>
+  <p><strong>A opinião honesta:</strong> hoje o produto que o usuário final recebe é a <em>v1
+  determinística</em>. A camada de IA — o argumento central da v2 — não funciona de ponta a ponta:
+  os providers reais (<code>OllamaProvider</code>, <code>OpenAICompatProvider</code>) são stubs que
+  lançam <code>NotImplementedError</code>, e a GUI não importa nada de <code>agent/</code>. Além
+  disso, o projeto <strong>não é um repositório git</strong> e não tem CI — o que contradiz a
+  própria cultura de rastreabilidade que os documentos pregam. O alicerce merece nota alta; a casa
+  está com um andar construído de quatro.</p>
+
+  <div class="scores">
+    <div class="score"><div class="lbl">Arquitetura</div><div class="val v-good">8,5</div><div class="note">camadas limpas, 1 violação</div></div>
+    <div class="score"><div class="lbl">Documentação / SDD</div><div class="val v-good">9,0</div><div class="note">referência no gênero</div></div>
+    <div class="score"><div class="lbl">Testes / Harness</div><div class="val v-warn">6,5</div><div class="note">verde, mas com buracos</div></div>
+    <div class="score"><div class="lbl">Completude do produto</div><div class="val v-warn">5,0</div><div class="note">v2 não integrada</div></div>
+    <div class="score"><div class="lbl">Engenharia de entrega</div><div class="val v-crit">2,5</div><div class="note">sem git, sem CI, sem lint</div></div>
+  </div>
+</section>
+
+<!-- ===================== MÉTODO ===================== -->
+<section id="metodo">
+  <div class="eyebrow">2 · O que foi verificado</div>
+  <h2>Método da auditoria</h2>
+  <ul class="clean">
+    <li>Leitura integral dos 9 documentos SDD (<code>CONSTITUTION</code>, <code>SPEC</code>, <code>PLAN</code>, <code>TASKS</code>, <code>HARNESS</code>, <code>PRD</code>, ADRs) e do código dos 5 pacotes (<code>core</code>, <code>agent</code>, <code>guardrails</code>, <code>outputs</code>, <code>gui</code>).</li>
+    <li>Execução real da suíte: <code>pytest -q</code> → <strong>20 passed em 0,20s</strong>, sem rede (Python 3.14.3). A alegação do README se confirma.</li>
+    <li>Checagem cruzada de cada afirmação dos docs contra o código (rastreabilidade REQ → implementação → teste).</li>
+    <li>Verificação de higiene de engenharia: git, CI, lint, type-checking, empacotamento.</li>
+  </ul>
+</section>
+
+<!-- ===================== PONTOS FORTES ===================== -->
+<section id="fortes">
+  <div class="eyebrow">3 · Pontos fortes</div>
+  <h2>O que o projeto acerta — e acerta muito</h2>
+
+  <div class="finding good"><div class="head"><b>Separação determinístico × LLM como princípio de arquitetura</b><span class="pill pill-good">Diferencial</span></div>
+    <p>P1 ("o LLM nunca calcula; números vêm do <code>core/</code>") é a decisão mais importante do projeto e está implementada de verdade: <code>agent/agente.py</code> monta <code>FatosFinanceiros</code> a partir do core e o validador numérico rejeita qualquer cifra órfã na saída do LLM. É o padrão correto para IA em domínio financeiro, e pouquíssimos projetos o aplicam com essa disciplina.</p>
+    <p class="ev">core/calculos.py · agent/agente.py:32-75 · guardrails/validador_numerico.py</p></div>
+
+  <div class="finding good"><div class="head"><b>Degradação segura (fail-safe) implementada e testada</b></div>
+    <p>Se o provider falha, o schema não adere ou um guardrail dispara, o sistema entrega o diagnóstico determinístico completo com o motivo registrado — o usuário nunca fica sem resultado por causa do LLM. Coberto por <code>test_degradacao.py</code>.</p>
+    <p class="ev">agent/agente.py:78-126 · tests/test_degradacao.py</p></div>
+
+  <div class="finding good"><div class="head"><b>Guardrails concretos, não decorativos</b></div>
+    <p>Grounding numérico com tolerância ±1% e múltiplas interpretações pt-BR/US; anonimização de credores com mapa só em memória (LGPD); filtro de conteúdo proibido (recomendação de investimento, promessa de retorno); aviso legal garantido. Cada um tem teste dedicado — a regra "guardrail sem teste é inexistente" (P6) é cumprida no M1.</p>
+    <p class="ev">guardrails/ (3 módulos) · tests/test_grounding.py · test_pii.py · test_conteudo.py · test_injecao.py</p></div>
+
+  <div class="finding good"><div class="head"><b>Documentação SDD exemplar</b></div>
+    <p>SPEC em EARS com REQ-IDs prefixados por categoria, matriz REQ→task→teste, constituição versionada com processo de emenda, ADRs para decisões estruturais e <code>AGENTS.md</code> orientando agentes de código (incluindo o protocolo <code>NEEDS_CLARIFICATION</code> anti-improviso). Serve de gabarito para outros projetos.</p>
+    <p class="ev">docs/SPEC.md · docs/CONSTITUTION.md · docs/adr/ · AGENTS.md</p></div>
+
+  <div class="finding good"><div class="head"><b>Core matematicamente sólido e legível</b></div>
+    <p>Price, saldo devedor, CET por bisseção (com justificativa de convergência), simulador avalanche/bola de neve com trava de 600 meses e cascata de sobras correta. Comentários pedagógicos de alta qualidade explicam o <em>porquê</em>, não o óbvio.</p>
+    <p class="ev">core/calculos.py:50-78 · core/estrategias.py:30-80</p></div>
+
+  <div class="finding good"><div class="head"><b>Local-first por padrão</b></div>
+    <p>Config aponta para Ollama local; tudo roda offline; PDF é tratado como entrada não-confiável (P5) e nunca vai cru ao LLM — só fatos tipados trafegam. Postura correta de privacidade para dados financeiros pessoais.</p>
+    <p class="ev">agent/config.py · docs/ADR-0002 · tests/test_injecao.py</p></div>
+</section>
+
+<!-- ===================== PONTOS FRACOS ===================== -->
+<section id="fracos">
+  <div class="eyebrow">4 · Pontos fracos</div>
+  <h2>Achados, por severidade</h2>
+
+  <div class="finding crit"><div class="head"><b>F-01 · O projeto não é um repositório git</b><span class="pill pill-crit">Crítico</span></div>
+    <p>Não há <code>.git</code>, <code>.gitignore</code> nem histórico. Isso invalida na prática vários compromissos dos próprios docs: "todo commit cita o REQ-ID" (AGENTS.md), a ata de freeze com SHA-256 (FREEZE.md) e qualquer noção de auditoria de mudanças. Sem controle de versão, todo o edifício de rastreabilidade repousa sobre nada.</p>
+    <p class="ev">git status → "not a git repository"</p></div>
+
+  <div class="finding crit"><div class="head"><b>F-02 · A proposta de valor da v2 não chega ao usuário</b><span class="pill pill-crit">Crítico</span></div>
+    <p>Os dois providers reais são stubs (<code>NotImplementedError</code>) e a GUI não referencia <code>agent/</code> em nenhuma linha — o CONSELHEIRO só existe em <code>demo_agente.py</code> com <code>FakeProvider</code>. O TASKS.md é transparente sobre isso (M2/M3 pendentes), mas o README vende a v2 no presente do indicativo. Risco de "demo-ware": pipeline validado que nunca vira produto.</p>
+    <p class="ev">agent/provider.py:93,103 · grep "agent" em gui/app.py → 0 resultados</p></div>
+
+  <div class="finding crit"><div class="head"><b>F-03 · Zero automação de qualidade: sem CI, lint, type-check ou cobertura</b><span class="pill pill-crit">Crítico</span></div>
+    <p>Não existe <code>pyproject.toml</code>, ruff, mypy, pre-commit nem workflow de CI. Os "Gates A/B/C" do HARNESS.md são executados apenas na honra, manualmente. Um harness que não roda sozinho a cada mudança não é um portão — é uma placa de aviso.</p>
+    <p class="ev">ls raiz → apenas requirements*.txt; nenhum arquivo de config de ferramenta</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-04 · Gate B (planilhas sem erro de fórmula) não tem teste — violação do próprio P6</b><span class="pill pill-warn">Alto</span></div>
+    <p>A constituição diz que "guardrail sem teste é inexistente" e o HARNESS declara o Gate B como bloqueante ("recálculo + harness"), mas <code>outputs/</code> (550 linhas: planilha, relatório, proposta) tem <strong>zero testes</strong>. Pelo critério do projeto, H4 não existe.</p>
+    <p class="ev">tests/ cobre core+agent+guardrails; nenhum test_planilha/test_relatorio · docs/CONSTITUTION.md H4</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-05 · Dependência circular guardrails ↔ agent viola a regra de camadas</b><span class="pill pill-warn">Alto</span></div>
+    <p>O PLAN manda "setas só apontam para baixo", mas <code>guardrails/validador_numerico.py</code> e <code>conteudo.py</code> importam <code>agent.schemas</code>, enquanto <code>agent/agente.py</code> importa <code>guardrails</code>. Funciona porque <code>agent/__init__.py</code> é vazio, mas é acoplamento mútuo. Os schemas são contratos — devem morar numa camada própria (ex.: <code>contracts/</code>) da qual ambos dependem.</p>
+    <p class="ev">guardrails/validador_numerico.py:14 · guardrails/conteudo.py:12 · agent/agente.py:24-27 · docs/PLAN.md §1</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-06 · REQ-LLM-002 promete retry que não existe</b><span class="pill pill-warn">Alto</span></div>
+    <p>O SPEC exige "tentar 1 (uma) recuperação" quando a saída não adere ao schema; <code>agente.py</code> degrada direto, sem retry. Divergência silenciosa entre spec e código — exatamente o que o SDD existe para impedir. Ou implementa-se o retry, ou emenda-se o SPEC.</p>
+    <p class="ev">docs/SPEC.md REQ-LLM-002 · agent/agente.py:105-107</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-07 · Checagem final de PII não está ligada ao pipeline</b><span class="pill pill-warn">Alto</span></div>
+    <p><code>contem_pii()</code> existe e é testada, mas nenhum ponto do fluxo a chama antes de uma futura chamada cloud; <code>desanonimizar()</code> também está órfã. Quando o T-202 for implementado, nada força a checagem — o guardrail H2 hoje protege por construção (só fatos tipados saem), mas o cinto de segurança final está desconectado.</p>
+    <p class="ev">guardrails/pii.py:43-62 · grep contem_pii em agent/ → 0 chamadas</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-08 · GUI monolítica, sem threading e com formatação BR frágil</b><span class="pill pill-warn">Médio</span></div>
+    <p><code>gui/app.py</code> concentra 495 linhas (janela + estado + validação). Chamadas de LLM (30–60s no Ollama) congelariam a interface — o T-303 reconhece, mas o design atual não prepara o terreno (nenhum controller separado). Nome e CPF são coletados na aba Perfil mas nunca usados — colete apenas quando a carta precisar (minimização de dados, LGPD).</p>
+    <p class="ev">gui/app.py:39-120 · TASKS T-302/T-303</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-09 · Grounding numérico é heurístico e tem falsos-limites conhecidos</b><span class="pill pill-warn">Médio</span></div>
+    <p>Inteiros ≤3 são isentos (um LLM que diga "3 vezes mais caro" passa); anos ("2026") e números compostos legítimos seriam órfãos (falso positivo → degrada sem necessidade); o conjunto permitido inclui ×100 mas não ÷100. É um bom guardrail de segurança, mas trate-o como rede, não como prova — e documente os limites no HARNESS.</p>
+    <p class="ev">guardrails/validador_numerico.py:120-127</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-10 · Simulador diverge do cronograma Price sem documentar</b><span class="pill pill-warn">Médio</span></div>
+    <p><code>simular_quitacao()</code> aplica juros compostos sobre o saldo e paga a parcela nominal constante — um modelo simplificado que não coincide com a evolução real de um contrato Price (onde a parcela embute a amortização programada). Para comparação <em>relativa</em> entre estratégias serve, mas os "meses até quitar" absolutos podem divergir do contrato real. Isso deveria estar declarado no SPEC e no relatório gerado.</p>
+    <p class="ev">core/estrategias.py:47-78</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-11 · Config lê variáveis de ambiente na importação, não na execução</b><span class="pill pill-warn">Baixo</span></div>
+    <p>Os defaults de <code>ConfigAgente</code> chamam <code>os.getenv()</code> no corpo da classe — avaliados uma única vez no import. Mudar <code>HF_PROVIDER</code> depois de importar o módulo não tem efeito; em testes isso gera acoplamento à ordem de import. Mova a leitura para <code>carregar_config()</code> ou use <code>field(default_factory=...)</code>.</p>
+    <p class="ev">agent/config.py:13-21</p></div>
+
+  <div class="finding warn"><div class="head"><b>F-12 · Diretório harness/ vazio e testes do core rasos</b><span class="pill pill-warn">Baixo</span></div>
+    <p><code>harness/</code> contém só um <code>__init__.py</code> — remova ou dê função. <code>test_core.py</code> tem 40 linhas para 600 linhas de matemática financeira; casos de borda (taxa 0, n=1, saldo ínfimo, dívidas não-quitáveis) merecem testes baseados em propriedades (Hypothesis: ex. <code>saldo_devedor_price(pv,i,n,n) == 0</code> para todo pv,i,n).</p>
+    <p class="ev">harness/__init__.py · tests/test_core.py</p></div>
+</section>
+
+<!-- ===================== STACK ===================== -->
+<section id="stack">
+  <div class="eyebrow">5 · Stack</div>
+  <h2>Avaliação da stack e recomendações</h2>
+  <p>A stack congelada no PLAN é coerente com o produto (desktop, offline, empacotável, LGPD).
+  A recomendação central é <strong>mantê-la</strong> e investir a energia de mudança no
+  ferramental de engenharia, que hoje é inexistente.</p>
+
+  <div class="tblwrap"><table>
+    <tr><th>Camada</th><th>Atual</th><th>Veredito</th><th>Recomendação</th></tr>
+    <tr><td>Linguagem</td><td>Python 3.12+ (rodando 3.14.3)</td><td><span class="pill pill-good">Manter</span></td><td>Fixar versão testada em <code>pyproject.toml</code> (<code>requires-python</code>) e validar 3.12–3.14 no CI.</td></tr>
+    <tr><td>GUI</td><td>tkinter (stdlib)</td><td><span class="pill pill-good">Manter</span></td><td>Certa para o escopo (offline, .exe, zero deps). Se a v3 exigir UI moderna, avaliar <b>Flet</b> ou <b>PySide6</b> — via ADR, como manda o P7. Não trocar agora.</td></tr>
+    <tr><td>Planilha / Docs</td><td>openpyxl · python-docx</td><td><span class="pill pill-good">Manter</span></td><td>Adequados. Adicionar testes de recálculo (F-04).</td></tr>
+    <tr><td>PDF</td><td>pdfplumber (regex)</td><td><span class="pill pill-warn">Manter + evoluir</span></td><td>Suficiente para contratos digitais. Para escaneados, OCR local opcional (<b>RapidOCR/Tesseract</b>) como extra — nunca OCR em nuvem (P3).</td></tr>
+    <tr><td>Contratos de dados</td><td>pydantic v2</td><td><span class="pill pill-good">Manter</span></td><td>Mover schemas para camada <code>contracts/</code> (F-05). Considerar pydantic também nos modelos do core (validação de negativos).</td></tr>
+    <tr><td>LLM structured output</td><td>instructor (planejado)</td><td><span class="pill pill-good">Confirmar</span></td><td>Escolha certa para forçar <code>AnaliseAgente</code>. Alternativa a avaliar no T-201: <b>PydanticAI</b>, que unifica provider-agnóstico + retry + validação num só lugar.</td></tr>
+    <tr><td>LLM local</td><td>Ollama (qwen2.5:14b)</td><td><span class="pill pill-good">Manter</span></td><td>14B pode ser pesado para o público-alvo; teste aderência de schema com um 7–8B (ex. qwen2.5:7b) e documente o mínimo viável.</td></tr>
+    <tr><td>Gestão de ambiente</td><td>pip + requirements.txt</td><td><span class="pill pill-crit">Substituir</span></td><td><b>uv</b> + <code>pyproject.toml</code> + lockfile: instalação reprodutível, resolve o "funciona na minha máquina" do PyInstaller.</td></tr>
+    <tr><td>Qualidade</td><td>— (nada)</td><td><span class="pill pill-crit">Adicionar</span></td><td><b>ruff</b> (lint+format), <b>mypy</b> (o código já tem type hints — de graça), <b>pytest-cov</b> com piso de cobertura, <b>pre-commit</b>.</td></tr>
+    <tr><td>CI</td><td>— (nada)</td><td><span class="pill pill-crit">Adicionar</span></td><td>GitHub Actions: Gate A (pytest) + Gate B (recálculo de planilha) + lint/types a cada push. É o que transforma o HARNESS.md em realidade.</td></tr>
+    <tr><td>Empacotamento</td><td>PyInstaller (manual)</td><td><span class="pill pill-warn">Automatizar</span></td><td>Build no CI com artefato versionado + hash SHA-256 automático alimentando o FREEZE.md.</td></tr>
+  </table></div>
+</section>
+
+<!-- ===================== SDD & HARNESS ===================== -->
+<section id="metodologia">
+  <div class="eyebrow">6 · Metodologia</div>
+  <h2>Spec-Driven Development e Harness-Driven Development na prática</h2>
+  <p>O projeto não precisa ser convencido dessas metodologias — ele já as adota nominalmente.
+  A auditoria avaliou a <em>aderência real</em> e onde apertar o parafuso.</p>
+
+  <h3>Onde o SDD está funcionando</h3>
+  <ul class="clean">
+    <li><strong>Cadeia de artefatos completa:</strong> PRD → SPEC (EARS) → PLAN → TASKS → código, com CONSTITUTION acima de tudo e ADRs para desvios. É o fluxo canônico (mesmo espírito do spec-kit/OpenSpec).</li>
+    <li><strong>Requisitos testáveis:</strong> EARS com gatilhos e respostas verificáveis; cada REQ-GRD tem teste nomeado na matriz.</li>
+    <li><strong>Anti-improviso:</strong> P7 + <code>NEEDS_CLARIFICATION</code> + denylist controlam o maior risco de desenvolvimento com agentes de código: a invenção de escopo.</li>
+  </ul>
+
+  <h3>Onde o SDD está furado</h3>
+  <ul class="clean">
+    <li><strong>Spec drift já começou</strong> (F-06: retry prometido e ausente). Melhor prática: um teste de conformidade por REQ, e revisão de SPEC como parte do DoD de cada task — a spec é contrato vivo, não prosa de abertura.</li>
+    <li><strong>Rastreabilidade sem git é ficção</strong> (F-01): "todo commit cita o REQ-ID" exige commits. O primeiro ato de SDD real deste projeto é <code>git init</code>.</li>
+    <li><strong>Status ✅ auto-declarado:</strong> TASKS marca M1 como feito pelo próprio scaffold. Melhor prática: o status vem do CI (teste verde no pipeline), não do documento.</li>
+  </ul>
+
+  <h3>Onde o harness está funcionando</h3>
+  <ul class="clean">
+    <li><strong>Determinístico e offline por design:</strong> <code>FakeProvider</code> que respeita H1 por construção permite CI rápido e sem flakiness — exatamente o padrão recomendado para pipelines com LLM.</li>
+    <li><strong>Testes adversariais de verdade:</strong> fixtures com número fabricado, recomendação de investimento e PDF malicioso (prompt injection) cobrem os modos de falha que importam.</li>
+  </ul>
+
+  <h3>Onde o harness precisa crescer</h3>
+  <ul class="clean">
+    <li><strong>Gates que não executam sozinhos não são gates</strong> (F-03): a essência do harness-driven é o loop automático — cada mudança passa pela bancada sem depender de disciplina humana.</li>
+    <li><strong>Cobertura desigual:</strong> <code>outputs/</code> sem teste (F-04), core raso (F-12), GUI sem sequer smoke test de importação.</li>
+    <li><strong>Nível 2 do harness ausente e necessário para o M2:</strong> quando o Ollama real entrar, o FakeProvider deixa de cobrir o risco novo (aderência de schema por modelo pequeno). Planejar: suíte de integração marcada (<code>-m ollama</code>) com casos-ouro, métrica de taxa de aderência ao schema, e o LLM-as-judge do HARNESS §4 implementado com rubrica versionada.</li>
+    <li><strong>Golden files para outputs:</strong> planilha/docx gerados a partir dos perfis-ouro, com asserções estruturais (fórmulas recalculam, aviso legal presente, seção IA separada) — cobre H3/H4 de uma vez.</li>
+  </ul>
+</section>
+
+<!-- ===================== MELHORIAS ===================== -->
+<section id="melhorias">
+  <div class="eyebrow">7 · Melhorias</div>
+  <h2>Estruturais e de produto</h2>
+
+  <h3>Estruturais (engenharia)</h3>
+  <ul class="clean">
+    <li><strong>Camada <code>contracts/</code>:</strong> mover <code>agent/schemas.py</code> para um pacote de contratos sem dependências; <code>agent</code> e <code>guardrails</code> passam a depender só dele (resolve F-05 e deixa o diagrama do PLAN verdadeiro).</li>
+    <li><strong>Pipeline de guardrails declarativo:</strong> hoje a orquestração em <code>agente.py</code> é if-encadeado; uma lista ordenada de checagens <code>(nome, fn, é_crítica)</code> torna trivial adicionar guardrail novo com log e teste padronizados.</li>
+    <li><strong>Separar apresentação de estado na GUI:</strong> extrair um <code>AppController</code> testável; o LLM roda em <code>threading.Thread</code> com fila para o mainloop (prepara T-302/T-303 sem congelar a UI).</li>
+    <li><strong>Logging estruturado:</strong> configurar <code>logging</code> com arquivo local rotativo (sem PII, conforme REQ-SEC-001) — hoje os warnings de degradação vão para lugar nenhum no .exe.</li>
+    <li><strong>Validação nos modelos do core:</strong> <code>Divida(saldo_devedor=-100)</code> passa silenciosamente hoje; validadores pydantic (ou <code>__post_init__</code>) param dado ruim na porta.</li>
+  </ul>
+
+  <h3>Produto</h3>
+  <ul class="clean">
+    <li><strong>Persistência de perfil (a maior dor de uso hoje):</strong> o usuário redigita tudo a cada sessão. Salvar/abrir perfil em JSON local — com aviso claro de onde fica o arquivo — muda o produto de "calculadora" para "acompanhamento". Candidato a REQ-F-006 via processo de emenda.</li>
+    <li><strong>Acompanhamento mensal:</strong> com persistência, comparar mês a mês (saldo caindo, comprometimento melhorando) cria o loop de motivação que métodos como bola de neve exploram.</li>
+    <li><strong>Amortização SAC:</strong> financiamentos imobiliários (caso comum de portabilidade) usam SAC; hoje só Price é modelado.</li>
+    <li><strong>Transparência do modelo:</strong> declarar no relatório a simplificação do simulador (F-10) e a data-base das faixas de referência (4% a.m., limites 30/50%).</li>
+    <li><strong>OCR local opcional</strong> para contratos escaneados — o extrator já detecta o caso e avisa; falta o caminho feliz.</li>
+    <li><strong>CLI mínima</strong> (<code>python -m helper_financeiro analisar perfil.json</code>): barata graças à arquitetura em camadas, ótima para o harness e para usuários avançados.</li>
+    <li><strong>Distribuição confiável:</strong> .exe não assinado dispara SmartScreen; documentar o aviso e publicar hash na página de release reduz abandono na instalação.</li>
+  </ul>
+</section>
+
+<!-- ===================== ROADMAP ===================== -->
+<section id="roadmap">
+  <div class="eyebrow">8 · Roadmap</div>
+  <h2>Plano de implementação em 5 fases</h2>
+  <p class="muted">Esforço estimado para 1 dev em tempo parcial. As fases 0 e 1 são pré-requisito
+  de tudo; a ordem 2→3→4 segue os milestones M2→M3→M4 já planejados pelo projeto.</p>
+
+  <div style="margin-top:24px">
+    <div class="phase now">
+      <div class="when">Fase 0 · Fundação — 2 a 3 dias</div>
+      <h3>Transformar a pasta num projeto de engenharia</h3>
+      <ul>
+        <li><code>git init</code> + <code>.gitignore</code> + primeiro commit citando esta auditoria (fecha F-01).</li>
+        <li><code>pyproject.toml</code> com uv; migrar requirements para dependências + grupo dev.</li>
+        <li>ruff + mypy + pre-commit; corrigir o que apontarem (código já tipado — custo baixo).</li>
+        <li>CI (GitHub Actions): lint → mypy → <code>pytest -q</code> + pytest-cov com piso inicial de 70% (fecha F-03).</li>
+        <li>Remover <code>harness/</code> vazio ou movê-lo para dentro de <code>tests/</code> (F-12).</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="when">Fase 1 · Dívida de conformidade — 1 semana</div>
+      <h3>Fazer os docs e o código dizerem a mesma coisa</h3>
+      <ul>
+        <li>Criar <code>contracts/</code> e quebrar o ciclo guardrails↔agent (F-05); atualizar PLAN §1.</li>
+        <li>Implementar o retry único do REQ-LLM-002 no orquestrador — ou emendar o SPEC via ADR (F-06).</li>
+        <li>Testes de <code>outputs/</code>: golden files dos 3 perfis-ouro + recálculo de fórmulas → Gate B real no CI (F-04).</li>
+        <li>Ligar <code>contem_pii()</code> como checagem final obrigatória no caminho cloud e testar (F-07).</li>
+        <li>Corrigir leitura de env em <code>config.py</code> (F-11); testes de propriedade com Hypothesis no core (F-12).</li>
+        <li>Documentar limites do grounding (F-09) e a simplificação do simulador (F-10) no HARNESS/SPEC.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="when">Fase 2 · M2, providers reais — 2 a 3 semanas</div>
+      <h3>O CONSELHEIRO deixa de ser fake</h3>
+      <ul>
+        <li>T-201 <code>OllamaProvider</code> com instructor (ou PydanticAI — decidir por ADR) + timeout + retry.</li>
+        <li>Bancada de aderência de schema: medir taxa de sucesso por modelo (7B vs 14B) com os casos-ouro; escolher o mínimo viável.</li>
+        <li>T-202 <code>OpenAICompatProvider</code> com <code>contem_pii()</code> obrigatório pré-envio.</li>
+        <li>T-205 cache local de análise; T-206 teste de degradação com Ollama desligado de verdade.</li>
+        <li>Suíte de integração <code>pytest -m ollama</code> (fora do gate bloqueante) + LLM-as-judge com rubrica do HARNESS §4.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="when">Fase 3 · M3, integração de saída — 2 semanas</div>
+      <h3>A IA chega ao usuário — visivelmente separada dos números</h3>
+      <ul>
+        <li>Extrair <code>AppController</code>; LLM em thread com barra de progresso (T-303) e indicador de modo degradado (T-304).</li>
+        <li>Painel "Análise do CONSELHEIRO (assistida por IA)" na GUI com desanonimização para exibição local (T-302).</li>
+        <li>Seção IA no .docx, visualmente separada do determinístico, com aviso legal (T-301).</li>
+        <li><strong>Produto:</strong> salvar/abrir perfil em JSON local (novo REQ-F-006 via emenda) — destrava acompanhamento mensal na v2.1.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="when">Fase 4 · M4, empacotamento e release — 1 semana</div>
+      <h3>Entregar com confiança</h3>
+      <ul>
+        <li>Build PyInstaller no CI com pydantic/instructor incluídos (T-401); smoke test do .exe.</li>
+        <li>Revisão de segurança: varredura de PII/keys em logs e artefatos (T-403).</li>
+        <li>FREEZE.md alimentado automaticamente com SHA-256 do artefato (T-402); release versionada com hash publicado.</li>
+        <li>Backlog v2.1+: SAC, OCR local, CLI, comparativo mensal.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONCLUSÃO ===================== -->
+<section id="conclusao">
+  <div class="eyebrow">9 · Conclusão</div>
+  <h2>Veredito</h2>
+  <div class="verdict">
+    <p>Este é um dos scaffolds SDD mais bem pensados que se encontra em projetos individuais: a
+    constituição, os guardrails testados e a decisão de manter o LLM fora da matemática são
+    exatamente as escolhas certas para IA aplicada a finanças pessoais. O risco do projeto não é
+    técnico — é de <strong>execução e honestidade de status</strong>: sem git e sem CI, a
+    rastreabilidade prometida não existe na prática; sem os milestones M2/M3, a v2 é uma promessa
+    bem documentada, e o spec drift já apareceu (F-06) antes mesmo do primeiro provider real.</p>
+    <p>A boa notícia: as fases 0 e 1 custam cerca de duas semanas e não exigem nenhuma decisão
+    difícil — só transformam em infraestrutura o que hoje é disciplina declarada. Feito isso, o
+    projeto colhe o que o próprio desenho já plantou.</p>
+  </div>
+</section>
+
+<footer>
+  Auditoria gerada por Claude Code (Fable 5) em 03/07/2026 · Base: leitura integral do código e docs
+  + execução da suíte (<span class="num">20/20</span> verdes, offline) · Achados referenciam arquivo:linha para verificação independente.
+</footer>
+</div>
+</body>
+</html>

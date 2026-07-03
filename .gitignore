@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Ferramentas
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build / empacotamento
+build/
+dist/
+*.spec
+
+# IDE / SO
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Saídas geradas pelo app em desenvolvimento (exemplos versionados ficam em exemplos/)
+*.xlsx
+*.docx
+!exemplos/*.xlsx
+!exemplos/*.docx
+
+# Segredos — nunca versionar (REQ-SEC-001)
+.env
+*.key

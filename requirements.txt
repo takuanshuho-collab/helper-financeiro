@@ -1,0 +1,13 @@
+# Helper Financeiro — dependências
+# Instale com:  pip install -r requirements.txt
+
+openpyxl>=3.1        # geração da planilha .xlsx (com fórmulas e gráfico)
+python-docx>=1.1     # geração do relatório e das cartas .docx
+pdfplumber>=0.11     # extração de texto de contratos em PDF
+pydantic>=2.0        # contratos tipados entre o determinístico e o agente (v2)
+
+# tkinter NÃO entra aqui: é biblioteca padrão do Python (no Windows já vem
+# junto; em Linux, instale via 'sudo apt install python3-tk').
+
+# Apenas para empacotar o .exe (opcional):
+# pyinstaller>=6.0
