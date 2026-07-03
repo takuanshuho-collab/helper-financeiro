@@ -48,3 +48,18 @@ def test_modo_degradado_explicito(perfil_atencao):
     res = analisar(perfil_atencao, cfg=cfg)
     assert res.modo == "degradado"
     assert res.guardrails_violados == ["MODO_DEGRADADO"]
+
+
+def test_provider_offline_real_degrada(perfil_atencao):
+    """T-206: OllamaProvider DE VERDADE contra porta local fechada.
+
+    Diferente dos fakes acima, aqui o caminho real de rede (urllib) falha com
+    conexão recusada — e o usuário ainda recebe o determinístico, sem exceção.
+    A porta 9 (discard) não tem listener; a recusa é imediata, sem internet.
+    """
+    cfg = ConfigAgente(provider="local", base_url="http://127.0.0.1:9", timeout_s=2)
+    res = analisar(perfil_atencao, cfg=cfg)
+    assert res.modo == "degradado"
+    assert res.analise is None
+    assert res.guardrails_violados[0].startswith("ERRO_PROVIDER:")
+    assert res.fatos.saldo_devedor_total > 0          # determinístico intacto

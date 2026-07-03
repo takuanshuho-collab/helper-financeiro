@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0003) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0005) |
 | 9 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
 ## Fluxo Spec-Driven
@@ -24,14 +24,16 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
 ```
 
 ## Estado atual
-- **M1 entregue e verde** (offline): schemas, guardrails (PII, numérico, conteúdo),
-  orquestração com degradação segura, harness com 20 testes.
-- **Próximo:** T-201 (`OllamaProvider`, local-first) — plugar o modelo real ao
-  pipeline já validado.
+- **M1 + M1.5 + M2 entregues e verdes**: guardrails, orquestração com
+  degradação segura, providers reais (Ollama local-first e OpenAI-compat)
+  com structured output (ADR-0005), cache de análise e harness com 58 testes
+  offline (cobertura ~95%, piso 90% no CI).
+- **Próximo:** M3 (T-301..T-304) — levar o `ResultadoAnalise` à GUI e ao `.docx`.
 
 ## Rodar
 ```bash
-pip install -r requirements-dev.txt
-pytest -q            # harness offline (20 verdes)
-python demo_agente.py   # pipeline da IA com FakeProvider
+uv sync --group dev
+uv run pytest -q               # harness offline
+uv run pytest -m ollama        # integração real (skip sem Ollama+modelo)
+uv run python demo_agente.py   # pipeline da IA com FakeProvider
 ```

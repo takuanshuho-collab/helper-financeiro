@@ -59,7 +59,7 @@ não importa `agent`, `outputs` nem `gui`. `agent` depende de `core`,
 | Documentos | python-docx | `.docx` sem Node |
 | PDF | pdfplumber | extração de texto |
 | Schemas | pydantic v2 | contratos tipados |
-| LLM (structured) | instructor (opcional) + cliente OpenAI-compatible | agnóstico nuvem/local |
+| LLM (structured) | JSON Schema nativo (Ollama `format` / `response_format`) + Pydantic, via stdlib | ADR-0005: sem SDK/framework |
 | LLM local | Ollama (ex.: Qwen) | LGPD / offline |
 | Testes | pytest | harness |
 
@@ -92,6 +92,8 @@ financeiro dentro de prompts.
 - **M4 — Empacotamento** (.exe) e ata de freeze.
 
 ## 8. Riscos técnicos
-- Modelos locais pequenos podem não aderir bem ao schema → usar `instructor`
-  + `MODO_DEGRADADO` como rede de segurança (P8).
+- Modelos locais pequenos podem não aderir bem ao schema → o `format` do
+  Ollama restringe a gramática no servidor (ADR-0005); o que escapar, o
+  contrato Pydantic rejeita e o `MODO_DEGRADADO` segura (P8). Medir com
+  `scripts/bench_schema.py` antes de fixar o `HF_MODEL` padrão.
 - pdfplumber no PyInstaller → `--collect-all` (ver README).

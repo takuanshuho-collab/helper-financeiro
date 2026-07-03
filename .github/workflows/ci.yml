@@ -32,7 +32,7 @@ jobs:
         run: uv run ruff check .
 
       - name: Tipos (mypy)
-        run: uv run mypy core agent guardrails outputs main.py
+        run: uv run mypy core agent guardrails outputs contracts scripts main.py
 
       # Catraca de cobertura: só sobe, nunca desce. Fase 1 (testes de outputs,
       # propriedades e recuperação) levou a cobertura real a ~92%.

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import logging
 
+from pydantic import ValidationError
+
 from contracts import AnaliseAgente, DividaFato, EstrategiaFato, FatosFinanceiros, ResultadoAnalise
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias
@@ -20,6 +22,7 @@ from guardrails.conteudo import AVISO_LEGAL, detectar_conteudo_indevido, garanti
 from guardrails.pii import MapaAnonimizacao, anonimizar_credores, contem_pii
 from guardrails.validador_numerico import validar as validar_numeros
 
+from .cache import cache_global
 from .config import ConfigAgente, carregar_config
 from .provider import LLMProvider, obter_provider
 
@@ -104,26 +107,39 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
     if cfg.provider == "openai_compat" and _verificar_pii_pre_envio(fatos, mapa):
         return _degradado(fatos, ["REQ-GRD-002:PII_DETECTADA"])
 
-    provider = provider or obter_provider(cfg)
-
-    # 1) Chamada ao LLM — com 1 (uma) recuperação (REQ-LLM-002).
-    #    Falha transitória (rede, timeout) ou saída fora do schema ganham uma
-    #    segunda chance; persistindo, degrada.
-    analise: AnaliseAgente | None = None
-    motivo_falha = ""
-    for _tentativa in (1, 2):
-        try:
-            candidata = provider.analisar(fatos)
-        except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
-            motivo_falha = f"ERRO_PROVIDER:{type(e).__name__}"
-            continue
-        if isinstance(candidata, AnaliseAgente):
-            analise = candidata
-            break
-        motivo_falha = "REQ-LLM-002:SCHEMA"
+    # T-205: mesma entrada + mesmo modelo ⇒ reaproveita análise já aprovada.
+    chave_cache = cache_global.chave(cfg.provider, cfg.model, fatos)
+    analise: AnaliseAgente | None = cache_global.obter(chave_cache) if cfg.cache else None
+    veio_do_cache = analise is not None
 
     if analise is None:
-        return _degradado(fatos, [motivo_falha or "ERRO_PROVIDER:Desconhecido"])
+        # Erro de configuração (ex.: cloud sem HF_API_KEY) também degrada — o
+        # usuário nunca perde o determinístico por causa do agente (P8).
+        try:
+            provider = provider or obter_provider(cfg)
+        except Exception as e:  # noqa: BLE001
+            return _degradado(fatos, [f"ERRO_CONFIG:{type(e).__name__}"])
+
+        # 1) Chamada ao LLM — com 1 (uma) recuperação (REQ-LLM-002).
+        #    Falha transitória (rede, timeout) ou saída fora do schema ganham
+        #    uma segunda chance; persistindo, degrada.
+        motivo_falha = ""
+        for _tentativa in (1, 2):
+            try:
+                candidata = provider.analisar(fatos)
+            except ValidationError:
+                motivo_falha = "REQ-LLM-002:SCHEMA"
+                continue
+            except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
+                motivo_falha = f"ERRO_PROVIDER:{type(e).__name__}"
+                continue
+            if isinstance(candidata, AnaliseAgente):
+                analise = candidata
+                break
+            motivo_falha = "REQ-LLM-002:SCHEMA"
+
+        if analise is None:
+            return _degradado(fatos, [motivo_falha or "ERRO_PROVIDER:Desconhecido"])
 
     violacoes: list[str] = []
 
@@ -142,6 +158,11 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
 
     # 5) Aviso legal (H3) garantido no sumário.
     analise.sumario_executivo = garantir_aviso(analise.sumario_executivo)
+
+    # Só análise APROVADA pelos guardrails entra no cache: uma saída ruim
+    # nunca fica "grudada" na sessão — a próxima tentativa vai ao LLM de novo.
+    if cfg.cache and not veio_do_cache:
+        cache_global.guardar(chave_cache, analise)
 
     return ResultadoAnalise(fatos=fatos, analise=analise, modo="completo",
                             guardrails_violados=[], aviso_legal=AVISO_LEGAL)

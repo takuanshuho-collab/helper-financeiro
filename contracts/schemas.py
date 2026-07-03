@@ -59,7 +59,9 @@ class AnaliseAgente(BaseModel):
     prioridades: list[Prioridade]
     roteiro_negociacao: list[PassoNegociacao]
     alertas_risco: list[str] = Field(default_factory=list)
-    confianca: float = 0.0           # 0.0–1.0, auto-avaliada
+    # Fração 0.0–1.0 IMPOSTA pelo contrato: modelo real (qwen2.5:0.5b) devolveu
+    # 95.0 (estilo percentual) e passava — a SPEC §6.2 sempre exigiu 0–1.
+    confianca: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 # ----------------------------- Resultado consumido pela aplicação -------------

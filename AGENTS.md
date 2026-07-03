@@ -32,7 +32,7 @@ e pare. Mudança de arquitetura exige uma ADR nova em `docs/adr/`.
 uv sync --group dev              # instala tudo (pyproject.toml + uv.lock)
 uv run pytest -q                 # harness offline (deve ficar verde)
 uv run ruff check .              # lint — mesmo portão do CI
-uv run mypy core agent guardrails outputs main.py
+uv run mypy core agent guardrails outputs contracts scripts main.py
 uv run python demo_saidas.py     # gera exemplos determinísticos
 uv run python main.py            # abre a GUI
 ```

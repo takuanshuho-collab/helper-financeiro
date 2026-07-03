@@ -28,6 +28,8 @@ verificadas na fonte oficial.
 5. TOM: objetivo, respeitoso, sem alarmismo e sem julgamento moral do endividado.
 6. INCERTEZA: se os FATOS forem insuficientes para uma recomendação, diga isso \
 explicitamente em vez de preencher com suposições.
+7. CONFIANÇA: o campo `confianca` é uma FRAÇÃO entre 0.0 e 1.0 (ex.: 0.85), \
+nunca um percentual como 85 ou 95.
 
 Responda SOMENTE no formato estruturado solicitado (JSON conforme o schema).\
 """

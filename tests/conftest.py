@@ -1,7 +1,16 @@
 """Fixtures do harness (casos-ouro). Ver docs/HARNESS §2."""
 import pytest
 
+from agent.cache import cache_global
 from core.models import Divida, PerfilFinanceiro
+
+
+@pytest.fixture(autouse=True)
+def _cache_limpo():
+    """Isola os testes do cache de análises (T-205): sem estado entre eles."""
+    cache_global.limpar()
+    yield
+    cache_global.limpar()
 
 
 @pytest.fixture

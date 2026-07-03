@@ -11,14 +11,16 @@ repos:
 
       - id: mypy
         name: mypy (tipos)
-        entry: uv run mypy core agent guardrails outputs main.py
+        entry: uv run mypy core agent guardrails outputs contracts scripts main.py
         language: system
         types: [python]
         pass_filenames: false
 
       - id: pytest
         name: pytest (harness offline — Gate A)
-        entry: uv run pytest -q
+        # "not ollama": a integração real (minutos, exige modelo) fica fora do
+        # hook; rode-a sob demanda com `uv run pytest -m ollama`.
+        entry: uv run pytest -q -m "not ollama"
         language: system
         types: [python]
         pass_filenames: false

@@ -67,12 +67,17 @@ se a taxa de degradação em produção (M2+) incomodar.
 ```bash
 uv sync --group dev        # pytest, pydantic, ruff, mypy
 uv run pytest -q           # roda o harness offline
+uv run pytest -m ollama    # integração real (skip se não houver Ollama+modelo)
 uv run pytest -q -m judge  # opcional, exige provider real
+uv run python scripts/bench_schema.py --modelos qwen2.5:7b qwen2.5:14b --n 5
 ```
 
+> Os testes `ollama` medem o SISTEMA (aderência, P8 fim-a-fim), nunca bloqueiam
+> o CI. O bench compara modelos em schema/grounding/conteúdo/latência e orienta
+> a escolha do `HF_MODEL` padrão.
+
 Os gates rodam automaticamente a cada push (`.github/workflows/ci.yml`):
-ruff → mypy → pytest com piso de cobertura (48%, catraca — sobe para 70%
-quando os testes de `outputs/` fecharem o Gate B).
+ruff → mypy → pytest com piso de cobertura de **90%** (catraca: só sobe).
 
 ## 7. Mapa REQ → teste (mantido em sincronia com SPEC)
 | REQ | Teste |
@@ -80,8 +85,10 @@ quando os testes de `outputs/` fecharem o Gate B).
 | REQ-GRD-001 | `tests/test_grounding.py` |
 | REQ-GRD-002 / SEC-003 | `tests/test_pii.py` (inclui cinto pré-cloud) |
 | REQ-GRD-003 / REQ-GRD-004 | `tests/test_conteudo.py` |
-| REQ-LLM-002 / P8 | `tests/test_degradacao.py`, `tests/test_recuperacao.py` |
+| REQ-LLM-002 / P8 | `tests/test_degradacao.py` (inclui T-206: porta fechada real), `tests/test_recuperacao.py` |
 | REQ-GRD-005 / H5 | `tests/test_injecao.py` |
 | REQ-F-00x | `tests/test_core.py`, `tests/test_propriedades.py` (invariantes) |
 | REQ-F-005 / REQ-NF-003 / H3 / H4 (Gate B) | `tests/test_outputs.py` |
-| REQ-LLM-003 / SEC-002 | `tests/test_config.py` |
+| REQ-LLM-003 / SEC-002 | `tests/test_config.py`, `tests/test_providers.py` (T-201/T-202, servidor HTTP local) |
+| T-205 (cache) / SEC-003 | `tests/test_cache.py` |
+| REQ-LLM-004 (integração real, não bloqueante) | `tests/test_ollama_real.py` (`-m ollama`) |

@@ -23,6 +23,9 @@ class ConfigAgente:
     modo_degradado: bool = field(
         default_factory=lambda: os.getenv("HF_MODO_DEGRADADO", "0") == "1")
     timeout_s: int = field(default_factory=lambda: int(os.getenv("HF_TIMEOUT", "60")))
+    # Cache em memória de análises aprovadas (T-205): mesma entrada → sem nova
+    # chamada ao LLM. Desligue com HF_CACHE=0.
+    cache: bool = field(default_factory=lambda: os.getenv("HF_CACHE", "1") == "1")
 
 
 def carregar_config() -> ConfigAgente:

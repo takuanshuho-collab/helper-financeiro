@@ -40,12 +40,15 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-201 | `OllamaProvider` (local-first) | REQ-LLM-003/004 | T-106 | ⬜ |
-| T-202 | `OpenAICompatProvider` (nuvem, via env) | REQ-LLM-003, SEC-002 | T-106 | ⬜ |
-| T-203 | `agent/config.py` (provider, base_url, model, modo_degradado) | REQ-LLM-003 | — | ✅ (base) |
-| T-204 | Integração `instructor` p/ structured output | REQ-LLM-002 | T-201/202 | ⬜ |
-| T-205 | Cache local de análise (evitar custo/latência) | NF/RISCO | T-201 | ⬜ |
-| T-206 | Teste de degradação com provider offline real | P8 | T-201 | ⬜ |
+| T-201 | `OllamaProvider` (local-first, `/api/chat` + `format`=JSON Schema) | REQ-LLM-003/004 | T-106 | ✅ |
+| T-202 | `OpenAICompatProvider` (nuvem, via env, `response_format` strict) | REQ-LLM-003, SEC-002 | T-106 | ✅ |
+| T-203 | `agent/config.py` (provider, base_url, model, modo_degradado, cache) | REQ-LLM-003 | — | ✅ |
+| T-204 | Structured output nativo + validação Pydantic (ADR-0005; sem `instructor`) | REQ-LLM-002 | T-201/202 | ✅ |
+| T-205 | Cache local de análise (LRU em memória, só análise aprovada) | NF/RISCO, SEC-003 | T-201 | ✅ |
+| T-206 | Teste de degradação com provider offline real (porta fechada) | P8 | T-201 | ✅ |
+| T-207 | Bench de aderência de schema por modelo (`scripts/bench_schema.py`) | REQ-LLM-002 | T-201 | ✅ |
+| T-208 | Suíte de integração `pytest -m ollama` (skip sem servidor/modelo) | REQ-LLM-004 | T-201 | ✅ |
+| T-209 | Contrato reforçado: `confianca` com `ge=0/le=1` (achado do T-208) | SPEC §6.2 | T-208 | ✅ |
 
 ## Milestone M3 — Integração de saída
 
@@ -60,7 +63,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-401 | Atualizar build PyInstaller (incluir pydantic/instructor) | — | M3 | ⬜ |
+| T-401 | Atualizar build PyInstaller (incluir pydantic; sem SDK de LLM — ADR-0005) | — | M3 | ⬜ |
 | T-402 | Ata de freeze com SHA-256 dos artefatos | Processo | todos | ✅ (M1) |
 | T-403 | Revisão de segurança (sem PII/keys em log) | SEC-001/002 | M2 | ⬜ |
 
@@ -72,5 +75,7 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-M1 está entregue e verde neste scaffold. O próximo passo natural é **T-201**
-(OllamaProvider), plugando o modelo local ao pipeline já validado.
+M1, M1.5 e M2 entregues e verdes. O próximo passo natural é o **M3**
+(T-301..T-304): integrar o `ResultadoAnalise` à GUI e ao `.docx`, com
+indicador de modo degradado. Antes de escolher o `HF_MODEL` padrão em
+produção, rodar `scripts/bench_schema.py` com os modelos candidatos (7B/14B).

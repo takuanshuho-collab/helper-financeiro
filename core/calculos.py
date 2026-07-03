@@ -31,7 +31,10 @@ def parcela_price(pv: float, i: float, n: int) -> float:
         return 0.0
     if i == 0:                      # empréstimo sem juros
         return pv / n
-    return pv * i / _fator_anuidade(i, n)
+    # (i / fator) primeiro: para taxa subnormal (ex.: i=5e-324, Hypothesis) o
+    # produto pv*i quantizaria na faixa subnormal e perderia dígitos; a razão
+    # i/fator ≈ 1/n é exata e mantém a precisão do double.
+    return pv * (i / _fator_anuidade(i, n))
 
 
 def saldo_devedor_price(pv: float, i: float, n: int, k: int) -> float:
@@ -41,8 +44,9 @@ def saldo_devedor_price(pv: float, i: float, n: int, k: int) -> float:
     pmt = parcela_price(pv, i, n)
     if i == 0:
         return pv - pmt * k
-    # Valor presente das parcelas que ainda faltam
-    return pmt * _fator_anuidade(i, n - k) / i
+    # Valor presente das parcelas que ainda faltam. (fator / i) primeiro,
+    # pelo mesmo motivo da parcela_price: evita intermediário subnormal.
+    return pmt * (_fator_anuidade(i, n - k) / i)
 
 
 def custo_total(pv: float, i: float, n: int) -> tuple[float, float]:

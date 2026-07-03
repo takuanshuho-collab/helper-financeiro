@@ -146,10 +146,35 @@ uv run python demo_agente.py
 Qualidade (mesmos portões do CI — ver `.github/workflows/ci.yml`):
 ```bash
 uv run ruff check .
-uv run mypy core agent guardrails outputs main.py
+uv run mypy core agent guardrails outputs contracts scripts main.py
 uv run pre-commit install    # instala os hooks de commit (uma vez)
 ```
 
-O provider é **agnóstico**: por padrão aponta para **Ollama local** (LGPD /
-offline); pode usar endpoint OpenAI-compatible na nuvem via variáveis de
-ambiente. Ver `docs/ADR-0002` e `agent/config.py`.
+### Usando o CONSELHEIRO com um LLM de verdade (M2)
+
+O provider é **agnóstico** (ADR-0002/0005): por padrão aponta para **Ollama
+local** (LGPD / offline); um endpoint OpenAI-compatible na nuvem entra por
+variável de ambiente e **só recebe dados anonimizados** (H2).
+
+```bash
+# 1. instalar o Ollama (https://ollama.com) e baixar um modelo
+ollama pull qwen2.5:14b      # recomendado; use o bench p/ comparar candidatos
+
+# 2. (opcional) validar a integração e comparar modelos
+uv run pytest -m ollama
+uv run python scripts/bench_schema.py --modelos qwen2.5:7b qwen2.5:14b --n 5
+```
+
+| Variável | Padrão | Para quê |
+|---|---|---|
+| `HF_PROVIDER` | `local` | `local` (Ollama) · `openai_compat` (nuvem) · `fake` (testes) |
+| `HF_BASE_URL` | `http://localhost:11434/v1` | endpoint do provider |
+| `HF_MODEL` | `qwen2.5:14b` | modelo a usar |
+| `HF_API_KEY` | *(vazia)* | chave da nuvem — **só via ambiente** (REQ-SEC-002) |
+| `HF_MODO_DEGRADADO` | `0` | `1` pula o LLM e entrega só o determinístico (P8) |
+| `HF_TIMEOUT` | `60` | timeout por chamada, em segundos |
+| `HF_CACHE` | `1` | cache em memória de análises aprovadas (T-205) |
+
+Se o LLM estiver fora do ar, sem chave ou desobedecer aos guardrails, o
+sistema **degrada com segurança**: você sempre recebe o diagnóstico
+determinístico completo, com o motivo registrado.
