@@ -9,6 +9,18 @@ Convenção: `i` é sempre a taxa por período em decimal (0.02 = 2%).
 """
 from __future__ import annotations
 
+import math
+
+
+def _fator_anuidade(i: float, n: int) -> float:
+    """Calcula 1 - (1+i)^-n com estabilidade numérica.
+
+    A forma ingênua sofre cancelamento catastrófico para taxas minúsculas
+    (achado por teste de propriedade/Hypothesis: i=1e-9 perdia ~7 dígitos e
+    i=5e-324 dividia por zero). log1p/expm1 mantêm a precisão do double.
+    """
+    return -math.expm1(-n * math.log1p(i))
+
 
 def parcela_price(pv: float, i: float, n: int) -> float:
     """Parcela fixa no sistema Price (a famosa PMT).
@@ -19,7 +31,7 @@ def parcela_price(pv: float, i: float, n: int) -> float:
         return 0.0
     if i == 0:                      # empréstimo sem juros
         return pv / n
-    return pv * i / (1 - (1 + i) ** -n)
+    return pv * i / _fator_anuidade(i, n)
 
 
 def saldo_devedor_price(pv: float, i: float, n: int, k: int) -> float:
@@ -30,7 +42,7 @@ def saldo_devedor_price(pv: float, i: float, n: int, k: int) -> float:
     if i == 0:
         return pv - pmt * k
     # Valor presente das parcelas que ainda faltam
-    return pmt * (1 - (1 + i) ** -(n - k)) / i
+    return pmt * _fator_anuidade(i, n - k) / i
 
 
 def custo_total(pv: float, i: float, n: int) -> tuple[float, float]:

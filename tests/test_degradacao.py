@@ -11,7 +11,7 @@ class ProviderQueFalha:
 
 class ProviderQueAlucina:
     def analisar(self, fatos):
-        from agent.schemas import AnaliseAgente
+        from contracts import AnaliseAgente
         return AnaliseAgente(
             sumario_executivo="Economia garantida de R$ 88.888,00.",
             diagnostico_interpretado="x", prioridades=[], roteiro_negociacao=[])

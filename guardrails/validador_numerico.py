@@ -12,7 +12,7 @@ from __future__ import annotations
 import contextlib
 import re
 
-from agent.schemas import AnaliseAgente, FatosFinanceiros
+from contracts import AnaliseAgente, FatosFinanceiros
 
 TOLERANCIA_RELATIVA = 0.01   # ±1% para moeda/percentual
 _EPS = 1e-9

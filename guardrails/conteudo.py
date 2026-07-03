@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from agent.schemas import AnaliseAgente
+from contracts import AnaliseAgente
 
 AVISO_LEGAL = (
     "Aviso: esta análise é apoio à decisão com base nos dados informados. Não "

@@ -18,6 +18,17 @@ def perfil_atencao():
 
 
 @pytest.fixture
+def perfil_saudavel():
+    return PerfilFinanceiro(
+        renda_liquida=8000, despesas_fixas=3000, despesas_variaveis=1200,
+        reserva_emergencia=15000, saldo_fgts=20000,
+        dividas=[
+            Divida("Financiamento Casa", "Financiamento", 120000, 0.009, 1100, 180),
+        ],
+    )
+
+
+@pytest.fixture
 def perfil_critico():
     return PerfilFinanceiro(
         renda_liquida=3000, despesas_fixas=2000, despesas_variaveis=900,

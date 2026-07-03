@@ -21,6 +21,21 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-108 | Orquestração + degradação segura (`agent/agente.py`) | REQ-LLM-002, P8 | T-104..T-107 | ✅ |
 | T-109 | Harness offline (`tests/`) cobrindo M1 | HARNESS §1 | T-103..T-108 | ✅ |
 
+## Milestone M1.5 — Conformidade (auditoria 2026-07-03)
+
+> Fecha as divergências spec×código apontadas em `docs/AUDITORIA-2026-07-03.html`.
+
+| ID | Task | REQ / Achado | Status |
+|----|------|--------------|--------|
+| T-151 | Camada `contracts/` quebra ciclo guardrails↔agent (ADR-0004) | REQ-NF-004 / F-05 | ✅ |
+| T-152 | Retry único na chamada ao provider | REQ-LLM-002 / F-06 | ✅ |
+| T-153 | Cinto de segurança `contem_pii()` pré-cloud | REQ-GRD-002 / F-07 | ✅ |
+| T-154 | Testes de outputs (Gate B estrutural) | REQ-NF-003, H3/H4 / F-04 | ✅ |
+| T-155 | Config lê env em tempo de execução | SEC-002 / F-11 | ✅ |
+| T-156 | Testes de propriedade (Hypothesis) no core | REQ-F-001 / F-12 | ✅ |
+| T-157 | Estabilidade numérica de Price (log1p/expm1) — bug achado por T-156 | REQ-F-001 | ✅ |
+| T-158 | Limites do grounding e do simulador documentados | F-09/F-10 | ✅ |
+
 ## Milestone M2 — Providers reais
 
 | ID | Task | REQ | Depende | Status |

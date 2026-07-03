@@ -34,7 +34,7 @@ jobs:
       - name: Tipos (mypy)
         run: uv run mypy core agent guardrails outputs main.py
 
-      # Piso 48% = cobertura atual (catraca: só sobe, nunca desce).
-      # Fase 1 do roadmap eleva para 70% com os testes de outputs/ (F-04).
+      # Catraca de cobertura: só sobe, nunca desce. Fase 1 (testes de outputs,
+      # propriedades e recuperação) levou a cobertura real a ~92%.
       - name: Harness offline (pytest + cobertura)
-        run: uv run pytest --cov --cov-fail-under=48
+        run: uv run pytest --cov --cov-fail-under=90

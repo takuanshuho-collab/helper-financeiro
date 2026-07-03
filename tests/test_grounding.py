@@ -1,6 +1,6 @@
 """Grounding (REQ-GRD-001 / H1): número órfão na saída do LLM é reprovado."""
 from agent.agente import montar_fatos
-from agent.schemas import AnaliseAgente, Prioridade
+from contracts import AnaliseAgente, Prioridade
 from guardrails.validador_numerico import validar
 
 

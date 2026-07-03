@@ -143,6 +143,17 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
     _descreve("Bola de neve (ataca o menor saldo)", comp["bola_de_neve"],
               "Custa um pouco mais, mas entrega vitórias rápidas que ajudam a manter a disciplina.")
 
+    # Transparência do modelo (SPEC REQ-F-003, auditoria F-10).
+    nota = doc.add_paragraph()
+    r_nota = nota.add_run(
+        "Nota: a simulação usa um modelo simplificado (juros compostos sobre o "
+        "saldo, parcela constante) e serve para comparar as estratégias entre "
+        "si; o prazo exato pode diferir do cronograma contratual do banco."
+    )
+    r_nota.italic = True
+    r_nota.font.size = Pt(9)
+    r_nota.font.color.rgb = CINZA
+
     if comp["avalanche"]["quitavel"] and comp["bola_de_neve"]["quitavel"]:
         diferenca = comp["bola_de_neve"]["juros_pagos"] - comp["avalanche"]["juros_pagos"]
         if diferenca > 0:

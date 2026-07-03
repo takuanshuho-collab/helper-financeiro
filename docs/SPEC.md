@@ -24,6 +24,11 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   comprometimento de renda (Saudável ≤30% < Atenção ≤50% < Crítico).
 - **REQ-F-003** — O sistema DEVE simular quitação por avalanche e bola de neve,
   retornando meses até quitar e juros totais.
+  > *Modelo declarado (auditoria F-10):* o simulador aplica juros compostos
+  > sobre o saldo e abate a parcela nominal constante — uma simplificação que
+  > serve à comparação **relativa** entre estratégias; os meses absolutos podem
+  > divergir do cronograma Price contratual. Essa nota DEVE acompanhar o
+  > relatório gerado.
 - **REQ-F-004** — QUANDO o usuário fornecer um PDF de contrato, o sistema DEVE
   extrair tipo, valor, taxa, CET, nº de parcelas e valor da parcela (melhor
   esforço) e pré-preencher o formulário para conferência.
@@ -85,8 +90,8 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
 
 ## 6. Contratos de dados (Pydantic v2)
 
-> Fonte da verdade em `agent/schemas.py`. Estes contratos são a fronteira entre
-> o determinístico e o LLM.
+> Fonte da verdade em `contracts/schemas.py` (ADR-0004). Estes contratos são a
+> fronteira entre o determinístico e o LLM.
 
 ### 6.1 `FatosFinanceiros` (entrada do agente — apenas números + tokens)
 ```python

@@ -13,10 +13,10 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from contracts import AnaliseAgente, FatosFinanceiros, PassoNegociacao, Prioridade
 from core.utils import formatar_brl
 
 from .config import ConfigAgente
-from .schemas import AnaliseAgente, FatosFinanceiros, PassoNegociacao, Prioridade
 
 
 class LLMProvider(Protocol):

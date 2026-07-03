@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from .schemas import FatosFinanceiros
+from contracts import FatosFinanceiros
 
 SYSTEM_PROMPT = """\
 Você é um analista financeiro SÊNIOR especializado em endividamento de pessoa \

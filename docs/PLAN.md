@@ -29,8 +29,12 @@
 ```
 
 **Regra de dependência (P1/REQ-NF-004):** setas só apontam para baixo. `core`
-não importa `agent`, `outputs` nem `gui`. `agent` depende de `core` e
-`guardrails`. Nada importa `gui`.
+não importa `agent`, `outputs` nem `gui`. `agent` depende de `core`,
+`guardrails` e `contracts`. Nada importa `gui`.
+
+**Camada `contracts/` (ADR-0004):** os schemas Pydantic vivem em
+`contracts/schemas.py`, pacote sem dependências internas. `agent` e
+`guardrails` importam tipos apenas de lá — nunca um do outro.
 
 ## 2. Fluxo de uma análise (caminho feliz)
 

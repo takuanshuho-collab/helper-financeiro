@@ -12,16 +12,16 @@ from __future__ import annotations
 
 import logging
 
+from contracts import AnaliseAgente, DividaFato, EstrategiaFato, FatosFinanceiros, ResultadoAnalise
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias
 from core.models import PerfilFinanceiro
 from guardrails.conteudo import AVISO_LEGAL, detectar_conteudo_indevido, garantir_aviso
-from guardrails.pii import MapaAnonimizacao, anonimizar_credores
+from guardrails.pii import MapaAnonimizacao, anonimizar_credores, contem_pii
 from guardrails.validador_numerico import validar as validar_numeros
 
 from .config import ConfigAgente, carregar_config
 from .provider import LLMProvider, obter_provider
-from .schemas import AnaliseAgente, DividaFato, EstrategiaFato, FatosFinanceiros, ResultadoAnalise
 
 log = logging.getLogger("helper_financeiro.agente")
 
@@ -78,6 +78,17 @@ def _degradado(fatos: FatosFinanceiros, motivos: list[str]) -> ResultadoAnalise:
                             guardrails_violados=motivos, aviso_legal=AVISO_LEGAL)
 
 
+def _verificar_pii_pre_envio(fatos: FatosFinanceiros,
+                             mapa: MapaAnonimizacao) -> list[str]:
+    """Cinto de segurança final do H2: nada com PII sai para provider cloud.
+
+    A anonimização em montar_fatos() já protege por construção; esta checagem
+    varre o payload serializado que REALMENTE será enviado, para pegar qualquer
+    vazamento futuro (campo novo, refactor descuidado). REQ-GRD-002.
+    """
+    return contem_pii(fatos.model_dump_json(), mapa)
+
+
 def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
              cfg: ConfigAgente | None = None,
              provider: LLMProvider | None = None) -> ResultadoAnalise:
@@ -89,19 +100,32 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
     if cfg.modo_degradado:
         return _degradado(fatos, ["MODO_DEGRADADO"])
 
+    # H2: provider cloud só recebe payload comprovadamente sem PII.
+    if cfg.provider == "openai_compat" and _verificar_pii_pre_envio(fatos, mapa):
+        return _degradado(fatos, ["REQ-GRD-002:PII_DETECTADA"])
+
     provider = provider or obter_provider(cfg)
 
-    # 1) Chamada ao LLM
-    try:
-        analise = provider.analisar(fatos)
-    except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
-        return _degradado(fatos, [f"ERRO_PROVIDER:{type(e).__name__}"])
+    # 1) Chamada ao LLM — com 1 (uma) recuperação (REQ-LLM-002).
+    #    Falha transitória (rede, timeout) ou saída fora do schema ganham uma
+    #    segunda chance; persistindo, degrada.
+    analise: AnaliseAgente | None = None
+    motivo_falha = ""
+    for _tentativa in (1, 2):
+        try:
+            candidata = provider.analisar(fatos)
+        except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
+            motivo_falha = f"ERRO_PROVIDER:{type(e).__name__}"
+            continue
+        if isinstance(candidata, AnaliseAgente):
+            analise = candidata
+            break
+        motivo_falha = "REQ-LLM-002:SCHEMA"
+
+    if analise is None:
+        return _degradado(fatos, [motivo_falha or "ERRO_PROVIDER:Desconhecido"])
 
     violacoes: list[str] = []
-
-    # 2) Schema (defensivo: garante o tipo esperado)
-    if not isinstance(analise, AnaliseAgente):
-        return _degradado(fatos, ["REQ-LLM-002:SCHEMA"])
 
     # 3) Consistência numérica (H1) — a trava crítica
     orfaos = validar_numeros(fatos, analise)

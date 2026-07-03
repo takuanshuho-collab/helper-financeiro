@@ -42,6 +42,18 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
    b==a (contagem)? Se não, **violação**.
 4. Qualquer violação ⇒ teste falha (e, em produção, modo degradado).
 
+### 3.1 Limites conhecidos do grounding (auditoria F-09)
+O validador é uma **rede de segurança heurística**, não uma prova formal:
+- Inteiros ≤ 3 são isentos (enumerações "1., 2., 3."). Frases como
+  "3 vezes mais caro" passam sem checagem.
+- Números legítimos fora dos fatos (anos como "2026", artigos de lei) geram
+  **falso positivo** → degradação desnecessária, nunca saída errada. O erro
+  é sempre para o lado seguro.
+- O conjunto permitido inclui a forma ×100 de cada valor (percentuais),
+  mas não ÷100.
+Esses limites são aceitos enquanto o custo for degradar em excesso; revisar
+se a taxa de degradação em produção (M2+) incomodar.
+
 ## 4. Rubrica LLM-as-judge (opcional, 0–5)
 - Fidelidade aos fatos (peso 2) · Clareza (1) · Acionabilidade do roteiro (1) ·
   Ausência de aconselhamento indevido (1). Nota < 4 ⇒ revisar prompt.
@@ -66,8 +78,10 @@ quando os testes de `outputs/` fecharem o Gate B).
 | REQ | Teste |
 |---|---|
 | REQ-GRD-001 | `tests/test_grounding.py` |
-| REQ-GRD-002 / SEC-003 | `tests/test_pii.py` |
+| REQ-GRD-002 / SEC-003 | `tests/test_pii.py` (inclui cinto pré-cloud) |
 | REQ-GRD-003 / REQ-GRD-004 | `tests/test_conteudo.py` |
-| REQ-LLM-002 / P8 | `tests/test_degradacao.py` |
+| REQ-LLM-002 / P8 | `tests/test_degradacao.py`, `tests/test_recuperacao.py` |
 | REQ-GRD-005 / H5 | `tests/test_injecao.py` |
-| REQ-F-00x | `tests/test_core.py` |
+| REQ-F-00x | `tests/test_core.py`, `tests/test_propriedades.py` (invariantes) |
+| REQ-F-005 / REQ-NF-003 / H3 / H4 (Gate B) | `tests/test_outputs.py` |
+| REQ-LLM-003 / SEC-002 | `tests/test_config.py` |
