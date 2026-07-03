@@ -29,9 +29,12 @@ e pare. Mudança de arquitetura exige uma ADR nova em `docs/adr/`.
 
 ## Comandos úteis
 ```bash
-pytest -q                 # harness offline (deve ficar verde)
-python demo_saidas.py     # gera exemplos determinísticos
-python main.py            # abre a GUI
+uv sync --group dev              # instala tudo (pyproject.toml + uv.lock)
+uv run pytest -q                 # harness offline (deve ficar verde)
+uv run ruff check .              # lint — mesmo portão do CI
+uv run mypy core agent guardrails outputs main.py
+uv run python demo_saidas.py     # gera exemplos determinísticos
+uv run python main.py            # abre a GUI
 ```
 
 ## Definição de Pronto

@@ -1,0 +1,74 @@
+[project]
+name = "helper-financeiro"
+version = "2.0.0"
+description = "Diagnóstico de dívidas com estratégias de quitação, saídas em xlsx/docx e agente financeiro (LLM) sob guardrails"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "openpyxl>=3.1",      # planilha .xlsx com fórmulas e gráfico
+    "python-docx>=1.1",   # relatório e cartas .docx
+    "pdfplumber>=0.11",   # extração de texto de contratos PDF
+    "pydantic>=2.0",      # contratos tipados determinístico ↔ agente (v2)
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "pre-commit>=4.0",
+]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "SIM",      # simplificações
+]
+ignore = [
+    "E501",     # linhas longas: o formatador cuida; docstrings pedagógicas ficam livres
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["SIM"]  # clareza > concisão em testes
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+no_implicit_optional = true
+# GUI tkinter tem tipagem dinâmica pesada; endurecer na Fase 3 (AppController)
+[[tool.mypy.overrides]]
+module = ["pdfplumber.*", "openpyxl.*", "docx.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "judge: avaliação LLM-as-judge (requer provider real; fora do gate bloqueante)",
+    "ollama: integração com Ollama local (fora do gate bloqueante)",
+]
+
+# ---------------------------------------------------------------- coverage
+[tool.coverage.run]
+source = ["core", "agent", "guardrails", "outputs"]
+# gui/ fica fora da medição até existir AppController testável (Fase 3, F-08)
+omit = ["*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+precision = 1

@@ -1,0 +1,24 @@
+# Hooks locais via uv: sem descompasso de versão com o pyproject.toml.
+# Instalar:  uv run pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (lint + imports)
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy (tipos)
+        entry: uv run mypy core agent guardrails outputs main.py
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest (harness offline — Gate A)
+        entry: uv run pytest -q
+        language: system
+        types: [python]
+        pass_filenames: false

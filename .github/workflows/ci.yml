@@ -1,0 +1,40 @@
+# CI — materializa os portões do docs/HARNESS.md §5.
+# Gate A (bloqueante): lint + tipos + harness offline com piso de cobertura.
+# Gate B (planilhas sem erro de fórmula): entra na Fase 1, junto com tests/test_outputs.
+# Gate C (LLM-as-judge): sob demanda, nunca bloqueante (ver HARNESS §4).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate-a:
+    name: Gate A (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Instalar dependências
+        run: uv sync --group dev
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Tipos (mypy)
+        run: uv run mypy core agent guardrails outputs main.py
+
+      # Piso 48% = cobertura atual (catraca: só sobe, nunca desce).
+      # Fase 1 do roadmap eleva para 70% com os testes de outputs/ (F-04).
+      - name: Harness offline (pytest + cobertura)
+        run: uv run pytest --cov --cov-fail-under=48

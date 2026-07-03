@@ -16,7 +16,7 @@ embala para viagem. Trocar o salão não muda a receita.
 ```
 helper_financeiro/
 ├── main.py                 # ponto de entrada: abre a janela
-├── requirements.txt
+├── pyproject.toml          # dependências + config de ruff/mypy/pytest/coverage
 ├── core/                   # CÉREBRO — Python puro, sem interface
 │   ├── models.py           # Divida, PerfilFinanceiro (as "fichas")
 │   ├── utils.py            # parse/format de valores em padrão brasileiro
@@ -39,18 +39,19 @@ uma versão web, ou expor tudo via linha de comando, **nada do `core` muda**.
 
 ## ▶️ Como rodar (modo desenvolvedor)
 
+O projeto usa [uv](https://docs.astral.sh/uv/) para gerenciar ambiente e
+dependências (declaradas em `pyproject.toml`, travadas em `uv.lock`):
+
 ```bash
-# 1. (opcional) criar ambiente virtual
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
+# 1. instalar dependências (cria .venv automaticamente)
+uv sync
 
-# 2. instalar dependências
-pip install -r requirements.txt
-
-# 3. rodar
-python main.py
+# 2. rodar
+uv run python main.py
 ```
+
+> Sem uv? `pip install openpyxl python-docx pdfplumber pydantic` e
+> `python main.py` também funcionam.
 
 > No Linux, se der erro de `tkinter`, instale: `sudo apt install python3-tk`.
 > No Windows não é necessário — já vem com o Python.
@@ -137,9 +138,16 @@ tests/        # harness (pytest) — roda offline com FakeProvider
 
 Comece por [`docs/INDEX.md`](docs/INDEX.md). Rodar o harness:
 ```bash
-pip install -r requirements-dev.txt
-pytest -q            # 20 testes verdes, offline
-python demo_agente.py
+uv sync --group dev
+uv run pytest -q             # harness verde, offline
+uv run python demo_agente.py
+```
+
+Qualidade (mesmos portões do CI — ver `.github/workflows/ci.yml`):
+```bash
+uv run ruff check .
+uv run mypy core agent guardrails outputs main.py
+uv run pre-commit install    # instala os hooks de commit (uma vez)
 ```
 
 O provider é **agnóstico**: por padrão aponta para **Ollama local** (LGPD /

@@ -1,7 +1,7 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
 - **Versão:** 2.0.0 · **Regido por:** `CONSTITUTION.md` (P6)
-- **Executor:** `pytest` · **Local:** `tests/` e `harness/`
+- **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 
 O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 `REQ-GRD-*` ou `REQ-LLM-*` é considerado pronto sem um teste verde aqui.
@@ -53,10 +53,14 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 
 ## 6. Como rodar
 ```bash
-pip install -r requirements-dev.txt   # pytest, pydantic
-pytest -q                              # roda o harness offline
-pytest -q -m judge                     # opcional, exige provider real
+uv sync --group dev        # pytest, pydantic, ruff, mypy
+uv run pytest -q           # roda o harness offline
+uv run pytest -q -m judge  # opcional, exige provider real
 ```
+
+Os gates rodam automaticamente a cada push (`.github/workflows/ci.yml`):
+ruff → mypy → pytest com piso de cobertura (48%, catraca — sobe para 70%
+quando os testes de `outputs/` fecharem o Gate B).
 
 ## 7. Mapa REQ → teste (mantido em sincronia com SPEC)
 | REQ | Teste |

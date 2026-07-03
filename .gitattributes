@@ -1,0 +1,14 @@
+# Normaliza fim de linha: LF no repositório, nativo no checkout.
+* text=auto
+
+*.py text
+*.md text
+*.html text
+*.toml text
+*.yml text
+*.yaml text
+
+# Binários gerados (exemplos)
+*.xlsx binary
+*.docx binary
+*.pdf binary
