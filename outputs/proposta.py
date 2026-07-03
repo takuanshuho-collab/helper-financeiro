@@ -11,8 +11,8 @@ from __future__ import annotations
 from datetime import date
 
 from docx import Document
-from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, RGBColor
 
 from core.models import Divida
 from core.utils import formatar_brl, formatar_pct

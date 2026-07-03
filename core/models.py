@@ -6,7 +6,7 @@ que só guardam campos e sabem calcular algumas coisas sobre si mesmas.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 
 # Tipos de dívida reconhecidos. O tipo influencia a estratégia:
 # consignado costuma ser barato; cartão/cheque especial, caros.

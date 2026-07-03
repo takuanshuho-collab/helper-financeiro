@@ -6,14 +6,13 @@ from __future__ import annotations
 from datetime import date
 
 from docx import Document
-from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, RGBColor
 
+from core.diagnostico import resumo_diagnostico
+from core.estrategias import comparar_estrategias, gerar_recomendacoes, oportunidades_portabilidade
 from core.models import PerfilFinanceiro
 from core.utils import formatar_brl, formatar_pct
-from core.diagnostico import resumo_diagnostico
-from core.estrategias import (comparar_estrategias, oportunidades_portabilidade,
-                              gerar_recomendacoes)
 
 AZUL = RGBColor(0x1F, 0x4E, 0x79)
 CINZA = RGBColor(0x59, 0x59, 0x59)

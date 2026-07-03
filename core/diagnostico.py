@@ -3,7 +3,7 @@ Diagnóstico financeiro: transforma o perfil em indicadores interpretáveis.
 """
 from __future__ import annotations
 
-from .models import PerfilFinanceiro, Divida
+from .models import Divida, PerfilFinanceiro
 
 # Faixas de comprometimento de renda (parcelas / renda líquida).
 # Referência de bolso amplamente usada em educação financeira.

@@ -6,10 +6,10 @@ Serve para testar o motor e ver o que o programa produz.
 """
 import os
 
-from core.models import PerfilFinanceiro, Divida
+from core.models import Divida, PerfilFinanceiro
 from outputs.planilha import gerar_planilha
-from outputs.relatorio import gerar_relatorio
 from outputs.proposta import gerar_proposta
+from outputs.relatorio import gerar_relatorio
 
 SAIDA = os.path.join(os.path.dirname(__file__), "exemplos")
 os.makedirs(SAIDA, exist_ok=True)

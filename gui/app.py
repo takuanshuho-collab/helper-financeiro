@@ -13,19 +13,20 @@ gerado vem do pacote `outputs`.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from core.models import PerfilFinanceiro, Divida, TIPOS_DIVIDA
-from core.utils import parse_valor, parse_taxa, formatar_brl, formatar_pct
 from core.calculos import taxa_anual_para_mensal
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias, gerar_recomendacoes
 from core.extrator_pdf import extrair_contrato
+from core.models import TIPOS_DIVIDA, Divida, PerfilFinanceiro
+from core.utils import formatar_brl, formatar_pct, parse_taxa, parse_valor
 from outputs.planilha import gerar_planilha
-from outputs.relatorio import gerar_relatorio
 from outputs.proposta import gerar_proposta
+from outputs.relatorio import gerar_relatorio
 
 COR_PRIMARIA = "#1F4E79"
 COR_FUNDO = "#F5F7FA"
@@ -60,10 +61,8 @@ class HelperFinanceiroApp(tk.Tk):
     # ------------------------------------------------------------------ estilo
     def _configurar_estilo(self):
         s = ttk.Style(self)
-        try:
+        with contextlib.suppress(tk.TclError):  # tema "clam" pode não existir na plataforma
             s.theme_use("clam")
-        except tk.TclError:
-            pass
         s.configure("TNotebook", background=COR_FUNDO, borderwidth=0)
         s.configure("TNotebook.Tab", padding=(16, 8), font=("Segoe UI", 10))
         s.configure("TFrame", background=COR_FUNDO)

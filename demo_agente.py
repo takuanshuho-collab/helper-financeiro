@@ -6,12 +6,11 @@ com os nomes reais restaurados apenas na exibição local.
 
 Rode com:  python demo_agente.py
 """
-from core.models import PerfilFinanceiro, Divida
 from agent.agente import analisar
 from agent.config import ConfigAgente
 from agent.provider import FakeProvider
-from guardrails.pii import anonimizar_credores, MapaAnonimizacao
-from guardrails.pii import desanonimizar
+from core.models import Divida, PerfilFinanceiro
+from guardrails.pii import anonimizar_credores, desanonimizar
 
 perfil = PerfilFinanceiro(
     renda_liquida=5000, despesas_fixas=2200, despesas_variaveis=800,

@@ -9,9 +9,10 @@ passou pela balança calibrada do `core`, soa o alarme.
 """
 from __future__ import annotations
 
+import contextlib
 import re
 
-from agent.schemas import FatosFinanceiros, AnaliseAgente
+from agent.schemas import AnaliseAgente, FatosFinanceiros
 
 TOLERANCIA_RELATIVA = 0.01   # ±1% para moeda/percentual
 _EPS = 1e-9
@@ -30,10 +31,8 @@ def _interpretacoes(bruto: str) -> list[float]:
     """
     cands: list[float] = []
     # pt-BR: ponto = milhar, vírgula = decimal
-    try:
+    with contextlib.suppress(ValueError):
         cands.append(float(bruto.replace(".", "").replace(",", ".")))
-    except ValueError:
-        pass
     # cru/US: vírgula = milhar, ponto = decimal
     try:
         v = float(bruto.replace(",", ""))

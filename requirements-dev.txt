@@ -1,6 +1,0 @@
-# Dependências de desenvolvimento/harness
--r requirements.txt
-pydantic>=2.0
-pytest>=8.0
-# instructor>=1.0     # structured output com providers reais (M2)
-# openai>=1.0         # cliente OpenAI-compatible p/ Ollama e nuvem (M2)

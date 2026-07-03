@@ -12,19 +12,16 @@ from __future__ import annotations
 
 import logging
 
-from core.models import PerfilFinanceiro
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias
+from core.models import PerfilFinanceiro
+from guardrails.conteudo import AVISO_LEGAL, detectar_conteudo_indevido, garantir_aviso
+from guardrails.pii import MapaAnonimizacao, anonimizar_credores
+from guardrails.validador_numerico import validar as validar_numeros
 
-from .schemas import (FatosFinanceiros, DividaFato, EstrategiaFato,
-                      AnaliseAgente, ResultadoAnalise)
 from .config import ConfigAgente, carregar_config
 from .provider import LLMProvider, obter_provider
-
-from guardrails.pii import anonimizar_credores, MapaAnonimizacao
-from guardrails.validador_numerico import validar as validar_numeros
-from guardrails.conteudo import (detectar_conteudo_indevido, garantir_aviso,
-                                 AVISO_LEGAL)
+from .schemas import AnaliseAgente, DividaFato, EstrategiaFato, FatosFinanceiros, ResultadoAnalise
 
 log = logging.getLogger("helper_financeiro.agente")
 

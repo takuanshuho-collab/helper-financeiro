@@ -1,7 +1,6 @@
 """Conteúdo (REQ-GRD-004 / H6 e REQ-GRD-003 / H3)."""
 from agent.schemas import AnaliseAgente, PassoNegociacao
-from guardrails.conteudo import (detectar_conteudo_indevido, garantir_aviso,
-                                 AVISO_LEGAL)
+from guardrails.conteudo import AVISO_LEGAL, detectar_conteudo_indevido, garantir_aviso
 
 
 def test_recomendacao_investimento_e_sinalizada():

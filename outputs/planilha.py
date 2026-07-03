@@ -8,11 +8,11 @@ pode mudar um saldo ou uma taxa e ver tudo recalcular sozinho.
 from __future__ import annotations
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.chart import BarChart, Reference
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-from core.models import PerfilFinanceiro
 from core.estrategias import comparar_estrategias, oportunidades_portabilidade
+from core.models import PerfilFinanceiro
 
 # --- Paleta e estilos ---
 AZUL = "1F4E79"
@@ -160,13 +160,16 @@ def _aba_estrategias(wb, perfil: PerfilFinanceiro, extra_mensal: float,
 
     comp = comparar_estrategias(perfil, extra_mensal)
     ws.append([])
-    ws.cell(3, 1, f"Pagamento extra considerado por mês:").font = _negrito
-    c = ws.cell(3, 2, round(extra_mensal, 2)); c.number_format = MOEDA; c.font = _entrada
+    ws.cell(3, 1, "Pagamento extra considerado por mês:").font = _negrito
+    c = ws.cell(3, 2, round(extra_mensal, 2))
+    c.number_format = MOEDA
+    c.font = _entrada
 
     ws.append([])
     ws.append(["Método", "Meses até quitar", "Total de juros pagos", "Ordem de ataque"])
     for cell in ws[5]:
-        cell.font = _cabecalho; cell.fill = _fill_cab
+        cell.font = _cabecalho
+        cell.fill = _fill_cab
 
     def _linha_metodo(nome, res):
         meses = res["meses"] if res["quitavel"] else "não quita c/ este valor"
@@ -178,13 +181,15 @@ def _aba_estrategias(wb, perfil: PerfilFinanceiro, extra_mensal: float,
     _linha_metodo("Bola de neve (menor saldo primeiro)", comp["bola_de_neve"])
 
     # Portabilidade
-    ws.append([]); ws.append([])
+    ws.append([])
+    ws.append([])
     lin_port = ws.max_row + 1
     ws.cell(lin_port, 1,
             f"Portabilidade — economia se migrar para {taxa_alvo*100:.2f}% a.m.").font = _negrito
     ws.append(["Credor", "Tipo", "Parcela atual", "Parcela nova", "Economia total"])
     for cell in ws[ws.max_row]:
-        cell.font = _cabecalho; cell.fill = _fill_cab
+        cell.font = _cabecalho
+        cell.fill = _fill_cab
     for o in oportunidades_portabilidade(perfil, taxa_alvo):
         ws.append([o["credor"], o["tipo"], o["parcela_atual"],
                    o["parcela_nova"], o["economia_total"]])

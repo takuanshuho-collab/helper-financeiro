@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from .utils import parse_valor, parse_taxa
+from .utils import parse_taxa, parse_valor
 
 
 def extrair_texto_pdf(caminho: str) -> str:

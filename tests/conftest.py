@@ -1,7 +1,7 @@
 """Fixtures do harness (casos-ouro). Ver docs/HARNESS §2."""
 import pytest
 
-from core.models import PerfilFinanceiro, Divida
+from core.models import Divida, PerfilFinanceiro
 
 
 @pytest.fixture

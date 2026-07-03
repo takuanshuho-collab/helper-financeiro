@@ -5,8 +5,8 @@ A defesa arquitetural é que o LLM recebe SOMENTE fatos tipados (FatosFinanceiro
 nunca o texto cru do PDF. Este teste garante que o parser do contrato não
 propaga instruções para os campos estruturados usados na análise.
 """
-from core.extrator_pdf import parsear_campos
 from agent.schemas import FatosFinanceiros
+from core.extrator_pdf import parsear_campos
 
 
 def test_texto_malicioso_nao_vira_campo_estruturado():

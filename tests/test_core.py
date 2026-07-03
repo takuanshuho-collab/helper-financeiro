@@ -1,7 +1,6 @@
 """Núcleo determinístico (REQ-F-001..003)."""
-from core.calculos import (parcela_price, taxa_implicita, calcular_cet_anual,
-                           taxa_mensal_para_anual)
-from core.diagnostico import resumo_diagnostico, classificar_saude
+from core.calculos import calcular_cet_anual, parcela_price, taxa_implicita, taxa_mensal_para_anual
+from core.diagnostico import classificar_saude, resumo_diagnostico
 from core.estrategias import comparar_estrategias
 
 

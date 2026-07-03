@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from .models import PerfilFinanceiro, Divida
 from .calculos import simular_portabilidade
+from .models import Divida, PerfilFinanceiro
 
 MESES_MAXIMO = 600  # trava de segurança: 50 anos
 
