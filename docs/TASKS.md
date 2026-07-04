@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.0.0 · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.2.0 · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -90,6 +90,20 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-403 | Revisão de segurança (sem PII/keys em log) → `docs/REVISAO-SEGURANCA.md` | SEC-001/002 | M2 | ✅ |
 | T-404 | Higiene de checkpoint: estado dos grafos só com dicts (`model_dump`) + allowlist msgpack explícita no serializador | SEC-003 | T-252/T-255 | ✅ |
 
+## Milestone M5 — Perfil como orçamento detalhado (v2.2, ADR-0008)
+
+> Reabre o desenvolvimento pós-freeze v2.1.0 com autorização formal da
+> ADR-0008; nova ata de freeze será lavrada no fechamento do ciclo v2.2.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-501 | PRD: resolver NC-1..NC-4 como DEC-1..DEC-4 (agnóstico/local padrão; 100% offline; sem orçamento formal de tokens; programas generalizados) | PRD §8 | — | ✅ |
+| T-502 | Generalizar menção a programas públicos (prompts, AGENT.md, README) — Desenrola encerrado | DEC-4, RES-4 | T-501 | ✅ |
+| T-503 | `core/models.py`: `ComposicaoRenda`/`DespesasFixas`/`DespesasVariaveis` + `PerfilFinanceiro.com_orcamento` (roll-up) + `meses_reserva` | REQ-F-006/007 | — | ✅ |
+| T-504 | GUI: aba Perfil com itemização obrigatória, totais ao vivo, cobertura da reserva e resumo (fluxo/comprometimento) | REQ-F-008 | T-503 | ✅ |
+| T-505 | Harness: `tests/test_orcamento.py` (roll-up, meses de reserva, retrocompatibilidade, propriedade Hypothesis) | REQ-F-006/007 | T-503 | ✅ |
+| T-506 | Docs sincronizados (PRD/SPEC/PLAN/TASKS/HARNESS/INDEX + ADR-0008) e CI verde | Processo | todos | ✅ |
+
 ---
 
 ## Definição de Pronto (DoD)
@@ -98,7 +112,7 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Todos os milestones (M1..M4) entregues e verdes.** O roadmap v2 está
-completo: agente sob guardrails, extração Code-First, GUI integrada, `.exe`
-empacotado, segurança revisada e versão congelada (`FREEZE.md`). Mudanças
-daqui em diante exigem nova ADR + incremento de versão + nova ata (P-freeze).
+**Ciclo v2.2 aberto (ADR-0008).** M5 entregue: perfil como orçamento
+detalhado com roll-up no `core` e resumo ao vivo na GUI. Próximo passo
+combinado com o mantenedor: **M6 — revisão de UI/UX do app**. Ao fechar o
+ciclo v2.2, lavrar nova ata de freeze (rebuild do `.exe` + SHA-256).

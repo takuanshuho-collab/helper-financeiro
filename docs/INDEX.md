@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0007) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0008) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
@@ -37,8 +37,12 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
 - **Modelo padrão:** `qwen2.5:3b` (GPU 4 GB); alternativa Apache 2.0: `qwen3:4b`.
 - **M4 fechado:** `HelperFinanceiro.exe` (~94 MB, PyInstaller), revisão de
   segurança aprovada (`REVISAO-SEGURANCA.md`), higiene de checkpoint
-  (estado só com dicts + allowlist msgpack) e versão congelada em `FREEZE.md`.
-- **Roadmap v2 completo.** Mudanças exigem nova ADR + versão + nova ata.
+  (estado só com dicts + allowlist msgpack) e v2.1.0 congelada em `FREEZE.md`.
+- **Ciclo v2.2 aberto (ADR-0008) — M5 entregue:** questões abertas do PRD
+  resolvidas (DEC-1..DEC-4), menções a programas públicos generalizadas e
+  perfil como **orçamento doméstico detalhado** (categorias tipadas no
+  `core`, roll-up determinístico, cobertura da reserva em meses e resumo ao
+  vivo na GUI). Próximo: M6 — UI/UX. Nova ata de freeze ao fechar o ciclo.
 
 ## Rodar
 ```bash

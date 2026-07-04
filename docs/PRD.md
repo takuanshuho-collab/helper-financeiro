@@ -1,8 +1,8 @@
 # PRD — Helper Financeiro v2
 
 - **Produto:** Helper Financeiro (desktop, offline-first)
-- **Versão do documento:** 2.0.0
-- **Status:** Proposto
+- **Versão do documento:** 2.2.0
+- **Status:** Ativo (questões abertas resolvidas em 2026-07-04; ADR-0008)
 - **Codinome da camada de IA:** CONSELHEIRO (Agente Financeiro Sênior)
 - **Depende de:** `docs/CONSTITUTION.md`
 
@@ -57,6 +57,11 @@ com agente de código.
   opcional.
 - Suite de artefatos SDD e guia para IDE (`AGENTS.md`).
 - Integração da narrativa do agente no relatório `.docx` e na GUI.
+- **(v2.2)** Perfil como **orçamento doméstico completo**: renda, despesas
+  fixas e variáveis informadas **por categoria** (itemização obrigatória na
+  GUI), com totais derivados por soma no `core`, indicador de cobertura da
+  reserva de emergência (em meses de despesas) e resumo financeiro ao vivo
+  (ADR-0008).
 
 ### 5.2 Fora do escopo (v2)
 - OCR de contratos escaneados (fica para v3 — reaproveitar ÓCULO/OnnxTR).
@@ -68,8 +73,10 @@ com agente de código.
 - **RES-1:** Roda em Windows (empacotável como `.exe`), Python 3.12+.
 - **RES-2:** LGPD — anonimização obrigatória antes de LLM cloud (P3, H2).
 - **RES-3:** Não é aconselhamento financeiro licenciado (P4).
-- **RES-4:** Regras de programas (ex.: Desenrola) mudam; o sistema não as
-  "fixa" em código como verdade permanente — ver `NEEDS_CLARIFICATION`.
+- **RES-4:** Regras de programas públicos de renegociação mudam (e programas
+  inteiros terminam, como o Desenrola Brasil); o sistema NUNCA as fixa em
+  código como verdade permanente — qualquer menção é genérica e acompanhada
+  de ressalva de vigência (ver DEC-4).
 
 ## 7. Riscos
 | Risco | Mitigação |
@@ -80,13 +87,20 @@ com agente de código.
 | Usuário trata saída como conselho garantido | P4/H3: aviso legal em toda saída |
 | Custo/latência de API | Modo local (Ollama) + cache + degradação segura |
 
-## 8. Questões abertas (NEEDS_CLARIFICATION)
-- **NC-1:** Modo **local-first é mandatório** (Ollama sempre) ou nuvem é
-  aceitável desde que anonimizada? *(Assunção atual: agnóstico, com local
-  como padrão recomendado.)*
-- **NC-2:** Há requisito de **operação 100% offline**? *(Assunção: sim, com
-  degradação segura quando não houver LLM.)*
-- **NC-3:** Orçamento de **custo/tokens** por análise, se usar nuvem?
-- **NC-4:** Deve-se **incluir dados do Desenrola** vigente na análise, sabendo
-  que a regra expira/muda? *(Assunção: mencionar como contexto, sempre com
-  ressalva de verificar vigência.)*
+## 8. Decisões registradas (ex-NEEDS_CLARIFICATION)
+
+> Resolvidas com o mantenedor em **2026-07-04** (revisão pós-freeze v2.1.0).
+
+- **DEC-1 (era NC-1):** Provider **agnóstico com local como padrão** —
+  ratificada a assunção. Ollama é o caminho recomendado; nuvem é aceitável
+  apenas com payload anonimizado (REQ-GRD-002). Nada muda no código.
+- **DEC-2 (era NC-2):** **Sim, operação 100% offline é requisito** — ratificada
+  a assunção: modo local ou degradação segura (P8, REQ-NF-002).
+- **DEC-3 (era NC-3):** **Sem orçamento formal de custo/tokens.** Como o local
+  é o padrão, a nuvem é exceção consciente do usuário; o cache LRU evita
+  chamadas repetidas. Ordem de grandeza documentada: **~2–4k tokens por
+  análise** (fatos anonimizados + saída estruturada).
+- **DEC-4 (era NC-4):** **Generalizar com ressalva.** O Desenrola Brasil foi
+  encerrado; prompt e textos falam apenas em "programas públicos de
+  renegociação e feirões de dívida **vigentes**", sempre com a instrução de
+  verificar a vigência — nenhuma regra de programa é fixada em código (RES-4).

@@ -50,6 +50,58 @@ class Divida:
         return max(self.custo_total_restante - self.saldo_devedor, 0.0)
 
 
+# --- Orçamento detalhado (ADR-0008, REQ-F-006) -----------------------------
+# O usuário informa POR CATEGORIA; os agregados do PerfilFinanceiro são sempre
+# derivados por soma (roll-up determinístico) — nunca digitados em separado.
+
+
+@dataclass
+class ComposicaoRenda:
+    """Renda líquida mensal, aberta por origem."""
+
+    salario_liquido: float = 0.0   # salário/benefício principal, já descontado
+    renda_extra: float = 0.0       # bicos, freelas, trabalho autônomo
+    outras_rendas: float = 0.0     # aluguel recebido, pensão, auxílios
+
+    @property
+    def total(self) -> float:
+        return self.salario_liquido + self.renda_extra + self.outras_rendas
+
+
+@dataclass
+class DespesasFixas:
+    """Despesas que se repetem todo mês com valor previsível."""
+
+    moradia: float = 0.0           # aluguel, condomínio, IPTU mensalizado
+    contas_casa: float = 0.0       # luz, água, gás, internet, telefone
+    transporte: float = 0.0        # combustível, transporte público, seguro
+    saude: float = 0.0             # plano de saúde, remédios contínuos
+    educacao: float = 0.0          # escola, faculdade, cursos
+    assinaturas: float = 0.0       # streaming, apps, academia
+    outras_fixas: float = 0.0
+
+    @property
+    def total(self) -> float:
+        return (self.moradia + self.contas_casa + self.transporte + self.saude
+                + self.educacao + self.assinaturas + self.outras_fixas)
+
+
+@dataclass
+class DespesasVariaveis:
+    """Despesas que flutuam mês a mês (use a média dos últimos meses)."""
+
+    mercado: float = 0.0           # supermercado, feira, padaria
+    lazer: float = 0.0             # restaurantes, delivery, passeios
+    vestuario: float = 0.0         # roupas, calçados, cuidados pessoais
+    imprevistos: float = 0.0       # consertos, presentes, eventualidades
+    outras_variaveis: float = 0.0
+
+    @property
+    def total(self) -> float:
+        return (self.mercado + self.lazer + self.vestuario
+                + self.imprevistos + self.outras_variaveis)
+
+
 @dataclass
 class PerfilFinanceiro:
     renda_liquida: float = 0.0
@@ -58,6 +110,34 @@ class PerfilFinanceiro:
     reserva_emergencia: float = 0.0
     saldo_fgts: float = 0.0
     dividas: list[Divida] = field(default_factory=list)
+    # Detalhamento opcional de origem (preenchido por `com_orcamento`); os
+    # campos agregados acima continuam sendo a fonte usada nos cálculos.
+    renda_detalhada: ComposicaoRenda | None = None
+    fixas_detalhadas: DespesasFixas | None = None
+    variaveis_detalhadas: DespesasVariaveis | None = None
+
+    @classmethod
+    def com_orcamento(
+        cls,
+        renda: ComposicaoRenda,
+        fixas: DespesasFixas,
+        variaveis: DespesasVariaveis,
+        reserva_emergencia: float = 0.0,
+        saldo_fgts: float = 0.0,
+        dividas: list[Divida] | None = None,
+    ) -> PerfilFinanceiro:
+        """Monta o perfil a partir do orçamento por categoria (roll-up)."""
+        return cls(
+            renda_liquida=renda.total,
+            despesas_fixas=fixas.total,
+            despesas_variaveis=variaveis.total,
+            reserva_emergencia=reserva_emergencia,
+            saldo_fgts=saldo_fgts,
+            dividas=dividas or [],
+            renda_detalhada=renda,
+            fixas_detalhadas=fixas,
+            variaveis_detalhadas=variaveis,
+        )
 
     # --- Totais e indicadores ---
     @property
@@ -83,6 +163,17 @@ class PerfilFinanceiro:
     def fluxo_caixa(self) -> float:
         """Sobra (ou déficit) mensal após despesas e parcelas."""
         return self.renda_liquida - self.despesas_totais - self.total_parcelas
+
+    @property
+    def meses_reserva(self) -> float | None:
+        """Quantos meses de despesas totais a reserva cobre (REQ-F-007).
+
+        Retorna None quando as despesas totais são zero — sem despesas
+        informadas, a cobertura em meses não tem significado.
+        """
+        if self.despesas_totais <= 0:
+            return None
+        return self.reserva_emergencia / self.despesas_totais
 
     def to_dict(self) -> dict:
         return asdict(self)

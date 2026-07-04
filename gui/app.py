@@ -31,7 +31,14 @@ from core.calculos import taxa_anual_para_mensal
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias, gerar_recomendacoes
 from core.extrator_pdf import extrair_contrato, extrair_texto_pdf
-from core.models import TIPOS_DIVIDA, Divida, PerfilFinanceiro
+from core.models import (
+    TIPOS_DIVIDA,
+    ComposicaoRenda,
+    DespesasFixas,
+    DespesasVariaveis,
+    Divida,
+    PerfilFinanceiro,
+)
 from core.utils import formatar_brl, formatar_pct, parse_taxa, parse_valor
 from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta
@@ -109,32 +116,177 @@ class HelperFinanceiroApp(tk.Tk):
         return var
 
     # -------------------------------------------------------------- aba perfil
+    # M5 (ADR-0008, REQ-F-006/007/008): o perfil é um orçamento doméstico
+    # completo — renda e despesas entram POR CATEGORIA, os totais e o resumo
+    # são recalculados ao vivo, e o roll-up vem do core (com_orcamento).
     def _aba_perfil(self):
         frame = ttk.Frame(self.abas)
         self.abas.add(frame, text="  1. Perfil  ")
+        frame.grid_columnconfigure(0, weight=1, uniform="perfil")
+        frame.grid_columnconfigure(1, weight=1, uniform="perfil")
 
-        ttk.Label(frame, text="Dados pessoais e financeiros",
+        ttk.Label(frame, text="Dados pessoais e orçamento mensal completo",
                   style="Titulo.TLabel").grid(row=0, column=0, columnspan=2,
-                                              sticky="w", padx=8, pady=(12, 4))
-        self.var_nome = self._campo(frame, "Nome", 1)
-        self.var_cpf = self._campo(frame, "CPF", 2)
-        self.var_renda = self._campo(frame, "Renda líquida mensal (R$)", 3)
-        self.var_desp_fixas = self._campo(frame, "Despesas fixas (R$)", 4)
-        self.var_desp_var = self._campo(frame, "Despesas variáveis (R$)", 5)
-        self.var_reserva = self._campo(frame, "Reserva de emergência (R$)", 6)
-        self.var_fgts = self._campo(frame, "Saldo de FGTS (R$)", 7)
-
+                                              sticky="w", padx=8, pady=(10, 0))
         ttk.Label(frame,
-                  text="Dica: use vírgula para centavos (ex.: 3.250,00). "
-                       "Campos vazios contam como zero.",
-                  foreground="#777").grid(row=8, column=0, columnspan=2,
-                                          sticky="w", padx=8, pady=12)
+                  text="Preencha cada categoria (média mensal): os totais e o "
+                       "resumo são calculados na hora. Use vírgula para "
+                       "centavos; campos vazios contam como zero.",
+                  foreground="#777").grid(row=1, column=0, columnspan=2,
+                                          sticky="w", padx=8, pady=(0, 6))
+
+        ident = ttk.Frame(frame)
+        ident.grid(row=2, column=0, columnspan=2, sticky="ew", padx=8)
+        ttk.Label(ident, text="Nome").pack(side="left")
+        self.var_nome = tk.StringVar()
+        ttk.Entry(ident, textvariable=self.var_nome,
+                  width=32).pack(side="left", padx=(6, 18))
+        ttk.Label(ident, text="CPF").pack(side="left")
+        self.var_cpf = tk.StringVar()
+        ttk.Entry(ident, textvariable=self.var_cpf,
+                  width=18).pack(side="left", padx=6)
+
+        self.vars_renda, self.lbl_total_renda = self._secao_orcamento(
+            frame, "Renda líquida mensal (R$)", linha=3, coluna=0, campos=[
+                ("salario_liquido", "Salário / benefício líquido"),
+                ("renda_extra", "Renda extra ou autônoma"),
+                ("outras_rendas", "Outras rendas (aluguel, pensão)"),
+            ])
+        self.vars_fixas, self.lbl_total_fixas = self._secao_orcamento(
+            frame, "Despesas fixas (R$)", linha=3, coluna=1, rowspan=2,
+            campos=[
+                ("moradia", "Moradia (aluguel, condomínio)"),
+                ("contas_casa", "Contas da casa (luz, água, internet)"),
+                ("transporte", "Transporte"),
+                ("saude", "Saúde (plano, remédios contínuos)"),
+                ("educacao", "Educação"),
+                ("assinaturas", "Assinaturas e academia"),
+                ("outras_fixas", "Outras despesas fixas"),
+            ])
+        self.vars_variaveis, self.lbl_total_variaveis = self._secao_orcamento(
+            frame, "Despesas variáveis (R$)", linha=4, coluna=0, campos=[
+                ("mercado", "Mercado e alimentação"),
+                ("lazer", "Lazer e delivery"),
+                ("vestuario", "Vestuário e cuidados pessoais"),
+                ("imprevistos", "Imprevistos"),
+                ("outras_variaveis", "Outras despesas variáveis"),
+            ])
+
+        patrimonio = ttk.LabelFrame(frame, text="Reserva e FGTS (R$)")
+        patrimonio.grid(row=5, column=0, columnspan=2, sticky="ew",
+                        padx=8, pady=4)
+        ttk.Label(patrimonio,
+                  text="Reserva de emergência").grid(row=0, column=0,
+                                                     sticky="w", padx=8,
+                                                     pady=2)
+        self.var_reserva = self._var_orcamento()
+        ttk.Entry(patrimonio, textvariable=self.var_reserva, width=14,
+                  justify="right").grid(row=0, column=1, padx=8, pady=2)
+        ttk.Label(patrimonio, text="Saldo de FGTS").grid(row=0, column=2,
+                                                         sticky="w",
+                                                         padx=(24, 8), pady=2)
+        self.var_fgts = self._var_orcamento()
+        ttk.Entry(patrimonio, textvariable=self.var_fgts, width=14,
+                  justify="right").grid(row=0, column=3, padx=8, pady=2)
+        self.lbl_reserva = tk.Label(patrimonio, text="", bg=COR_FUNDO,
+                                    fg=COR_NEUTRA, font=("Segoe UI", 9))
+        self.lbl_reserva.grid(row=0, column=4, sticky="w", padx=(24, 8),
+                              pady=2)
+
+        resumo = ttk.LabelFrame(frame, text="Resumo ao vivo")
+        resumo.grid(row=6, column=0, columnspan=2, sticky="ew", padx=8,
+                    pady=(4, 8))
+        self.lbl_fluxo = tk.Label(resumo, text="", bg=COR_FUNDO,
+                                  font=("Segoe UI", 10, "bold"))
+        self.lbl_fluxo.pack(side="left", padx=12, pady=6)
+        self.lbl_comprometimento = tk.Label(resumo, text="", bg=COR_FUNDO,
+                                            font=("Segoe UI", 10))
+        self.lbl_comprometimento.pack(side="left", padx=12, pady=6)
+
+        self._perfil_pronto = True
+        self._atualizar_resumo_perfil()
+
+    def _var_orcamento(self) -> tk.StringVar:
+        """StringVar que dispara o recálculo do resumo a cada digitação."""
+        var = tk.StringVar()
+        var.trace_add("write", lambda *_: self._atualizar_resumo_perfil())
+        return var
+
+    def _secao_orcamento(self, parent, titulo, linha, coluna, campos,
+                         rowspan=1):
+        """LabelFrame com um campo por categoria e um rótulo de total vivo."""
+        lf = ttk.LabelFrame(parent, text=titulo)
+        lf.grid(row=linha, column=coluna, rowspan=rowspan, sticky="nsew",
+                padx=8, pady=4)
+        lf.grid_columnconfigure(0, weight=1)
+        vars_: dict[str, tk.StringVar] = {}
+        for i, (chave, rotulo) in enumerate(campos):
+            ttk.Label(lf, text=rotulo).grid(row=i, column=0, sticky="w",
+                                            padx=8, pady=2)
+            var = self._var_orcamento()
+            ttk.Entry(lf, textvariable=var, width=12,
+                      justify="right").grid(row=i, column=1, sticky="e",
+                                            padx=8, pady=2)
+            vars_[chave] = var
+        total = tk.Label(lf, text="Total: R$ 0,00", bg=COR_FUNDO,
+                         fg=COR_PRIMARIA, font=("Segoe UI", 9, "bold"))
+        total.grid(row=len(campos), column=0, columnspan=2, sticky="e",
+                   padx=8, pady=(4, 6))
+        return vars_, total
+
+    def _atualizar_resumo_perfil(self):
+        """Recalcula totais, cobertura da reserva e fluxo de caixa ao vivo."""
+        if not getattr(self, "_perfil_pronto", False):
+            return  # widgets do resumo ainda em construção
+        perfil = self._ler_perfil()
+        self.lbl_total_renda.config(
+            text=f"Total: {formatar_brl(perfil.renda_liquida)}")
+        self.lbl_total_fixas.config(
+            text=f"Total: {formatar_brl(perfil.despesas_fixas)}")
+        self.lbl_total_variaveis.config(
+            text=f"Total: {formatar_brl(perfil.despesas_variaveis)}")
+
+        meses = perfil.meses_reserva
+        if meses is None:
+            self.lbl_reserva.config(
+                text="Cobertura: informe as despesas", fg=COR_NEUTRA)
+        else:
+            cor = (COR_OK if meses >= 3
+                   else COR_ALERTA if meses >= 1 else COR_ERRO)
+            txt_meses = f"{meses:.1f}".replace(".", ",")
+            self.lbl_reserva.config(
+                text=f"Cobertura: {txt_meses} mês(es) de despesas", fg=cor)
+
+        fluxo = perfil.fluxo_caixa
+        cor_fluxo = (COR_OK if fluxo > 0
+                     else COR_ALERTA if fluxo == 0 else COR_ERRO)
+        self.lbl_fluxo.config(
+            text=f"Fluxo de caixa livre: {formatar_brl(fluxo)}",
+            fg=cor_fluxo)
+
+        if perfil.renda_liquida <= 0:
+            self.lbl_comprometimento.config(
+                text="Comprometimento com dívidas: — (informe a renda)",
+                fg=COR_NEUTRA)
+        else:
+            comp = perfil.comprometimento_renda
+            cor_comp = (COR_OK if comp <= 0.30
+                        else COR_ALERTA if comp <= 0.50 else COR_ERRO)
+            self.lbl_comprometimento.config(
+                text=f"Comprometimento com dívidas: {formatar_pct(comp)}",
+                fg=cor_comp)
 
     def _ler_perfil(self) -> PerfilFinanceiro:
-        return PerfilFinanceiro(
-            renda_liquida=parse_valor(self.var_renda.get()),
-            despesas_fixas=parse_valor(self.var_desp_fixas.get()),
-            despesas_variaveis=parse_valor(self.var_desp_var.get()),
+        return PerfilFinanceiro.com_orcamento(
+            renda=ComposicaoRenda(
+                **{k: parse_valor(v.get()) for k, v in
+                   self.vars_renda.items()}),
+            fixas=DespesasFixas(
+                **{k: parse_valor(v.get()) for k, v in
+                   self.vars_fixas.items()}),
+            variaveis=DespesasVariaveis(
+                **{k: parse_valor(v.get()) for k, v in
+                   self.vars_variaveis.items()}),
             reserva_emergencia=parse_valor(self.var_reserva.get()),
             saldo_fgts=parse_valor(self.var_fgts.get()),
             dividas=self.dividas,
@@ -220,6 +372,8 @@ class HelperFinanceiroApp(tk.Tk):
                 d.credor, d.tipo, formatar_brl(d.saldo_devedor),
                 formatar_pct(d.taxa_mensal), formatar_brl(d.parcela),
                 d.parcelas_restantes))
+        # Parcelas mudam o fluxo de caixa e o comprometimento do resumo.
+        self._atualizar_resumo_perfil()
 
     # ------------------------------------------------------------ aba contrato
     def _aba_contrato(self):

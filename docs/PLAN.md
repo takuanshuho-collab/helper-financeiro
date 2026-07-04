@@ -119,6 +119,11 @@ financeiro dentro de prompts.
   acontece SÓ na fronteira da exibição: `agent/exibicao.py` produz `SecaoIA`
   (contracts) com os nomes reais; `gui/` e `outputs/` apenas renderizam.
 - **M4 — Empacotamento** (.exe) e ata de freeze.
+- **M5 — Perfil como orçamento detalhado** (v2.2, ADR-0008): categorias
+  tipadas no `core` com roll-up determinístico (`com_orcamento`), indicador
+  de cobertura da reserva (`meses_reserva`) e aba Perfil com itemização
+  obrigatória + resumo ao vivo; decisões DEC-1..DEC-4 registradas no PRD §8
+  (inclui generalizar menções a programas públicos de renegociação).
 
 ## 8. Riscos técnicos
 - Modelos locais pequenos podem não aderir bem ao schema → o `format` do

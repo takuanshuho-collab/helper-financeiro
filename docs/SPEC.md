@@ -1,6 +1,6 @@
 # SPEC — Helper Financeiro v2 (EARS)
 
-- **Versão:** 2.0.0 · **Status:** Proposto
+- **Versão:** 2.2.0 · **Status:** Ativo
 - **Sintaxe:** EARS (Easy Approach to Requirements Syntax), em português
 - **Regido por:** `CONSTITUTION.md` · **Detalha:** `PRD.md`
 
@@ -34,6 +34,21 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   esforço) e pré-preencher o formulário para conferência.
 - **REQ-F-005** — O sistema DEVE gerar planilha `.xlsx`, relatório `.docx` e
   carta de proposta `.docx`.
+- **REQ-F-006 (v2.2, ADR-0008)** — O sistema DEVE aceitar renda e despesas
+  informadas **por categoria** (renda: salário/extra/outras; fixas: moradia,
+  contas da casa, transporte, saúde, educação, assinaturas, outras;
+  variáveis: mercado, lazer, vestuário, imprevistos, outras) e DEVE derivar
+  os agregados do perfil **por soma determinística** no `core` (roll-up) —
+  nunca por digitação separada do total.
+- **REQ-F-007 (v2.2)** — O sistema DEVE calcular a cobertura da reserva de
+  emergência em **meses de despesas totais** (reserva ÷ despesas); SE as
+  despesas totais forem zero, ENTÃO o indicador NÃO DEVE ser exibido como
+  número (sem significado).
+- **REQ-F-008 (v2.2)** — QUANDO o usuário editar qualquer campo do orçamento,
+  a GUI DEVE atualizar imediatamente os totais por seção, a cobertura da
+  reserva e o resumo (fluxo de caixa livre e comprometimento com dívidas,
+  com os limiares do REQ-F-002). *(A aritmética vive no `core`; a GUI apenas
+  formata — REQ-NF-004.)*
 
 ## 2. Requisitos do Agente (LLM)
 

@@ -60,7 +60,9 @@ uv run python main.py
 
 ## 🖥️ Fluxo de uso
 
-1. **Aba Perfil** — informe renda, despesas, reserva e FGTS.
+1. **Aba Perfil** — preencha o orçamento mensal por categoria (renda,
+   despesas fixas e variáveis, reserva e FGTS); os totais, a cobertura da
+   reserva e o fluxo de caixa são calculados na hora.
 2. **Aba Dívidas** — cadastre cada dívida (credor, tipo, saldo, taxa, parcela).
 3. **Aba Contrato PDF** *(opcional)* — selecione um contrato; os campos são
    extraídos e jogados no formulário da aba Dívidas para você **conferir**.
@@ -115,8 +117,9 @@ Nenhuma informação é enviada pela internet.
 
 Esta ferramenta é de **apoio à decisão** com base nos dados informados. Não
 constitui aconselhamento financeiro ou de investimento personalizado. Taxas de
-mercado e regras de programas de renegociação (ex.: Desenrola) mudam com
-frequência — confirme os números vigentes antes de decidir.
+mercado e regras de programas públicos de renegociação e feirões de dívida
+mudam com frequência (e programas terminam) — confirme os números e a vigência
+antes de decidir.
 
 ---
 
