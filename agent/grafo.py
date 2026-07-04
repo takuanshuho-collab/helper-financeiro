@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Literal, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 from uuid import uuid4
 
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
@@ -40,15 +41,42 @@ log = logging.getLogger("helper_financeiro.grafo")
 # REQ-LLM-002: no máximo 1 recuperação ⇒ 2 tentativas no total.
 MAX_TENTATIVAS = 2
 
+# Higiene de checkpoint (M4): o estado carrega apenas dicts/primitivos
+# (model_dump) — o checkpointer nunca serializa objetos Pydantic. Como cinto
+# extra, os tipos de `contracts` ficam registrados na allowlist do msgpack:
+# se algum voltar a entrar no estado, é desserializado explicitamente em vez
+# de virar aviso (e, em versões futuras do LangGraph, bloqueio).
+_TIPOS_PERMITIDOS_CHECKPOINT = [
+    ("contracts.schemas", nome) for nome in (
+        "AnaliseAgente", "CampoExtraido", "CampoTextoExtraido", "DividaFato",
+        "EstrategiaFato", "ExtracaoContrato", "ExtracaoVerificada",
+        "FatosFinanceiros", "PassoNegociacao", "Prioridade",
+    )
+]
+
+
+def criar_checkpointer() -> InMemorySaver:
+    """InMemorySaver com serializador de allowlist explícita (só memória)."""
+    return InMemorySaver(serde=JsonPlusSerializer(
+        allowed_msgpack_modules=_TIPOS_PERMITIDOS_CHECKPOINT))
+
 
 class EstadoAnalise(TypedDict):
-    """Estado que trafega pelo grafo. Só dados serializáveis e sem PII."""
-    fatos: FatosFinanceiros
-    analise: NotRequired[AnaliseAgente | None]
+    """Estado que trafega pelo grafo. Só dicts/primitivos, sem PII.
+
+    `fatos` e `analise` são `model_dump()` de FatosFinanceiros/AnaliseAgente;
+    os nós revalidam com `model_validate` quando precisam do objeto.
+    """
+    fatos: dict[str, Any]
+    analise: NotRequired[dict[str, Any] | None]
     motivos: NotRequired[list[str]]
     veio_do_cache: NotRequired[bool]
     tentativas: NotRequired[int]
     modo: NotRequired[str]
+
+
+def _fatos_de(state: EstadoAnalise) -> FatosFinanceiros:
+    return FatosFinanceiros.model_validate(state["fatos"])
 
 
 @dataclass
@@ -69,7 +97,7 @@ def verificar_pii(state: EstadoAnalise,
     """
     cfg = runtime.context.cfg
     if cfg.provider == "openai_compat" and contem_pii(
-            state["fatos"].model_dump_json(), runtime.context.mapa):
+            _fatos_de(state).model_dump_json(), runtime.context.mapa):
         return {"motivos": ["REQ-GRD-002:PII_DETECTADA"]}
     return {}
 
@@ -80,9 +108,10 @@ def consultar_cache(state: EstadoAnalise,
     cfg = runtime.context.cfg
     if not cfg.cache:
         return {"veio_do_cache": False}
-    chave = cache_global.chave(cfg.provider, cfg.model, state["fatos"])
+    chave = cache_global.chave(cfg.provider, cfg.model, _fatos_de(state))
     analise = cache_global.obter(chave)
-    return {"analise": analise, "veio_do_cache": analise is not None}
+    return {"analise": analise.model_dump() if analise else None,
+            "veio_do_cache": analise is not None}
 
 
 def chamar_llm(state: EstadoAnalise,
@@ -100,7 +129,7 @@ def chamar_llm(state: EstadoAnalise,
 
     tentativas = state.get("tentativas", 0) + 1
     try:
-        candidata = ctx.provider.analisar(state["fatos"])
+        candidata = ctx.provider.analisar(_fatos_de(state))
     except ValidationError:
         return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
     except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
@@ -108,16 +137,18 @@ def chamar_llm(state: EstadoAnalise,
                 "tentativas": tentativas}
     if not isinstance(candidata, AnaliseAgente):
         return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
-    return {"analise": candidata, "motivos": [], "tentativas": tentativas}
+    return {"analise": candidata.model_dump(), "motivos": [],
+            "tentativas": tentativas}
 
 
 def validar_guardrails(state: EstadoAnalise,
                        runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
     """H1 (números fabricados) + H6 (conteúdo indevido) — as travas críticas."""
-    analise = state.get("analise")
-    assert analise is not None  # rota garante: só chega aqui com análise
+    analise_dump = state.get("analise")
+    assert analise_dump is not None  # rota garante: só chega aqui com análise
+    analise = AnaliseAgente.model_validate(analise_dump)
     violacoes: list[str] = []
-    if validar_numeros(state["fatos"], analise):
+    if validar_numeros(_fatos_de(state), analise):
         violacoes.append("REQ-GRD-001:NUMEROS_FABRICADOS")
     if detectar_conteudo_indevido(analise):
         violacoes.append("REQ-GRD-004:CONTEUDO_INDEVIDO")
@@ -128,13 +159,14 @@ def aprovar(state: EstadoAnalise,
             runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
     """Garante o aviso legal (H3) e guarda no cache só o que foi APROVADO."""
     cfg = runtime.context.cfg
-    analise = state.get("analise")
-    assert analise is not None
+    analise_dump = state.get("analise")
+    assert analise_dump is not None
+    analise = AnaliseAgente.model_validate(analise_dump)
     analise.sumario_executivo = garantir_aviso(analise.sumario_executivo)
     if cfg.cache and not state.get("veio_do_cache", False):
-        chave = cache_global.chave(cfg.provider, cfg.model, state["fatos"])
+        chave = cache_global.chave(cfg.provider, cfg.model, _fatos_de(state))
         cache_global.guardar(chave, analise)
-    return {"analise": analise, "modo": "completo"}
+    return {"analise": analise.model_dump(), "modo": "completo"}
 
 
 def degradar(state: EstadoAnalise,
@@ -188,7 +220,7 @@ def _construir() -> GrafoAnalise:
     g.add_edge("degradar", END)
     # InMemorySaver: estado por thread_id só na memória do processo. Persistir
     # em disco exige as condições do ADR-0006 (pós-anonimização + opt-in).
-    return g.compile(checkpointer=InMemorySaver())
+    return g.compile(checkpointer=criar_checkpointer())
 
 
 _grafo: GrafoAnalise | None = None
@@ -207,14 +239,16 @@ def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
                      thread_id: str | None = None) -> ResultadoAnalise:
     """Invoca o grafo e materializa o `ResultadoAnalise` da aplicação."""
     estado = grafo_analise().invoke(
-        {"fatos": fatos},
+        {"fatos": fatos.model_dump()},
         config={"configurable": {"thread_id": thread_id or str(uuid4())}},
         context=ContextoAnalise(cfg=cfg, mapa=mapa, provider=provider),
     )
     modo = estado.get("modo", "degradado")
+    analise_dump = estado.get("analise")
     return ResultadoAnalise(
         fatos=fatos,
-        analise=estado.get("analise") if modo == "completo" else None,
+        analise=AnaliseAgente.model_validate(analise_dump)
+        if modo == "completo" and analise_dump is not None else None,
         modo=modo,
         guardrails_violados=estado.get("motivos", []) if modo == "degradado" else [],
         aviso_legal=AVISO_LEGAL,

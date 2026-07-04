@@ -85,9 +85,10 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-401 | Atualizar build PyInstaller (pydantic+langgraph+llama-index; spike T-257 já validou ~84 MB) | — | M3 | ⬜ |
-| T-402 | Ata de freeze com SHA-256 dos artefatos | Processo | todos | ✅ (M1) |
-| T-403 | Revisão de segurança (sem PII/keys em log) | SEC-001/002 | M2 | ⬜ |
+| T-401 | Build PyInstaller definitivo (`HelperFinanceiro.exe` ~94 MB, onefile/windowed; langgraph/llama-index sem collects extras) | — | M3 | ✅ |
+| T-402 | Ata de freeze com SHA-256 dos artefatos (v2, escopo M1..M4) | Processo | todos | ✅ |
+| T-403 | Revisão de segurança (sem PII/keys em log) → `docs/REVISAO-SEGURANCA.md` | SEC-001/002 | M2 | ✅ |
+| T-404 | Higiene de checkpoint: estado dos grafos só com dicts (`model_dump`) + allowlist msgpack explícita no serializador | SEC-003 | T-252/T-255 | ✅ |
 
 ---
 
@@ -97,7 +98,7 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-M1, M1.5, M2, M2.5 e M3 entregues e verdes. O próximo passo é o **M4**:
-T-401 (build PyInstaller com pydantic+langgraph+llama-index — o spike T-257
-já validou ~84 MB sem collects extras) e T-403 (revisão de segurança: sem
-PII/keys em log), fechando com a ata de freeze atualizada.
+**Todos os milestones (M1..M4) entregues e verdes.** O roadmap v2 está
+completo: agente sob guardrails, extração Code-First, GUI integrada, `.exe`
+empacotado, segurança revisada e versão congelada (`FREEZE.md`). Mudanças
+daqui em diante exigem nova ADR + incremento de versão + nova ata (P-freeze).

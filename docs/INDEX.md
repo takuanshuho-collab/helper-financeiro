@@ -13,7 +13,8 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
 | 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0007) |
-| 9 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
+| 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
+| 10 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
 ## Fluxo Spec-Driven
 ```
@@ -34,8 +35,10 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   confirmação da extração retomando o checkpoint. Harness com 80 testes
   (77 offline + 3 de integração real; cobertura ≥90% no CI, atual ~95%).
 - **Modelo padrão:** `qwen2.5:3b` (GPU 4 GB); alternativa Apache 2.0: `qwen3:4b`.
-- **Próximo:** M4 (T-401/T-403) — build PyInstaller (spike já validou ~84 MB)
-  e revisão de segurança, fechando com a ata de freeze.
+- **M4 fechado:** `HelperFinanceiro.exe` (~94 MB, PyInstaller), revisão de
+  segurança aprovada (`REVISAO-SEGURANCA.md`), higiene de checkpoint
+  (estado só com dicts + allowlist msgpack) e versão congelada em `FREEZE.md`.
+- **Roadmap v2 completo.** Mudanças exigem nova ADR + versão + nova ata.
 
 ## Rodar
 ```bash

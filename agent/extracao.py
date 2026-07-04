@@ -24,7 +24,6 @@ from math import isclose
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
 from uuid import uuid4
 
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
@@ -35,6 +34,7 @@ from contracts import CampoExtraido, ExtracaoContrato, ExtracaoVerificada
 from core.calculos import parcela_price
 
 from .config import ConfigAgente, carregar_config
+from .grafo import criar_checkpointer
 from .prompts import SYSTEM_PROMPT_EXTRACAO, montar_prompt_extracao
 from .provider import NUM_CTX, _post_json
 
@@ -157,10 +157,14 @@ def verificar_extracao(extracao: ExtracaoContrato, documento: str) -> ExtracaoVe
 
 # ------------------------------------------------------------------ grafo
 class EstadoExtracao(TypedDict):
-    """Estado do fluxo de extração. O documento fica só na memória do processo."""
+    """Estado do fluxo de extração. O documento fica só na memória do processo.
+
+    `extracao` e `verificada` são `model_dump()` (higiene de checkpoint, M4):
+    o checkpointer só serializa dicts/primitivos, nunca objetos Pydantic.
+    """
     documento: str
-    extracao: NotRequired[ExtracaoContrato | None]
-    verificada: NotRequired[ExtracaoVerificada | None]
+    extracao: NotRequired[dict[str, Any] | None]
+    verificada: NotRequired[dict[str, Any] | None]
     confirmada: NotRequired[dict[str, Any] | None]
     motivos: NotRequired[list[str]]
     tentativas: NotRequired[int]
@@ -189,14 +193,17 @@ def _no_extrair(state: EstadoExtracao,
     except Exception as e:  # noqa: BLE001 — P8 na entrada: falhou ⇒ fallback regex do chamador
         return {"motivos": [f"ERRO_PROVIDER:{type(e).__name__}"],
                 "tentativas": tentativas}
-    return {"extracao": extracao, "motivos": [], "tentativas": tentativas}
+    return {"extracao": extracao.model_dump(), "motivos": [],
+            "tentativas": tentativas}
 
 
 def _no_verificar(state: EstadoExtracao,
                   runtime: Runtime[ContextoExtracao]) -> dict[str, object]:
-    extracao = state.get("extracao")
-    assert extracao is not None
-    return {"verificada": verificar_extracao(extracao, state["documento"])}
+    extracao_dump = state.get("extracao")
+    assert extracao_dump is not None
+    extracao = ExtracaoContrato.model_validate(extracao_dump)
+    return {"verificada":
+            verificar_extracao(extracao, state["documento"]).model_dump()}
 
 
 def _no_confirmar(state: EstadoExtracao,
@@ -210,9 +217,9 @@ def _no_confirmar(state: EstadoExtracao,
     verificada = state.get("verificada")
     assert verificada is not None
     resposta = interrupt({
-        "campos": verificada.extracao.model_dump(),
-        "descartados": verificada.descartados,
-        "inconsistencias": verificada.inconsistencias,
+        "campos": verificada["extracao"],
+        "descartados": verificada["descartados"],
+        "inconsistencias": verificada["inconsistencias"],
     })
     return {"confirmada": resposta}
 
@@ -249,7 +256,7 @@ def _construir() -> GrafoExtracao:
     g.add_edge("verificar", "confirmar")
     g.add_edge("confirmar", END)
     g.add_edge("falhar", END)
-    return g.compile(checkpointer=InMemorySaver())
+    return g.compile(checkpointer=criar_checkpointer())
 
 
 _grafo: GrafoExtracao | None = None

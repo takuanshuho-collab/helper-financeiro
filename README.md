@@ -78,29 +78,28 @@ uv run python main.py
 
 ---
 
-## 📦 Como gerar o `.exe` (PyInstaller)
+## 📦 Como gerar o `.exe` (PyInstaller, T-401)
 
-O `pdfplumber` carrega arquivos de dados que o PyInstaller não detecta sozinho,
-então usamos `--collect-all` para ele e suas dependências:
+Uma linha, usando o próprio ambiente do uv (o spike T-257 provou que
+langgraph/llama-index congelam sem `--collect` extra; só o `pdfplumber` e o
+`python-docx` carregam dados que o PyInstaller não detecta sozinho):
 
 ```bash
-pip install pyinstaller
-
-pyinstaller --noconfirm --onefile --windowed ^
-  --name "HelperFinanceiro" ^
-  --collect-all pdfplumber ^
-  --collect-all pdfminer ^
-  --collect-data docx ^
+uv run --with pyinstaller pyinstaller --noconfirm --onefile --windowed \
+  --name HelperFinanceiro \
+  --collect-all pdfplumber --collect-all pdfminer --collect-data docx \
   main.py
 ```
 
-> `^` é a continuação de linha no **CMD do Windows**. No PowerShell use `` ` ``;
-> em Linux/macOS use `\`.
+> No **PowerShell** troque `\` por `` ` `` no fim das linhas (ou escreva tudo
+> numa linha só); no **CMD** use `^`.
 
-O executável final fica em `dist/HelperFinanceiro.exe`.
+O executável final fica em `dist/HelperFinanceiro.exe`. A IA local continua
+opcional no `.exe`: sem Ollama instalado, o programa funciona normalmente e o
+painel de IA degrada com o motivo indicado (P8).
 
-Dica: se o `.exe` reclamar de módulo faltando ao abrir um PDF, rode uma vez pelo
-terminal (`HelperFinanceiro.exe` a partir do CMD) para ver a mensagem de erro e
+Dica: se o `.exe` reclamar de módulo faltando, rode uma vez pelo terminal
+(`dist\HelperFinanceiro.exe` a partir do CMD) para ver a mensagem de erro e
 adicione o pacote em falta com outro `--collect-all`.
 
 ---
