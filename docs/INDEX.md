@@ -38,14 +38,15 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
 - **M4 fechado:** `HelperFinanceiro.exe` (~94 MB, PyInstaller), revisão de
   segurança aprovada (`REVISAO-SEGURANCA.md`), higiene de checkpoint
   (estado só com dicts + allowlist msgpack) e v2.1.0 congelada em `FREEZE.md`.
-- **Ciclo v2.2 aberto (ADR-0008) — M5 + M6 entregues:** questões abertas do
-  PRD resolvidas (DEC-1..DEC-4), menções a programas públicos generalizadas,
-  perfil como **orçamento doméstico detalhado** (categorias tipadas no
-  `core`, roll-up determinístico, cobertura da reserva em meses e resumo ao
-  vivo) e **revisão de UI/UX** (M6): validação visual dos campos numéricos
+- **Ciclo v2.2 fechado e congelado (`FREEZE.md` v2.2.0):** perfil como
+  **orçamento doméstico detalhado** (ADR-0008: categorias tipadas no `core`,
+  roll-up determinístico, cobertura da reserva em meses e resumo ao vivo) e
+  **revisão de UI/UX** (M6): validação visual dos campos numéricos
   (REQ-F-009), aba Perfil rolável, contador de dívidas, barra de status
-  contextual, edição por duplo clique/Enter/Delete e lista zebrada.
-  Pendente para fechar o ciclo: **nova ata de freeze** (rebuild do `.exe`).
+  contextual, edição por duplo clique/Enter/Delete e lista zebrada. Ata
+  ampliada para congelar todo o código de primeira parte + o harness (104
+  testes offline, cobertura 95,4%) e o `.exe` rebuild (93,8 MB).
+- **Mudanças exigem nova ADR + incremento de versão + nova ata.**
 
 ## Rodar
 ```bash

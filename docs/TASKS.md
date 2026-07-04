@@ -127,10 +127,9 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.2 (ADR-0008): M5 e M6 entregues.** Perfil como orçamento
-detalhado com roll-up no `core` e resumo ao vivo (M5); revisão de UI/UX com
-validação visual, aba rolável, ergonomia da lista e tema consistente (M6).
-Próximo passo para fechar o ciclo v2.2: **nova ata de freeze** — rebuild do
-`.exe`, recalcular os SHA-256 (agora incluindo `ADR-0008`,
-`tests/test_orcamento.py`, `tests/test_validacao_texto.py` e os fontes
-alterados) e incrementar a versão da ata.
+**Ciclo v2.2 fechado e congelado.** M5 (perfil como orçamento detalhado,
+ADR-0008) e M6 (revisão de UI/UX) entregues; versão congelada em `FREEZE.md`
+v2.2.0, com a ata ampliada para cobrir todo o código de primeira parte + o
+harness (104 testes offline, cobertura 95,4%) e o `.exe` rebuild (93,8 MB).
+Daqui em diante, qualquer mudança nos artefatos congelados exige nova ADR +
+incremento de versão + nova ata (P-freeze).
