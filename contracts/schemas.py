@@ -104,3 +104,27 @@ class ExtracaoVerificada(BaseModel):
     extracao: ExtracaoContrato       # campos sem fonte verificável já removidos
     descartados: list[str] = Field(default_factory=list)      # "saldo_devedor:SEM_FONTE"
     inconsistencias: list[str] = Field(default_factory=list)  # "CRUZADA_PRICE:parcela"
+
+
+# ----------------------------- Exibição local (M3) ----------------------------
+# Estrutura pronta para as cascas (GUI e .docx) renderizarem a seção de IA.
+# Aqui os nomes REAIS já foram restaurados: a desanonimização acontece só na
+# fronteira da exibição local (REQ-SEC-003) — nada disto volta ao LLM/nuvem.
+class PassoRoteiroIA(BaseModel):
+    credor: str                      # nome real (restaurado do token)
+    abordagem: str                   # rótulo legível ("Quitação à vista", ...)
+    argumentos: list[str] = Field(default_factory=list)
+    concessoes: list[str] = Field(default_factory=list)
+
+
+class SecaoIA(BaseModel):
+    """Seção "Análise do Agente (IA)" pronta para exibição (T-301/T-302)."""
+    modo: str                        # "completo" | "degradado"
+    motivos: list[str] = Field(default_factory=list)   # por que degradou (P8)
+    sumario: str = ""
+    diagnostico: str = ""
+    prioridades: list[str] = Field(default_factory=list)   # já com "1. Credor — ..."
+    roteiro: list[PassoRoteiroIA] = Field(default_factory=list)
+    alertas: list[str] = Field(default_factory=list)
+    confianca: float = 0.0
+    aviso_legal: str = ""

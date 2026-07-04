@@ -68,6 +68,11 @@ uv run python main.py
    e as **parcelas restantes** antes de adicionar.
 4. **Aba Análise** — defina o pagamento extra mensal e a taxa-alvo de
    portabilidade, clique em **Analisar** e gere a **planilha** e o **relatório**.
+   O botão **🧠 Gerar análise sênior** consulta o CONSELHEIRO (IA local, leva
+   alguns minutos — a janela continua utilizável) e mostra a narrativa num
+   painel rotulado *assistido por IA*; se o LLM falhar, um indicador de **modo
+   degradado** aparece e o diagnóstico determinístico continua valendo. A
+   última análise aprovada entra no relatório `.docx` em seção própria.
 5. **Aba Carta ao credor** — escolha a dívida e o tipo de proposta (quitação,
    portabilidade ou redução) e gere a carta.
 

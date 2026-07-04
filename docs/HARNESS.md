@@ -92,4 +92,6 @@ ruff → mypy → pytest com piso de cobertura de **90%** (catraca: só sobe).
 | REQ-LLM-003 / SEC-002 | `tests/test_config.py`, `tests/test_providers.py` (T-201/T-202, servidor HTTP local) |
 | T-205 (cache) / SEC-003 | `tests/test_cache.py` |
 | T-255/T-256 (extração Code-First: quote-check, cruzada Price, interrupt, H2/H5 na entrada) | `tests/test_extracao.py` |
+| T-301..T-305 (exibição: desanonimização na fronteira, painel/estado degradado, payload→formulário) | `tests/test_exibicao.py` |
+| T-301 (seção "Análise do Agente (IA)" no `.docx`; degradado ⇒ seção omitida) | `tests/test_outputs.py` |
 | REQ-LLM-004 (integração real, não bloqueante) | `tests/test_ollama_real.py` (`-m ollama`; inclui extração real) |

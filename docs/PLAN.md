@@ -115,7 +115,9 @@ financeiro dentro de prompts.
 - **M2.5 — Orquestração em grafo + extração Code-First** (LangGraph,
   LlamaIndex retriever-only, verificador com citação obrigatória).
 - **M3 — Integração de saída** (narrativa no `.docx`, painel na GUI e tela de
-  confirmação da extração retomando o checkpoint do grafo).
+  confirmação da extração retomando o checkpoint do grafo). A desanonimização
+  acontece SÓ na fronteira da exibição: `agent/exibicao.py` produz `SecaoIA`
+  (contracts) com os nomes reais; `gui/` e `outputs/` apenas renderizam.
 - **M4 — Empacotamento** (.exe) e ata de freeze.
 
 ## 8. Riscos técnicos

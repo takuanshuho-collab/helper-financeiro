@@ -13,8 +13,10 @@ from .schemas import (
     ExtracaoVerificada,
     FatosFinanceiros,
     PassoNegociacao,
+    PassoRoteiroIA,
     Prioridade,
     ResultadoAnalise,
+    SecaoIA,
 )
 
 __all__ = [
@@ -27,6 +29,8 @@ __all__ = [
     "ExtracaoVerificada",
     "FatosFinanceiros",
     "PassoNegociacao",
+    "PassoRoteiroIA",
     "Prioridade",
     "ResultadoAnalise",
+    "SecaoIA",
 ]

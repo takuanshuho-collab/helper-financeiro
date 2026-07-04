@@ -69,12 +69,17 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 ## Milestone M3 — Integração de saída
 
+> A lógica testável vive fora do tkinter: `contracts.SecaoIA` + `agent/exibicao.py`
+> (fronteira da desanonimização, REQ-SEC-003) alimentam a GUI e o `.docx`;
+> `gui/app.py` permanece casca fina (fora dos portões, ver pyproject).
+
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-301 | Seção "Análise do Agente (IA)" no `.docx`, separada dos números | REQ-GRD-003 | T-108 | ⬜ |
-| T-302 | Painel na GUI com narrativa + rótulo "assistido por IA" | REQ-LLM-001, P2 | T-108 | ⬜ |
-| T-303 | Botão "Gerar análise sênior" com barra de progresso (thread) | NF-usabilidade | T-302 | ⬜ |
-| T-304 | Indicador visual de modo degradado na GUI | P8 | T-302 | ⬜ |
+| T-301 | Seção "Análise do Agente (IA)" no `.docx`, separada dos números (`SecaoIA` + `agent/exibicao.py`) | REQ-GRD-003 | T-108 | ✅ |
+| T-302 | Painel na GUI com narrativa + rótulo "assistido por IA" | REQ-LLM-001, P2 | T-108 | ✅ |
+| T-303 | Botão "Gerar análise sênior" com barra de progresso (thread+fila+`after`) | NF-usabilidade | T-302 | ✅ |
+| T-304 | Indicador visual de modo degradado na GUI (status colorido + motivos) | P8 | T-302 | ✅ |
+| T-305 | Tela de confirmação da extração (Toplevel com campos+citações) retomando o checkpoint (`interrupt`→`Command(resume)`) | REQ-GRD-005, H5 | T-255 | ✅ |
 
 ## Milestone M4 — Empacotamento & freeze
 
@@ -92,7 +97,7 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-M1, M1.5, M2 e M2.5 entregues e verdes. O próximo passo natural é o **M3**
-(T-301..T-304): integrar o `ResultadoAnalise` à GUI e ao `.docx`, com
-indicador de modo degradado — incluindo a tela de confirmação da extração
-(o grafo já pausa via `interrupt`; a GUI só precisa retomar o checkpoint).
+M1, M1.5, M2, M2.5 e M3 entregues e verdes. O próximo passo é o **M4**:
+T-401 (build PyInstaller com pydantic+langgraph+llama-index — o spike T-257
+já validou ~84 MB sem collects extras) e T-403 (revisão de segurança: sem
+PII/keys em log), fechando com a ata de freeze atualizada.

@@ -24,15 +24,18 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
 ```
 
 ## Estado atual
-- **M1 + M1.5 + M2 + M2.5 entregues e verdes**: guardrails, orquestração em
-  **StateGraph** (LangGraph, ADR-0006) com degradação segura, providers reais
-  com structured output (ADR-0005), **extração Code-First de documentos** com
-  citação obrigatória + verificador determinístico + pausa para confirmação
-  humana (`interrupt`), ingestão local LlamaIndex retriever-only (ADR-0007),
-  cache de análise e harness com 72 testes (cobertura ≥90% no CI).
+- **M1 + M1.5 + M2 + M2.5 + M3 entregues e verdes**: guardrails, orquestração
+  em **StateGraph** (LangGraph, ADR-0006) com degradação segura, providers
+  reais com structured output (ADR-0005), **extração Code-First de documentos**
+  com citação obrigatória + verificador determinístico + confirmação humana
+  (`interrupt`), ingestão local LlamaIndex retriever-only (ADR-0007) e a
+  **integração de saída** (M3): painel "assistido por IA" na GUI com thread e
+  indicador de degradação, seção "Análise do Agente (IA)" no `.docx` e tela de
+  confirmação da extração retomando o checkpoint. Harness com 80 testes
+  (77 offline + 3 de integração real; cobertura ≥90% no CI, atual ~95%).
 - **Modelo padrão:** `qwen2.5:3b` (GPU 4 GB); alternativa Apache 2.0: `qwen3:4b`.
-- **Próximo:** M3 (T-301..T-304) — GUI/.docx, incluindo a tela de confirmação
-  da extração retomando o checkpoint do grafo.
+- **Próximo:** M4 (T-401/T-403) — build PyInstaller (spike já validou ~84 MB)
+  e revisão de segurança, fechando com a ata de freeze.
 
 ## Rodar
 ```bash

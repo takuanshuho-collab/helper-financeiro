@@ -9,6 +9,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 
+from contracts import SecaoIA
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias, gerar_recomendacoes, oportunidades_portabilidade
 from core.models import PerfilFinanceiro
@@ -36,9 +37,63 @@ def _tabela_indicadores(doc, dados: list[tuple[str, str]]):
     return tab
 
 
+def _secao_ia(doc, secao: SecaoIA, numero: int) -> None:
+    """Renderiza a seção "Análise do Agente (IA)" (T-301, REQ-GRD-003).
+
+    O rótulo de abertura deixa explícito que o conteúdo é assistido por IA e
+    que os números oficiais são os das seções determinísticas anteriores (P2).
+    """
+    _titulo(doc, f"{numero}. Análise do Agente (IA)")
+
+    rotulo = doc.add_paragraph()
+    r = rotulo.add_run(
+        "Conteúdo assistido por IA (CONSELHEIRO, modelo local): interpretação "
+        "gerada exclusivamente a partir dos números das seções anteriores, que "
+        "permanecem a fonte oficial deste relatório. Revise antes de agir. "
+        f"Confiança auto-avaliada do modelo: {secao.confianca:.0%}."
+    )
+    r.italic = True
+    r.font.size = Pt(9)
+    r.font.color.rgb = CINZA
+
+    _titulo(doc, "Sumário executivo", nivel=2)
+    doc.add_paragraph(secao.sumario)
+
+    _titulo(doc, "Diagnóstico interpretado", nivel=2)
+    doc.add_paragraph(secao.diagnostico)
+
+    if secao.prioridades:
+        _titulo(doc, "Prioridades sugeridas", nivel=2)
+        for prioridade in secao.prioridades:   # já vêm numeradas ("1. Credor — ...")
+            doc.add_paragraph(prioridade)
+
+    if secao.roteiro:
+        _titulo(doc, "Roteiro de negociação", nivel=2)
+        for passo in secao.roteiro:
+            p = doc.add_paragraph(style="List Bullet")
+            p.add_run(f"{passo.credor} — {passo.abordagem}. ").bold = True
+            if passo.argumentos:
+                p.add_run("Argumentos: " + "; ".join(passo.argumentos) + ". ")
+            if passo.concessoes:
+                p.add_run("Concessões possíveis: " + "; ".join(passo.concessoes) + ".")
+
+    if secao.alertas:
+        _titulo(doc, "Alertas de risco", nivel=2)
+        for alerta in secao.alertas:
+            doc.add_paragraph("⚠ " + alerta, style="List Bullet")
+
+    if secao.aviso_legal:
+        aviso = doc.add_paragraph()
+        r = aviso.add_run(secao.aviso_legal)
+        r.italic = True
+        r.font.size = Pt(9)
+        r.font.color.rgb = CINZA
+
+
 def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
                     extra_mensal: float = 0.0, taxa_alvo_mensal: float = 0.018,
-                    nome_usuario: str = "") -> str:
+                    nome_usuario: str = "",
+                    secao_ia: SecaoIA | None = None) -> str:
     diag = resumo_diagnostico(perfil)
     doc = Document()
 
@@ -197,6 +252,13 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
         "Registre todo acordo por escrito (protocolo ou Consumidor.gov.br).",
     ]:
         doc.add_paragraph(passo, style="List Number")
+
+    # --- Análise do Agente (IA) — T-301 ---
+    # Seção SEPARADA das tabelas determinísticas (REQ-GRD-003): só entra quando
+    # a análise passou por todos os guardrails (modo "completo"); em modo
+    # degradado o relatório sai apenas com o determinístico (P8).
+    if secao_ia is not None and secao_ia.modo == "completo":
+        _secao_ia(doc, secao_ia, numero=8 if ops else 7)
 
     # --- Aviso ---
     doc.add_paragraph()

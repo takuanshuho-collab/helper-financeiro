@@ -12,6 +12,7 @@ import re
 from docx import Document
 from openpyxl import load_workbook
 
+from contracts import PassoRoteiroIA, SecaoIA
 from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta
 from outputs.relatorio import gerar_relatorio
@@ -101,6 +102,46 @@ def test_relatorio_deficit_gera_alerta(perfil_critico, tmp_path):
     caminho = gerar_relatorio(perfil_critico, str(tmp_path / "rel.docx"))
     texto = _texto_docx(caminho)
     assert "fluxo de caixa está negativo" in texto
+
+
+# ------------------------------------------- seção "Análise do Agente (IA)"
+SECAO_IA = SecaoIA(
+    modo="completo",
+    sumario="A dívida do Cartão Banco A é a mais cara e deve ser atacada primeiro.",
+    diagnostico="O comprometimento de renda está em nível de atenção.",
+    prioridades=["1. Cartão Banco A — maior taxa da carteira"],
+    roteiro=[PassoRoteiroIA(credor="Cartão Banco A", abordagem="Quitação à vista",
+                            argumentos=["propor desconto para quitação à vista"],
+                            concessoes=["usar parte do FGTS"])],
+    alertas=["Evite contratar crédito novo enquanto renegocia."],
+    confianca=0.85,
+    aviso_legal="Este conteúdo é apoio à decisão, não aconselhamento financeiro.",
+)
+
+
+def test_relatorio_secao_ia_completa(perfil_atencao, tmp_path):
+    """T-301: a narrativa entra em seção própria, separada dos números."""
+    caminho = gerar_relatorio(perfil_atencao, str(tmp_path / "rel_ia.docx"),
+                              extra_mensal=500, secao_ia=SECAO_IA)
+    texto = _texto_docx(caminho)
+    assert "Análise do Agente (IA)" in texto
+    assert "assistido por IA" in texto             # T-302/P2: rótulo explícito
+    assert "fonte oficial" in texto                # REQ-GRD-003: números oficiais = seções determinísticas
+    assert "atacada primeiro" in texto             # narrativa presente
+    assert "Quitação à vista" in texto             # roteiro presente
+    assert "85%" in texto                          # confiança auto-avaliada
+    # As seções determinísticas continuam intactas antes da seção de IA.
+    assert "Diagnóstico" in texto and "apoio à decisão" in texto
+
+
+def test_relatorio_secao_ia_degradada_omitida(perfil_atencao, tmp_path):
+    """P8/REQ-GRD-003: sem análise aprovada, o .docx sai só com o determinístico."""
+    secao = SecaoIA(modo="degradado", motivos=["ERRO_PROVIDER:URLError"])
+    caminho = gerar_relatorio(perfil_atencao, str(tmp_path / "rel_deg.docx"),
+                              secao_ia=secao)
+    texto = _texto_docx(caminho)
+    assert "Análise do Agente" not in texto
+    assert "Relatório de Saúde Financeira" in texto
 
 
 # ------------------------------------------------------------------- proposta
