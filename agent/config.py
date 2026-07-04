@@ -17,7 +17,10 @@ class ConfigAgente:
     provider: str = field(default_factory=lambda: os.getenv("HF_PROVIDER", "local"))
     base_url: str = field(
         default_factory=lambda: os.getenv("HF_BASE_URL", "http://localhost:11434/v1"))
-    model: str = field(default_factory=lambda: os.getenv("HF_MODEL", "qwen2.5:14b"))
+    # Padrão dimensionado para a GPU-alvo (4 GB de VRAM): 3B roda 100% na GPU.
+    # ATENÇÃO à licença (ADR-0006): qwen2.5:3b é Qwen Research License (não
+    # comercial); para uso comercial, HF_MODEL=qwen3:4b (Apache 2.0).
+    model: str = field(default_factory=lambda: os.getenv("HF_MODEL", "qwen2.5:3b"))
     api_key: str = field(default_factory=lambda: os.getenv("HF_API_KEY", ""))  # nunca hardcode
     # Se True, pula o LLM e entrega só o determinístico (P8).
     modo_degradado: bool = field(

@@ -50,6 +50,23 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-208 | Suíte de integração `pytest -m ollama` (skip sem servidor/modelo) | REQ-LLM-004 | T-201 | ✅ |
 | T-209 | Contrato reforçado: `confianca` com `ge=0/le=1` (achado do T-208) | SPEC §6.2 | T-208 | ✅ |
 
+## Milestone M2.5 — Orquestração em grafo + extração Code-First (Fase 2.5)
+
+> ADR-0006 (LangGraph orquestra; providers do ADR-0005 mantidos como nós) e
+> ADR-0007 (LlamaIndex retriever-only na ingestão). O modelo extrai variáveis
+> e narra; o CÓDIGO verifica, calcula e decide rota — Code-First nas 2 pontas.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-251 | ADR-0006 — LangGraph como orquestrador (supersede parcial do ADR-0005) | P8, REQ-LLM-002 | — | ✅ |
+| T-252 | `agent/grafo.py`: StateGraph (pii→cache→llm⇄retry→guardrails→aprovar/degradar), InMemorySaver | REQ-LLM-002, SEC-003 | T-251 | ✅ |
+| T-253 | `HF_MODEL` padrão → `qwen2.5:3b` (GPU 4 GB) + bench vs `qwen3:4b` (licença) | REQ-LLM-004 | T-252 | ✅ |
+| T-254 | ADR-0007 — LlamaIndex ingestão local (retriever-only, embeddings Ollama) | REQ-NF-002, H2 | — | ✅ |
+| T-255 | `agent/ingestao.py` + `agent/extracao.py`: extração estruturada com citação obrigatória e pausa p/ confirmação (`interrupt`) | REQ-GRD-005, H5 | T-254 | ✅ |
+| T-256 | Verificador determinístico (quote-check + checagem cruzada Price) + harness | REQ-GRD-001 (na entrada) | T-255 | ✅ |
+| T-257 | Spike freeze PyInstaller com langgraph+llama-index (~84 MB, sem collects extras) | risco M4 | T-252/255 | ✅ |
+| T-258 | Docs sincronizados (PLAN/TASKS/HARNESS/INDEX/README) + CI verde | Processo | todos | ✅ |
+
 ## Milestone M3 — Integração de saída
 
 | ID | Task | REQ | Depende | Status |
@@ -63,7 +80,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-401 | Atualizar build PyInstaller (incluir pydantic; sem SDK de LLM — ADR-0005) | — | M3 | ⬜ |
+| T-401 | Atualizar build PyInstaller (pydantic+langgraph+llama-index; spike T-257 já validou ~84 MB) | — | M3 | ⬜ |
 | T-402 | Ata de freeze com SHA-256 dos artefatos | Processo | todos | ✅ (M1) |
 | T-403 | Revisão de segurança (sem PII/keys em log) | SEC-001/002 | M2 | ⬜ |
 
@@ -75,7 +92,7 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-M1, M1.5 e M2 entregues e verdes. O próximo passo natural é o **M3**
+M1, M1.5, M2 e M2.5 entregues e verdes. O próximo passo natural é o **M3**
 (T-301..T-304): integrar o `ResultadoAnalise` à GUI e ao `.docx`, com
-indicador de modo degradado. Antes de escolher o `HF_MODEL` padrão em
-produção, rodar `scripts/bench_schema.py` com os modelos candidatos (7B/14B).
+indicador de modo degradado — incluindo a tela de confirmação da extração
+(o grafo já pausa via `interrupt`; a GUI só precisa retomar o checkpoint).

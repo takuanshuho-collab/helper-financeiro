@@ -1,0 +1,221 @@
+"""
+Grafo de orquestração do CONSELHEIRO (ADR-0006, T-252).
+
+O fluxo é RÍGIDO: o LangGraph liga nós que são funções Python puras; o LLM não
+decide rota nenhuma (Code-First — o modelo aparece só nas pontas). Toda aresta
+de falha converge para `degradar`, que preserva o determinístico (P8).
+
+    verificar_pii → consultar_cache → chamar_llm ⇄ (1 retry) → validar_guardrails
+                          ↘ (hit) ─────────────────────────────↗        ↓
+                                                        aprovar | degradar
+
+O que fica FORA do estado (e portanto fora de qualquer checkpoint): o mapa de
+anonimização (REQ-SEC-003: só memória), a config e o provider — todos viajam
+no `Runtime.context`, que o LangGraph não serializa.
+"""
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Literal, NotRequired, TypedDict
+from uuid import uuid4
+
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.runtime import Runtime
+from pydantic import ValidationError
+
+from contracts import AnaliseAgente, FatosFinanceiros, ResultadoAnalise
+from guardrails.conteudo import AVISO_LEGAL, detectar_conteudo_indevido, garantir_aviso
+from guardrails.pii import MapaAnonimizacao, contem_pii
+from guardrails.validador_numerico import validar as validar_numeros
+
+from .cache import cache_global
+from .config import ConfigAgente
+from .provider import LLMProvider, obter_provider
+
+log = logging.getLogger("helper_financeiro.grafo")
+
+# REQ-LLM-002: no máximo 1 recuperação ⇒ 2 tentativas no total.
+MAX_TENTATIVAS = 2
+
+
+class EstadoAnalise(TypedDict):
+    """Estado que trafega pelo grafo. Só dados serializáveis e sem PII."""
+    fatos: FatosFinanceiros
+    analise: NotRequired[AnaliseAgente | None]
+    motivos: NotRequired[list[str]]
+    veio_do_cache: NotRequired[bool]
+    tentativas: NotRequired[int]
+    modo: NotRequired[str]
+
+
+@dataclass
+class ContextoAnalise:
+    """Dependências de execução — NUNCA entram em checkpoint (REQ-SEC-003)."""
+    cfg: ConfigAgente
+    mapa: MapaAnonimizacao
+    provider: LLMProvider | None = None
+
+
+# ------------------------------------------------------------------- nós
+def verificar_pii(state: EstadoAnalise,
+                  runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+    """Cinto de segurança final do H2: nada com PII sai para provider cloud.
+
+    A anonimização em montar_fatos() já protege por construção; esta checagem
+    varre o payload serializado que REALMENTE será enviado (REQ-GRD-002).
+    """
+    cfg = runtime.context.cfg
+    if cfg.provider == "openai_compat" and contem_pii(
+            state["fatos"].model_dump_json(), runtime.context.mapa):
+        return {"motivos": ["REQ-GRD-002:PII_DETECTADA"]}
+    return {}
+
+
+def consultar_cache(state: EstadoAnalise,
+                    runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+    """T-205: mesma entrada + mesmo modelo ⇒ reaproveita análise já aprovada."""
+    cfg = runtime.context.cfg
+    if not cfg.cache:
+        return {"veio_do_cache": False}
+    chave = cache_global.chave(cfg.provider, cfg.model, state["fatos"])
+    analise = cache_global.obter(chave)
+    return {"analise": analise, "veio_do_cache": analise is not None}
+
+
+def chamar_llm(state: EstadoAnalise,
+               runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+    """Uma tentativa de chamada ao provider (ADR-0005). O retry é aresta do grafo."""
+    ctx = runtime.context
+    if ctx.provider is None:
+        # Erro de configuração (ex.: cloud sem HF_API_KEY) degrada direto,
+        # sem consumir retry — o usuário nunca perde o determinístico (P8).
+        try:
+            ctx.provider = obter_provider(ctx.cfg)
+        except Exception as e:  # noqa: BLE001
+            return {"motivos": [f"ERRO_CONFIG:{type(e).__name__}"],
+                    "tentativas": MAX_TENTATIVAS}
+
+    tentativas = state.get("tentativas", 0) + 1
+    try:
+        candidata = ctx.provider.analisar(state["fatos"])
+    except ValidationError:
+        return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
+    except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
+        return {"motivos": [f"ERRO_PROVIDER:{type(e).__name__}"],
+                "tentativas": tentativas}
+    if not isinstance(candidata, AnaliseAgente):
+        return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
+    return {"analise": candidata, "motivos": [], "tentativas": tentativas}
+
+
+def validar_guardrails(state: EstadoAnalise,
+                       runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+    """H1 (números fabricados) + H6 (conteúdo indevido) — as travas críticas."""
+    analise = state.get("analise")
+    assert analise is not None  # rota garante: só chega aqui com análise
+    violacoes: list[str] = []
+    if validar_numeros(state["fatos"], analise):
+        violacoes.append("REQ-GRD-001:NUMEROS_FABRICADOS")
+    if detectar_conteudo_indevido(analise):
+        violacoes.append("REQ-GRD-004:CONTEUDO_INDEVIDO")
+    return {"motivos": violacoes}
+
+
+def aprovar(state: EstadoAnalise,
+            runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+    """Garante o aviso legal (H3) e guarda no cache só o que foi APROVADO."""
+    cfg = runtime.context.cfg
+    analise = state.get("analise")
+    assert analise is not None
+    analise.sumario_executivo = garantir_aviso(analise.sumario_executivo)
+    if cfg.cache and not state.get("veio_do_cache", False):
+        chave = cache_global.chave(cfg.provider, cfg.model, state["fatos"])
+        cache_global.guardar(chave, analise)
+    return {"analise": analise, "modo": "completo"}
+
+
+def degradar(state: EstadoAnalise,
+             runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+    """P8: entrega o determinístico intacto, com os motivos registrados."""
+    motivos = state.get("motivos") or ["ERRO_PROVIDER:Desconhecido"]
+    log.warning("Modo degradado. Guardrails/erros: %s", motivos)
+    return {"analise": None, "modo": "degradado", "motivos": motivos}
+
+
+# ------------------------------------------------------------------- rotas
+def _rota_pos_pii(state: EstadoAnalise) -> Literal["degradar", "consultar_cache"]:
+    return "degradar" if state.get("motivos") else "consultar_cache"
+
+
+def _rota_pos_cache(state: EstadoAnalise) -> Literal["validar_guardrails", "chamar_llm"]:
+    return "validar_guardrails" if state.get("analise") is not None else "chamar_llm"
+
+
+def _rota_pos_llm(state: EstadoAnalise) -> Literal["validar_guardrails", "chamar_llm", "degradar"]:
+    if state.get("analise") is not None:
+        return "validar_guardrails"
+    if state.get("tentativas", 0) >= MAX_TENTATIVAS:
+        return "degradar"
+    return "chamar_llm"  # REQ-LLM-002: exatamente 1 recuperação
+
+
+def _rota_pos_guardrails(state: EstadoAnalise) -> Literal["aprovar", "degradar"]:
+    return "degradar" if state.get("motivos") else "aprovar"
+
+
+# ------------------------------------------------------------------- grafo
+GrafoAnalise = CompiledStateGraph[EstadoAnalise, ContextoAnalise, EstadoAnalise, EstadoAnalise]
+
+
+def _construir() -> GrafoAnalise:
+    g = StateGraph(EstadoAnalise, context_schema=ContextoAnalise)
+    g.add_node("verificar_pii", verificar_pii)
+    g.add_node("consultar_cache", consultar_cache)
+    g.add_node("chamar_llm", chamar_llm)
+    g.add_node("validar_guardrails", validar_guardrails)
+    g.add_node("aprovar", aprovar)
+    g.add_node("degradar", degradar)
+
+    g.add_edge(START, "verificar_pii")
+    g.add_conditional_edges("verificar_pii", _rota_pos_pii)
+    g.add_conditional_edges("consultar_cache", _rota_pos_cache)
+    g.add_conditional_edges("chamar_llm", _rota_pos_llm)
+    g.add_conditional_edges("validar_guardrails", _rota_pos_guardrails)
+    g.add_edge("aprovar", END)
+    g.add_edge("degradar", END)
+    # InMemorySaver: estado por thread_id só na memória do processo. Persistir
+    # em disco exige as condições do ADR-0006 (pós-anonimização + opt-in).
+    return g.compile(checkpointer=InMemorySaver())
+
+
+_grafo: GrafoAnalise | None = None
+
+
+def grafo_analise() -> GrafoAnalise:
+    """Grafo compilado (singleton — a compilação não é de graça)."""
+    global _grafo
+    if _grafo is None:
+        _grafo = _construir()
+    return _grafo
+
+
+def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
+                     cfg: ConfigAgente, provider: LLMProvider | None = None,
+                     thread_id: str | None = None) -> ResultadoAnalise:
+    """Invoca o grafo e materializa o `ResultadoAnalise` da aplicação."""
+    estado = grafo_analise().invoke(
+        {"fatos": fatos},
+        config={"configurable": {"thread_id": thread_id or str(uuid4())}},
+        context=ContextoAnalise(cfg=cfg, mapa=mapa, provider=provider),
+    )
+    modo = estado.get("modo", "degradado")
+    return ResultadoAnalise(
+        fatos=fatos,
+        analise=estado.get("analise") if modo == "completo" else None,
+        modo=modo,
+        guardrails_violados=estado.get("motivos", []) if modo == "degradado" else [],
+        aviso_legal=AVISO_LEGAL,
+    )

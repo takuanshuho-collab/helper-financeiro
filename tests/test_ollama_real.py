@@ -20,17 +20,24 @@ from guardrails.conteudo import AVISO_LEGAL
 
 
 def _modelo_instalado() -> str | None:
-    """Nome de um modelo utilizável no Ollama local, ou None (⇒ skip)."""
+    """Nome de um modelo de CHAT utilizável no Ollama local, ou None (⇒ skip).
+
+    Modelos de embedding (ex.: nomic-embed-text) não conversam — chamá-los em
+    /api/chat dá HTTP 400 — então ficam fora da escolha.
+    """
     try:
         with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=1) as r:
-            modelos = [m["name"] for m in json.loads(r.read())["models"]]
+            modelos = [m["name"] for m in json.loads(r.read())["models"]
+                       if "embed" not in m["name"]]
     except OSError:
         return None
     if not modelos:
         return None
-    preferido = os.getenv("HF_MODEL", "")
-    if any(m == preferido or m.startswith(preferido + ":") for m in modelos):
-        return preferido
+    from agent.config import ConfigAgente
+    for preferido in (os.getenv("HF_MODEL", ""), ConfigAgente().model):
+        if preferido and any(m == preferido or m.startswith(preferido + ":")
+                             for m in modelos):
+            return preferido
     return modelos[0]
 
 
@@ -67,6 +74,31 @@ def test_provider_real_adere_ao_schema(perfil_atencao):
     assert isinstance(analise, AnaliseAgente)
     assert 0.0 <= analise.confianca <= 1.0   # imposto pelo contrato (Field ge/le)
     assert analise.sumario_executivo.strip()
+
+
+def test_extracao_real_de_contrato():
+    """Fase 2.5 fim-a-fim: modelo extrai, código verifica, grafo pausa (T-255/T-256).
+
+    O que o SISTEMA garante mesmo com modelo fraco: ou o fluxo pausa para
+    confirmação com campos verificados (todo valor sobrevivente tem fonte
+    literal no documento), ou degrada com motivo. Nunca exceção, nunca valor
+    sem citação.
+    """
+    from agent.extracao import iniciar_extracao
+    from tests.test_extracao import DOC_CONTRATO
+
+    _, estado = iniciar_extracao(DOC_CONTRATO, cfg=_cfg())
+
+    pausas = estado.get("__interrupt__")
+    if not pausas:
+        assert estado["motivos"], "sem pausa e sem motivo: violaria P8"
+        pytest.xfail(f"modelo {_MODELO} não produziu extração válida: {estado['motivos']}")
+    payload = pausas[0].value
+    saldo = payload["campos"]["saldo_devedor"]
+    if saldo is not None:
+        # Quote-check já garantiu: o valor tem fonte literal no documento.
+        assert saldo["valor"] == pytest.approx(10000.0)
+        assert "10.000,00" in saldo["trecho_fonte"]
 
 
 def test_pipeline_real_nunca_estoura(perfil_atencao):

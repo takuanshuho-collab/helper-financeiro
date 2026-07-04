@@ -1,30 +1,28 @@
 """
 Orquestração do CONSELHEIRO (REQ-LLM-001/002, P8).
 
-Fluxo (docs/PLAN §2):
-  core → montar_fatos (+anonimização) → provider → guardrails → ResultadoAnalise
+Fluxo (docs/PLAN §2, ADR-0006):
+  core → montar_fatos (+anonimização) → grafo (LangGraph) → ResultadoAnalise
 
-Se qualquer etapa da IA falhar, cai em MODO DEGRADADO: devolve os fatos
-determinísticos intactos e sinaliza o que falhou. O usuário nunca fica sem o
-essencial por causa do LLM.
+Desde a Fase 2.5 o pipeline é um StateGraph (`agent/grafo.py`): nós puros,
+arestas explícitas e toda falha convergindo para o modo DEGRADADO — devolve os
+fatos determinísticos intactos e sinaliza o que falhou. O usuário nunca fica
+sem o essencial por causa do LLM.
 """
 from __future__ import annotations
 
 import logging
 
-from pydantic import ValidationError
-
-from contracts import AnaliseAgente, DividaFato, EstrategiaFato, FatosFinanceiros, ResultadoAnalise
+from contracts import DividaFato, EstrategiaFato, FatosFinanceiros, ResultadoAnalise
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias
 from core.models import PerfilFinanceiro
-from guardrails.conteudo import AVISO_LEGAL, detectar_conteudo_indevido, garantir_aviso
+from guardrails.conteudo import AVISO_LEGAL
 from guardrails.pii import MapaAnonimizacao, anonimizar_credores, contem_pii
-from guardrails.validador_numerico import validar as validar_numeros
 
-from .cache import cache_global
 from .config import ConfigAgente, carregar_config
-from .provider import LLMProvider, obter_provider
+from .grafo import executar_analise
+from .provider import LLMProvider
 
 log = logging.getLogger("helper_financeiro.agente")
 
@@ -95,74 +93,18 @@ def _verificar_pii_pre_envio(fatos: FatosFinanceiros,
 def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
              cfg: ConfigAgente | None = None,
              provider: LLMProvider | None = None) -> ResultadoAnalise:
-    """Ponto de entrada da análise assistida por IA, com guardrails e degradação."""
+    """Ponto de entrada da análise assistida por IA, com guardrails e degradação.
+
+    Desde o ADR-0006 a orquestração (cache → LLM com 1 retry → guardrails →
+    aprovar/degradar) vive no StateGraph de `agent/grafo.py`; esta função
+    prepara os fatos e materializa o resultado — a assinatura e o
+    comportamento observável são os mesmos de antes.
+    """
     cfg = cfg or carregar_config()
     fatos, mapa = montar_fatos(perfil, extra_mensal)
 
-    # P8: modo degradado explícito (ex.: sem LLM disponível).
+    # P8: modo degradado explícito (ex.: sem LLM disponível) nem entra no grafo.
     if cfg.modo_degradado:
         return _degradado(fatos, ["MODO_DEGRADADO"])
 
-    # H2: provider cloud só recebe payload comprovadamente sem PII.
-    if cfg.provider == "openai_compat" and _verificar_pii_pre_envio(fatos, mapa):
-        return _degradado(fatos, ["REQ-GRD-002:PII_DETECTADA"])
-
-    # T-205: mesma entrada + mesmo modelo ⇒ reaproveita análise já aprovada.
-    chave_cache = cache_global.chave(cfg.provider, cfg.model, fatos)
-    analise: AnaliseAgente | None = cache_global.obter(chave_cache) if cfg.cache else None
-    veio_do_cache = analise is not None
-
-    if analise is None:
-        # Erro de configuração (ex.: cloud sem HF_API_KEY) também degrada — o
-        # usuário nunca perde o determinístico por causa do agente (P8).
-        try:
-            provider = provider or obter_provider(cfg)
-        except Exception as e:  # noqa: BLE001
-            return _degradado(fatos, [f"ERRO_CONFIG:{type(e).__name__}"])
-
-        # 1) Chamada ao LLM — com 1 (uma) recuperação (REQ-LLM-002).
-        #    Falha transitória (rede, timeout) ou saída fora do schema ganham
-        #    uma segunda chance; persistindo, degrada.
-        motivo_falha = ""
-        for _tentativa in (1, 2):
-            try:
-                candidata = provider.analisar(fatos)
-            except ValidationError:
-                motivo_falha = "REQ-LLM-002:SCHEMA"
-                continue
-            except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
-                motivo_falha = f"ERRO_PROVIDER:{type(e).__name__}"
-                continue
-            if isinstance(candidata, AnaliseAgente):
-                analise = candidata
-                break
-            motivo_falha = "REQ-LLM-002:SCHEMA"
-
-        if analise is None:
-            return _degradado(fatos, [motivo_falha or "ERRO_PROVIDER:Desconhecido"])
-
-    violacoes: list[str] = []
-
-    # 3) Consistência numérica (H1) — a trava crítica
-    orfaos = validar_numeros(fatos, analise)
-    if orfaos:
-        violacoes.append("REQ-GRD-001:NUMEROS_FABRICADOS")
-
-    # 4) Conteúdo indevido (H6)
-    if detectar_conteudo_indevido(analise):
-        violacoes.append("REQ-GRD-004:CONTEUDO_INDEVIDO")
-
-    # Violação de guardrail crítico ⇒ degrada (não entrega saída suspeita).
-    if violacoes:
-        return _degradado(fatos, violacoes)
-
-    # 5) Aviso legal (H3) garantido no sumário.
-    analise.sumario_executivo = garantir_aviso(analise.sumario_executivo)
-
-    # Só análise APROVADA pelos guardrails entra no cache: uma saída ruim
-    # nunca fica "grudada" na sessão — a próxima tentativa vai ao LLM de novo.
-    if cfg.cache and not veio_do_cache:
-        cache_global.guardar(chave_cache, analise)
-
-    return ResultadoAnalise(fatos=fatos, analise=analise, modo="completo",
-                            guardrails_violados=[], aviso_legal=AVISO_LEGAL)
+    return executar_analise(fatos, mapa, cfg, provider)

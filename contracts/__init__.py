@@ -5,8 +5,12 @@ Contratos de dados (Pydantic v2) — camada sem dependências internas.
 """
 from .schemas import (
     AnaliseAgente,
+    CampoExtraido,
+    CampoTextoExtraido,
     DividaFato,
     EstrategiaFato,
+    ExtracaoContrato,
+    ExtracaoVerificada,
     FatosFinanceiros,
     PassoNegociacao,
     Prioridade,
@@ -15,8 +19,12 @@ from .schemas import (
 
 __all__ = [
     "AnaliseAgente",
+    "CampoExtraido",
+    "CampoTextoExtraido",
     "DividaFato",
     "EstrategiaFato",
+    "ExtracaoContrato",
+    "ExtracaoVerificada",
     "FatosFinanceiros",
     "PassoNegociacao",
     "Prioridade",

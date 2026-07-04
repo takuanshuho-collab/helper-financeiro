@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0005) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0007) |
 | 9 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
 ## Fluxo Spec-Driven
@@ -24,11 +24,15 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
 ```
 
 ## Estado atual
-- **M1 + M1.5 + M2 entregues e verdes**: guardrails, orquestração com
-  degradação segura, providers reais (Ollama local-first e OpenAI-compat)
-  com structured output (ADR-0005), cache de análise e harness com 58 testes
-  offline (cobertura ~95%, piso 90% no CI).
-- **Próximo:** M3 (T-301..T-304) — levar o `ResultadoAnalise` à GUI e ao `.docx`.
+- **M1 + M1.5 + M2 + M2.5 entregues e verdes**: guardrails, orquestração em
+  **StateGraph** (LangGraph, ADR-0006) com degradação segura, providers reais
+  com structured output (ADR-0005), **extração Code-First de documentos** com
+  citação obrigatória + verificador determinístico + pausa para confirmação
+  humana (`interrupt`), ingestão local LlamaIndex retriever-only (ADR-0007),
+  cache de análise e harness com 72 testes (cobertura ≥90% no CI).
+- **Modelo padrão:** `qwen2.5:3b` (GPU 4 GB); alternativa Apache 2.0: `qwen3:4b`.
+- **Próximo:** M3 (T-301..T-304) — GUI/.docx, incluindo a tela de confirmação
+  da extração retomando o checkpoint do grafo.
 
 ## Rodar
 ```bash

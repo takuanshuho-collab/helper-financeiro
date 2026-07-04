@@ -157,19 +157,24 @@ local** (LGPD / offline); um endpoint OpenAI-compatible na nuvem entra por
 variável de ambiente e **só recebe dados anonimizados** (H2).
 
 ```bash
-# 1. instalar o Ollama (https://ollama.com) e baixar um modelo
-ollama pull qwen2.5:14b      # recomendado; use o bench p/ comparar candidatos
+# 1. instalar o Ollama (https://ollama.com) e baixar os modelos
+ollama pull qwen2.5:3b        # padrão: roda 100% numa GPU de 4 GB
+ollama pull nomic-embed-text  # embeddings da ingestão de documentos (M2.5)
 
 # 2. (opcional) validar a integração e comparar modelos
 uv run pytest -m ollama
-uv run python scripts/bench_schema.py --modelos qwen2.5:7b qwen2.5:14b --n 5
+uv run python scripts/bench_schema.py --modelos qwen2.5:3b qwen3:4b --n 5
 ```
+
+> **Licença do modelo:** `qwen2.5:3b` usa a Qwen Research License (não
+> comercial). Para uso comercial, `HF_MODEL=qwen3:4b` (Apache 2.0) — ver
+> ADR-0006.
 
 | Variável | Padrão | Para quê |
 |---|---|---|
 | `HF_PROVIDER` | `local` | `local` (Ollama) · `openai_compat` (nuvem) · `fake` (testes) |
 | `HF_BASE_URL` | `http://localhost:11434/v1` | endpoint do provider |
-| `HF_MODEL` | `qwen2.5:14b` | modelo a usar |
+| `HF_MODEL` | `qwen2.5:3b` | modelo a usar |
 | `HF_API_KEY` | *(vazia)* | chave da nuvem — **só via ambiente** (REQ-SEC-002) |
 | `HF_MODO_DEGRADADO` | `0` | `1` pula o LLM e entrega só o determinístico (P8) |
 | `HF_TIMEOUT` | `60` | timeout por chamada, em segundos |
@@ -178,3 +183,19 @@ uv run python scripts/bench_schema.py --modelos qwen2.5:7b qwen2.5:14b --n 5
 Se o LLM estiver fora do ar, sem chave ou desobedecer aos guardrails, o
 sistema **degrada com segurança**: você sempre recebe o diagnóstico
 determinístico completo, com o motivo registrado.
+
+### Extração Code-First de contratos e extratos (M2.5)
+
+O pipeline agora é um **grafo LangGraph** (ADR-0006) e sabe ler documentos
+(ADR-0007): o **modelo extrai** as variáveis (`capital`, `taxa`, `prazo`...),
+o **código verifica e calcula**, e **você confirma** antes de qualquer uso:
+
+- cada campo extraído exige a **citação literal** do documento — valor sem
+  fonte verificável é descartado automaticamente;
+- os campos são checados entre si (a parcela recalculada via Price precisa
+  bater com a extraída);
+- o fluxo **pausa** para você conferir os campos (mesma filosofia do "confira
+  antes de adicionar" da aba Contrato PDF) — a tela chega no M3;
+- a extração roda **somente no modelo local**: o documento bruto (com seus
+  dados) nunca sai da máquina;
+- se o modelo falhar, o extrator regex clássico continua funcionando.

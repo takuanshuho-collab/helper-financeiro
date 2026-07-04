@@ -71,3 +71,36 @@ class ResultadoAnalise(BaseModel):
     modo: str                        # "completo" | "degradado"
     guardrails_violados: list[str] = Field(default_factory=list)
     aviso_legal: str = ""
+
+
+# ----------------------------- Extração Code-First (Fase 2.5) -----------------
+# O modelo EXTRAI variáveis de documentos (contrato/extrato); o código verifica
+# e calcula. Cada campo exige a citação verbatim de onde saiu: valor sem fonte
+# verificável é descartado pelo verificador (espelho do H1 na entrada).
+class CampoExtraido(BaseModel):
+    valor: float
+    trecho_fonte: str                # citação literal do documento
+    confianca: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class CampoTextoExtraido(BaseModel):
+    valor: str
+    trecho_fonte: str
+    confianca: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class ExtracaoContrato(BaseModel):
+    """Variáveis financeiras extraídas de um documento. Campos ausentes = None."""
+    credor: CampoTextoExtraido | None = None
+    tipo: CampoTextoExtraido | None = None       # "emprestimo", "financiamento"...
+    saldo_devedor: CampoExtraido | None = None   # R$
+    taxa_mensal: CampoExtraido | None = None     # FRAÇÃO (0.025 = 2,5% a.m.)
+    parcela: CampoExtraido | None = None         # R$
+    parcelas_restantes: CampoExtraido | None = None
+
+
+class ExtracaoVerificada(BaseModel):
+    """Saída do verificador determinístico (quote-check + checagem cruzada)."""
+    extracao: ExtracaoContrato       # campos sem fonte verificável já removidos
+    descartados: list[str] = Field(default_factory=list)      # "saldo_devedor:SEM_FONTE"
+    inconsistencias: list[str] = Field(default_factory=list)  # "CRUZADA_PRICE:parcela"
