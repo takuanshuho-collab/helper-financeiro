@@ -104,6 +104,21 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-505 | Harness: `tests/test_orcamento.py` (roll-up, meses de reserva, retrocompatibilidade, propriedade Hypothesis) | REQ-F-006/007 | T-503 | ✅ |
 | T-506 | Docs sincronizados (PRD/SPEC/PLAN/TASKS/HARNESS/INDEX + ADR-0008) e CI verde | Processo | todos | ✅ |
 
+## Milestone M6 — Revisão de UI/UX (v2.2)
+
+> A GUI continua fora dos portões de cobertura; a lógica nova testável
+> (`texto_numerico_valido`) vive no `core` e tem harness próprio.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-601 | `core.utils.texto_numerico_valido` + testes (padrão BR, vazio = válido) | REQ-F-009 | — | ✅ |
+| T-602 | Validação visual ao vivo dos campos numéricos (estilo `Invalido.TEntry` via trace) | REQ-F-009 | T-601 | ✅ |
+| T-603 | Aba Perfil rolável (Canvas + Scrollbar + roda do mouse) p/ não cortar campos | NF-usabilidade | M5 | ✅ |
+| T-604 | Contador de dívidas no rótulo da aba + barra de status contextual por aba | NF-usabilidade | — | ✅ |
+| T-605 | Ergonomia da aba Dívidas: duplo clique edita, Enter adiciona, Delete remove | NF-usabilidade | — | ✅ |
+| T-606 | Tema consistente: molduras no fundo padrão e lista de dívidas zebrada | NF-usabilidade | — | ✅ |
+| T-607 | Docs sincronizados (SPEC/PLAN/TASKS/HARNESS/INDEX) + smoke GUI + CI verde | Processo | todos | ✅ |
+
 ---
 
 ## Definição de Pronto (DoD)
@@ -112,7 +127,10 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.2 aberto (ADR-0008).** M5 entregue: perfil como orçamento
-detalhado com roll-up no `core` e resumo ao vivo na GUI. Próximo passo
-combinado com o mantenedor: **M6 — revisão de UI/UX do app**. Ao fechar o
-ciclo v2.2, lavrar nova ata de freeze (rebuild do `.exe` + SHA-256).
+**Ciclo v2.2 (ADR-0008): M5 e M6 entregues.** Perfil como orçamento
+detalhado com roll-up no `core` e resumo ao vivo (M5); revisão de UI/UX com
+validação visual, aba rolável, ergonomia da lista e tema consistente (M6).
+Próximo passo para fechar o ciclo v2.2: **nova ata de freeze** — rebuild do
+`.exe`, recalcular os SHA-256 (agora incluindo `ADR-0008`,
+`tests/test_orcamento.py`, `tests/test_validacao_texto.py` e os fontes
+alterados) e incrementar a versão da ata.

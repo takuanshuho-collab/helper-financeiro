@@ -60,3 +60,27 @@ def formatar_pct(decimal: float, casas: int = 2) -> str:
     """Formata um decimal como percentual: 0.023 -> '2,30%'."""
     txt = f"{decimal * 100:.{casas}f}"
     return txt.replace(".", ",") + "%"
+
+
+def texto_numerico_valido(texto: str | None) -> bool:
+    """Diz se o texto de um campo numérico é interpretável (REQ-F-009).
+
+    Vazio conta como válido (o campo vale zero por design); texto não
+    interpretável ("abc", "1,2,3") é inválido — a GUI usa isso para
+    SINALIZAR o campo em vez de tratá-lo silenciosamente como zero.
+    Aplica a mesma normalização brasileira do `parse_valor`.
+    """
+    if texto is None:
+        return True
+    limpo = str(texto).strip()
+    if not limpo:
+        return True
+    for simbolo in ("R$", "r$", "%", " ", "\u00a0"):
+        limpo = limpo.replace(simbolo, "")
+    if "," in limpo:
+        limpo = limpo.replace(".", "").replace(",", ".")
+    try:
+        float(limpo)
+    except ValueError:
+        return False
+    return True

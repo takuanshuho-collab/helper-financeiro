@@ -49,6 +49,11 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   reserva e o resumo (fluxo de caixa livre e comprometimento com dívidas,
   com os limiares do REQ-F-002). *(A aritmética vive no `core`; a GUI apenas
   formata — REQ-NF-004.)*
+- **REQ-F-009 (v2.2, M6)** — SE o texto de um campo numérico não for
+  interpretável como número no padrão brasileiro, ENTÃO a GUI DEVE sinalizar
+  o campo visualmente em vez de tratá-lo silenciosamente como zero. Campo
+  vazio é válido e vale zero por design. *(A regra de interpretação vive em
+  `core.utils.texto_numerico_valido`; a GUI só aplica o estilo — REQ-NF-004.)*
 
 ## 2. Requisitos do Agente (LLM)
 

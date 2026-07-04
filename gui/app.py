@@ -39,7 +39,13 @@ from core.models import (
     Divida,
     PerfilFinanceiro,
 )
-from core.utils import formatar_brl, formatar_pct, parse_taxa, parse_valor
+from core.utils import (
+    formatar_brl,
+    formatar_pct,
+    parse_taxa,
+    parse_valor,
+    texto_numerico_valido,
+)
 from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta
 from outputs.relatorio import gerar_relatorio
@@ -74,6 +80,12 @@ class HelperFinanceiroApp(tk.Tk):
         self._configurar_estilo()
         self._montar_cabecalho()
 
+        # T-604: barra de status com dica contextual da aba ativa.
+        self.barra_status = tk.Label(self, text="", anchor="w", bg="#E8EDF3",
+                                     fg="#555555", font=("Segoe UI", 9),
+                                     padx=12, pady=3)
+        self.barra_status.pack(side="bottom", fill="x")
+
         self.abas = ttk.Notebook(self)
         self.abas.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self._aba_perfil()
@@ -81,6 +93,23 @@ class HelperFinanceiroApp(tk.Tk):
         self._aba_contrato()
         self._aba_analise()
         self._aba_carta()
+        self.abas.bind("<<NotebookTabChanged>>", self._ao_trocar_aba)
+        self._ao_trocar_aba()
+
+    _DICAS_ABAS = (
+        "Preencha o orçamento por categoria — os totais e o resumo são "
+        "calculados na hora.",
+        "Cadastre cada dívida. Dica: Enter adiciona, duplo clique edita e "
+        "Delete remove a selecionada.",
+        "Extraia os dados de um contrato PDF e confira antes de usar.",
+        "Rode o diagnóstico determinístico e, se quiser, a análise sênior "
+        "assistida por IA.",
+        "Gere a carta de proposta para o credor escolhido.",
+    )
+
+    def _ao_trocar_aba(self, _evento=None):
+        indice = self.abas.index("current") if self.abas.tabs() else 0
+        self.barra_status.config(text=self._DICAS_ABAS[indice])
 
     # ------------------------------------------------------------------ estilo
     def _configurar_estilo(self):
@@ -95,6 +124,14 @@ class HelperFinanceiroApp(tk.Tk):
                     foreground=COR_PRIMARIA)
         s.configure("TButton", font=("Segoe UI", 10), padding=6)
         s.configure("Primario.TButton", font=("Segoe UI", 10, "bold"))
+        # T-606: tema consistente nas molduras e na lista de dívidas.
+        s.configure("TLabelframe", background=COR_FUNDO)
+        s.configure("TLabelframe.Label", background=COR_FUNDO,
+                    foreground=COR_PRIMARIA, font=("Segoe UI", 10, "bold"))
+        s.configure("Treeview", rowheight=24, font=("Segoe UI", 9))
+        s.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
+        # T-602: campo numérico com texto não interpretável fica rosado.
+        s.configure("Invalido.TEntry", fieldbackground="#F6D5D3")
 
     def _montar_cabecalho(self):
         barra = tk.Frame(self, bg=COR_PRIMARIA, height=54)
@@ -107,21 +144,59 @@ class HelperFinanceiroApp(tk.Tk):
                  font=("Segoe UI", 9)).pack(side="right", padx=16)
 
     # ------------------------------------------------------ util de formulário
-    def _campo(self, parent, rotulo, linha, valor_inicial=""):
+    def _campo(self, parent, rotulo, linha, valor_inicial="",
+               numerico=False, ao_enter=None):
         ttk.Label(parent, text=rotulo).grid(row=linha, column=0, sticky="w",
                                             padx=8, pady=6)
         var = tk.StringVar(value=valor_inicial)
         ent = ttk.Entry(parent, textvariable=var, width=24)
         ent.grid(row=linha, column=1, sticky="w", padx=8, pady=6)
+        if numerico:
+            self._vincular_validacao(ent, var)
+        if ao_enter is not None:
+            ent.bind("<Return>", lambda _e: ao_enter())
         return var
+
+    # T-602 (REQ-F-009): texto não interpretável nunca vira zero em silêncio —
+    # o campo é sinalizado em rosa enquanto o texto não fizer sentido.
+    def _vincular_validacao(self, entry: ttk.Entry, var: tk.StringVar):
+        def validar(*_):
+            valido = texto_numerico_valido(var.get())
+            entry.configure(style="TEntry" if valido else "Invalido.TEntry")
+        var.trace_add("write", validar)
+
+    # T-603: conteúdo rolável para a aba Perfil não cortar campos em janelas
+    # menores (minsize 880x640). Roda do mouse funciona com o cursor em cima.
+    def _frame_rolavel(self, externo: ttk.Frame) -> ttk.Frame:
+        canvas = tk.Canvas(externo, bg=COR_FUNDO, highlightthickness=0)
+        barra = ttk.Scrollbar(externo, orient="vertical",
+                              command=canvas.yview)
+        canvas.configure(yscrollcommand=barra.set)
+        barra.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        interno = ttk.Frame(canvas)
+        janela = canvas.create_window((0, 0), window=interno, anchor="nw")
+        interno.bind("<Configure>", lambda _e: canvas.configure(
+            scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(
+            janela, width=e.width))
+
+        def rolar(evento):
+            canvas.yview_scroll(-(evento.delta // 120), "units")
+        canvas.bind("<Enter>",
+                    lambda _e: canvas.bind_all("<MouseWheel>", rolar))
+        canvas.bind("<Leave>",
+                    lambda _e: canvas.unbind_all("<MouseWheel>"))
+        return interno
 
     # -------------------------------------------------------------- aba perfil
     # M5 (ADR-0008, REQ-F-006/007/008): o perfil é um orçamento doméstico
     # completo — renda e despesas entram POR CATEGORIA, os totais e o resumo
     # são recalculados ao vivo, e o roll-up vem do core (com_orcamento).
     def _aba_perfil(self):
-        frame = ttk.Frame(self.abas)
-        self.abas.add(frame, text="  1. Perfil  ")
+        externo = ttk.Frame(self.abas)
+        self.abas.add(externo, text="  1. Perfil  ")
+        frame = self._frame_rolavel(externo)  # T-603: conteúdo rolável
         frame.grid_columnconfigure(0, weight=1, uniform="perfil")
         frame.grid_columnconfigure(1, weight=1, uniform="perfil")
 
@@ -180,14 +255,18 @@ class HelperFinanceiroApp(tk.Tk):
                                                      sticky="w", padx=8,
                                                      pady=2)
         self.var_reserva = self._var_orcamento()
-        ttk.Entry(patrimonio, textvariable=self.var_reserva, width=14,
-                  justify="right").grid(row=0, column=1, padx=8, pady=2)
+        ent_reserva = ttk.Entry(patrimonio, textvariable=self.var_reserva,
+                                width=14, justify="right")
+        ent_reserva.grid(row=0, column=1, padx=8, pady=2)
+        self._vincular_validacao(ent_reserva, self.var_reserva)
         ttk.Label(patrimonio, text="Saldo de FGTS").grid(row=0, column=2,
                                                          sticky="w",
                                                          padx=(24, 8), pady=2)
         self.var_fgts = self._var_orcamento()
-        ttk.Entry(patrimonio, textvariable=self.var_fgts, width=14,
-                  justify="right").grid(row=0, column=3, padx=8, pady=2)
+        ent_fgts = ttk.Entry(patrimonio, textvariable=self.var_fgts,
+                             width=14, justify="right")
+        ent_fgts.grid(row=0, column=3, padx=8, pady=2)
+        self._vincular_validacao(ent_fgts, self.var_fgts)
         self.lbl_reserva = tk.Label(patrimonio, text="", bg=COR_FUNDO,
                                     fg=COR_NEUTRA, font=("Segoe UI", 9))
         self.lbl_reserva.grid(row=0, column=4, sticky="w", padx=(24, 8),
@@ -224,9 +303,9 @@ class HelperFinanceiroApp(tk.Tk):
             ttk.Label(lf, text=rotulo).grid(row=i, column=0, sticky="w",
                                             padx=8, pady=2)
             var = self._var_orcamento()
-            ttk.Entry(lf, textvariable=var, width=12,
-                      justify="right").grid(row=i, column=1, sticky="e",
-                                            padx=8, pady=2)
+            ent = ttk.Entry(lf, textvariable=var, width=12, justify="right")
+            ent.grid(row=i, column=1, sticky="e", padx=8, pady=2)
+            self._vincular_validacao(ent, var)  # T-602
             vars_[chave] = var
         total = tk.Label(lf, text="Total: R$ 0,00", bg=COR_FUNDO,
                          fg=COR_PRIMARIA, font=("Segoe UI", 9, "bold"))
@@ -299,40 +378,59 @@ class HelperFinanceiroApp(tk.Tk):
 
         # Lista (Treeview)
         colunas = ("credor", "tipo", "saldo", "taxa", "parcela", "restantes")
-        self.tree = ttk.Treeview(frame, columns=colunas, show="headings", height=8)
+        self.tree = ttk.Treeview(frame, columns=colunas, show="headings",
+                                 height=8)
         titulos = {"credor": "Credor", "tipo": "Tipo", "saldo": "Saldo",
-                   "taxa": "Taxa a.m.", "parcela": "Parcela", "restantes": "Parc. rest."}
+                   "taxa": "Taxa a.m.", "parcela": "Parcela",
+                   "restantes": "Parc. rest."}
         larguras = {"credor": 160, "tipo": 200, "saldo": 100, "taxa": 80,
                     "parcela": 100, "restantes": 80}
         for c in colunas:
             self.tree.heading(c, text=titulos[c])
             self.tree.column(c, width=larguras[c], anchor="center")
-        self.tree.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=8, pady=8)
+        # T-606: linhas zebradas para leitura mais fácil da lista.
+        self.tree.tag_configure("par", background="#FFFFFF")
+        self.tree.tag_configure("impar", background="#EEF3F9")
+        self.tree.grid(row=0, column=0, columnspan=4, sticky="nsew",
+                       padx=8, pady=8)
         frame.grid_rowconfigure(0, weight=1)
         frame.grid_columnconfigure(3, weight=1)
+        # T-605: duplo clique edita; Delete remove a dívida selecionada.
+        self.tree.bind("<Double-1>", lambda _e: self._editar_divida())
+        self.tree.bind("<Delete>", lambda _e: self._remover_divida())
 
-        ttk.Button(frame, text="Remover selecionada",
-                   command=self._remover_divida).grid(row=1, column=0, sticky="w",
-                                                      padx=8, pady=(0, 8))
+        acoes = ttk.Frame(frame)
+        acoes.grid(row=1, column=0, columnspan=4, sticky="w", padx=8,
+                   pady=(0, 8))
+        ttk.Button(acoes, text="✏ Editar selecionada",
+                   command=self._editar_divida).pack(side="left")
+        ttk.Button(acoes, text="🗑 Remover selecionada",
+                   command=self._remover_divida).pack(side="left", padx=8)
 
-        # Formulário de cadastro
-        form = ttk.LabelFrame(frame, text="Adicionar dívida")
+        # Formulário de cadastro (Enter em qualquer campo adiciona).
+        form = ttk.LabelFrame(frame, text="Adicionar / editar dívida")
         form.grid(row=2, column=0, columnspan=4, sticky="ew", padx=8, pady=8)
 
-        self.d_credor = self._campo(form, "Credor", 0)
-        ttk.Label(form, text="Tipo").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        add = self._adicionar_divida
+        self.d_credor = self._campo(form, "Credor", 0, ao_enter=add)
+        ttk.Label(form, text="Tipo").grid(row=1, column=0, sticky="w",
+                                          padx=8, pady=6)
         self.d_tipo = tk.StringVar(value=TIPOS_DIVIDA[0])
         ttk.Combobox(form, textvariable=self.d_tipo, values=TIPOS_DIVIDA,
-                     width=34, state="readonly").grid(row=1, column=1, sticky="w",
-                                                      padx=8, pady=6)
-        self.d_saldo = self._campo(form, "Saldo devedor (R$)", 2)
-        self.d_taxa = self._campo(form, "Taxa mensal (%)", 3)
-        self.d_parcela = self._campo(form, "Parcela (R$)", 4)
-        self.d_restantes = self._campo(form, "Parcelas restantes", 5)
+                     width=34, state="readonly").grid(row=1, column=1,
+                                                      sticky="w", padx=8,
+                                                      pady=6)
+        self.d_saldo = self._campo(form, "Saldo devedor (R$)", 2,
+                                   numerico=True, ao_enter=add)
+        self.d_taxa = self._campo(form, "Taxa mensal (%)", 3,
+                                  numerico=True, ao_enter=add)
+        self.d_parcela = self._campo(form, "Parcela (R$)", 4,
+                                     numerico=True, ao_enter=add)
+        self.d_restantes = self._campo(form, "Parcelas restantes", 5,
+                                       numerico=True, ao_enter=add)
 
         ttk.Button(form, text="➕ Adicionar dívida", style="Primario.TButton",
-                   command=self._adicionar_divida).grid(row=6, column=0,
-                                                        columnspan=2, pady=10)
+                   command=add).grid(row=6, column=0, columnspan=2, pady=10)
 
     def _adicionar_divida(self, prefill: dict | None = None):
         credor = self.d_credor.get().strip()
@@ -365,15 +463,50 @@ class HelperFinanceiroApp(tk.Tk):
         self._atualizar_tree()
         self._atualizar_combo_dividas()
 
+    def _editar_divida(self):
+        """T-605: joga a dívida selecionada no formulário para edição.
+
+        Remove da lista e devolve os campos ao formulário; o usuário revisa e
+        clica em Adicionar para gravar de volta (fluxo simples, sem modo de
+        edição separado).
+        """
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = self.tree.index(sel[0])
+        d = self.dividas[idx]
+        self.d_credor.set(d.credor)
+        self.d_tipo.set(d.tipo if d.tipo in TIPOS_DIVIDA else "Outro")
+        self.d_saldo.set(f"{d.saldo_devedor:.2f}".replace(".", ","))
+        self.d_taxa.set(f"{d.taxa_mensal * 100:.2f}".replace(".", ","))
+        self.d_parcela.set(f"{d.parcela:.2f}".replace(".", ","))
+        self.d_restantes.set(str(d.parcelas_restantes))
+        del self.dividas[idx]
+        self._atualizar_tree()
+        self._atualizar_combo_dividas()
+        self._status_transitorio("Dívida carregada no formulário — ajuste e "
+                                 "clique em Adicionar para gravar.")
+
     def _atualizar_tree(self):
         self.tree.delete(*self.tree.get_children())
-        for d in self.dividas:
-            self.tree.insert("", "end", values=(
+        for i, d in enumerate(self.dividas):
+            tag = "par" if i % 2 == 0 else "impar"
+            self.tree.insert("", "end", tags=(tag,), values=(
                 d.credor, d.tipo, formatar_brl(d.saldo_devedor),
                 formatar_pct(d.taxa_mensal), formatar_brl(d.parcela),
                 d.parcelas_restantes))
+        # T-604: contador de dívidas no rótulo da aba.
+        rotulo = (f"  2. Dívidas ({len(self.dividas)})  " if self.dividas
+                  else "  2. Dívidas  ")
+        with contextlib.suppress(tk.TclError):
+            self.abas.tab(1, text=rotulo)
         # Parcelas mudam o fluxo de caixa e o comprometimento do resumo.
         self._atualizar_resumo_perfil()
+
+    def _status_transitorio(self, texto: str, ms: int = 6000):
+        """Mostra uma mensagem na barra de status e depois volta à dica da aba."""
+        self.barra_status.config(text=texto)
+        self.after(ms, self._ao_trocar_aba)
 
     # ------------------------------------------------------------ aba contrato
     def _aba_contrato(self):
@@ -655,13 +788,15 @@ class HelperFinanceiroApp(tk.Tk):
         ttk.Label(params, text="Pagamento extra por mês (R$):").grid(
             row=0, column=0, sticky="w", padx=4)
         self.var_extra = tk.StringVar(value="0")
-        ttk.Entry(params, textvariable=self.var_extra, width=12).grid(
-            row=0, column=1, padx=4)
+        ent_extra = ttk.Entry(params, textvariable=self.var_extra, width=12)
+        ent_extra.grid(row=0, column=1, padx=4)
+        self._vincular_validacao(ent_extra, self.var_extra)
         ttk.Label(params, text="Taxa-alvo p/ portabilidade (% a.m.):").grid(
             row=0, column=2, sticky="w", padx=(20, 4))
         self.var_alvo = tk.StringVar(value="1,8")
-        ttk.Entry(params, textvariable=self.var_alvo, width=8).grid(
-            row=0, column=3, padx=4)
+        ent_alvo = ttk.Entry(params, textvariable=self.var_alvo, width=8)
+        ent_alvo.grid(row=0, column=3, padx=4)
+        self._vincular_validacao(ent_alvo, self.var_alvo)
         ttk.Button(params, text="🔍 Analisar", style="Primario.TButton",
                    command=self._analisar).grid(row=0, column=4, padx=16)
 
@@ -882,9 +1017,12 @@ class HelperFinanceiroApp(tk.Tk):
                                             padx=8, pady=6)
 
         self.c_contrato = self._campo(frame, "Nº do contrato (opcional)", 3)
-        self.c_valor = self._campo(frame, "Valor proposto à vista (R$)", 4)
-        self.c_banco = self._campo(frame, "Banco concorrente (portabilidade)", 5)
-        self.c_taxa = self._campo(frame, "Taxa do concorrente (% a.m.)", 6)
+        self.c_valor = self._campo(frame, "Valor proposto à vista (R$)", 4,
+                                   numerico=True)
+        self.c_banco = self._campo(frame, "Banco concorrente (portabilidade)",
+                                   5)
+        self.c_taxa = self._campo(frame, "Taxa do concorrente (% a.m.)", 6,
+                                  numerico=True)
 
         ttk.Button(frame, text="✉ Gerar carta (.docx)", style="Primario.TButton",
                    command=self._gerar_proposta).grid(row=7, column=0,

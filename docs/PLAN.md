@@ -124,6 +124,11 @@ financeiro dentro de prompts.
   de cobertura da reserva (`meses_reserva`) e aba Perfil com itemização
   obrigatória + resumo ao vivo; decisões DEC-1..DEC-4 registradas no PRD §8
   (inclui generalizar menções a programas públicos de renegociação).
+- **M6 — Revisão de UI/UX** (v2.2): validação visual de campos numéricos
+  (`core.utils.texto_numerico_valido`, REQ-F-009), aba Perfil rolável,
+  contador de dívidas na aba, barra de status contextual, edição de dívida
+  por duplo clique/Enter/Delete e tema consistente (molduras + lista
+  zebrada). A GUI segue casca fina: a lógica testável fica no `core`.
 
 ## 8. Riscos técnicos
 - Modelos locais pequenos podem não aderir bem ao schema → o `format` do

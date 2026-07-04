@@ -89,6 +89,7 @@ ruff → mypy → pytest com piso de cobertura de **90%** (catraca: só sobe).
 | REQ-GRD-005 / H5 | `tests/test_injecao.py` |
 | REQ-F-00x | `tests/test_core.py`, `tests/test_propriedades.py` (invariantes) |
 | REQ-F-006 / REQ-F-007 (orçamento detalhado: roll-up e meses de reserva — M5) | `tests/test_orcamento.py` |
+| REQ-F-009 (validação de texto numérico BR: vazio válido, lixo inválido — M6) | `tests/test_validacao_texto.py` |
 | REQ-F-005 / REQ-NF-003 / H3 / H4 (Gate B) | `tests/test_outputs.py` |
 | REQ-LLM-003 / SEC-002 | `tests/test_config.py`, `tests/test_providers.py` (T-201/T-202, servidor HTTP local) |
 | T-205 (cache) / SEC-003 | `tests/test_cache.py` |
