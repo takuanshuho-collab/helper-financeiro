@@ -41,10 +41,11 @@ const ROTULO_ESTADO: Record<Estado<unknown>['fase'], string> = {
 
 export default function App() {
   const [abaAtiva, setAbaAtiva] = useState(0)
-  const [estado, setEstado] = useState<Estado<DiagnosticoOut>>({ fase: 'ocioso' })
+  const [estado, setEstado] = useState<Estado<DiagnosticoOut>>({
+    fase: 'carregando',
+  })
 
   useEffect(() => {
-    setEstado({ fase: 'carregando' })
     hf.saude()
       .then(() => hf.diagnostico(PERFIL_EXEMPLO))
       .then((dados) => setEstado({ fase: 'ok', dados }))

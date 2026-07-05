@@ -38,3 +38,36 @@ jobs:
       # propriedades e recuperação) levou a cobertura real a ~92%.
       - name: Harness offline (pytest + cobertura)
         run: uv run pytest --cov --cov-fail-under=90
+
+  # Gate Front (v2.3, ADR-0009): lint + tipos + build da GUI web (gui_web/).
+  # Independente do Gate A; os portões Python seguem inalterados. Não baixa o
+  # binário do Electron (não é preciso para lint/typecheck/build).
+  gate-front:
+    name: Gate Front (gui_web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gui_web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: gui_web/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Tipos (tsc)
+        run: npm run typecheck
+
+      - name: Build (Vite + Electron)
+        run: npm run build

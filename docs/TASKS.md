@@ -133,7 +133,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-703 | Sidecar FastAPI embrulhando `core` (`/health`, `/diagnostico`); loopback + porta efêmera + token por sessão | REQ-NF-005 | T-701 | ✅ |
 | T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ✅ |
 | T-705 | Design Tokens do brief (cores claro/escuro, Plus Jakarta Sans, radius/sombras) como base do tema | Design | T-702 | ✅ |
-| T-706 | CI: etapa Node (ESLint/Prettier + `tsc` + Vitest + build Vite); portões Python inalterados | Processo | T-702 | ⬜ |
+| T-706 | CI: etapa Node `gate-front` (ESLint + `tsc` + build Vite, sem binário do Electron); Vitest entra com os testes de unidade (M8); portões Python inalterados | Processo | T-702 | ✅ |
 | T-707 | Testes `pytest` do contrato do sidecar (token 401/inválido, validação 422, roundtrip determinístico, casos sem dívidas / reserva sem despesas / ordenação) | REQ-NF-005/SEC-004 | T-703 | ✅ |
 
 ## Milestone M8 — Telas 1–3 (v2.3)
@@ -182,8 +182,11 @@ sidecar FastAPI (`/health`, `/diagnostico`, loopback + token, validado por
 `tests/test_sidecar.py` + smoke real) e o front `gui_web/` (Electron+Vite+React
 +TS, *secure defaults*, ponte `window.hf`) — **launch real confirmado pelo
 mantenedor** (a janela conecta ao sidecar e exibe o diagnóstico do `core`).
-**T-705 concluída**: Plus Jakarta Sans self-hosted (Fontsource, empacotada no
-bundle — offline) + sistema completo de tokens claro/escuro/radius/sombras, com
-`data-theme` pronto para o toggle do T-904. Próximo passo: **T-704** (contrato
-tipado da ponte), depois **T-707** (mais testes de contrato) e **T-706** (etapa
-Node no CI). Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
+**M7 (fundação da GUI web) FECHADO** — T-701..T-707 concluídas: SPEC v2.3 +
+governança sincronizada; sidecar FastAPI (loopback + token) com 8 testes de
+contrato; front `gui_web/` (Electron+Vite+React+TS) com *secure defaults*, ponte
+tipada `window.hf`, tema "Clareza" (Plus Jakarta Sans local + tokens completos)
+e CI `gate-front` (lint + typecheck + build). Launch real confirmado pelo
+mantenedor. Próximo passo: **M8** — construir as telas 1–3 (Visão geral com anel
+`conic-gradient`, Perfil/orçamento, Dívidas) sobre o esqueleto, consumindo o
+sidecar. Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
