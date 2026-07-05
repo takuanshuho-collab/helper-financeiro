@@ -198,16 +198,19 @@ function CardEstrategia({
   destaque?: boolean
   e: EstrategiaOut
 }) {
+  const quita = e.quitavel && e.meses != null
   return (
     <div className={destaque ? 'scard scard-win' : 'scard'}>
       <div className="scard-topo">
         <span className="scard-nome">{nome}</span>
         {selo && <span className="scard-selo">{selo}</span>}
       </div>
-      <div className="scard-meses">
-        {e.quitavel && e.meses != null ? `${e.meses} meses` : 'não quita'}
+      <div className="scard-meses">{quita ? `${e.meses} meses` : 'não quita'}</div>
+      <div className="scard-juros">
+        {quita
+          ? `${brl(e.juros_pagos)} em juros no caminho`
+          : 'as parcelas mínimas não cobrem os juros'}
       </div>
-      <div className="scard-juros">{brl(e.juros_pagos)} em juros no caminho</div>
     </div>
   )
 }

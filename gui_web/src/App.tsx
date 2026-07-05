@@ -28,7 +28,7 @@ const PERFIL_SEED: PerfilIn = {
     {
       credor: 'Cartão Banco A',
       tipo: 'Cartão de crédito',
-      saldo_devedor: 8000,
+      saldo_devedor: 5000,
       taxa_mensal: 0.12,
       parcela: 900,
       parcelas_restantes: 12,
