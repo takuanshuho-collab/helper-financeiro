@@ -72,6 +72,8 @@ export interface DividaOut {
 export interface DiagnosticoOut {
   renda_liquida: number
   despesas_totais: number
+  despesas_fixas: number
+  despesas_variaveis: number
   total_parcelas: number
   fluxo_caixa: number
   saldo_devedor_total: number

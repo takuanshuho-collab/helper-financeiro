@@ -78,6 +78,8 @@ def test_diagnostico_roundtrip():
 
     # Roll-up determinístico no core: despesas = 1500 + 500 + 800 = 2800.
     assert dados["despesas_totais"] == 2800.0
+    assert dados["despesas_fixas"] == 2000.0
+    assert dados["despesas_variaveis"] == 800.0
     assert dados["total_parcelas"] == 1200.0
     # Comprometimento = 1200 / 5000 = 0,24 → Saudável.
     assert dados["classificacao"] == "Saudável"

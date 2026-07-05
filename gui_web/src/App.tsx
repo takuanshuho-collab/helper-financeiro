@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { PerfilIn } from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
 import EmConstrucao from './screens/EmConstrucao'
+import Perfil from './screens/Perfil'
 import VisaoGeral from './screens/VisaoGeral'
 
 // As 6 telas do redesign "Clareza" (REQ-F-010..016).
@@ -54,8 +55,19 @@ const PERFIL_SEED: PerfilIn = {
 
 export default function App() {
   const [abaAtiva, setAbaAtiva] = useState(0)
-  const [perfil] = useState<PerfilIn>(PERFIL_SEED)
+  const [perfil, setPerfil] = useState<PerfilIn>(PERFIL_SEED)
   const analise = useAnalise(perfil)
+
+  function tela() {
+    switch (abaAtiva) {
+      case 0:
+        return <VisaoGeral analise={analise} />
+      case 1:
+        return <Perfil perfil={perfil} setPerfil={setPerfil} analise={analise} />
+      default:
+        return <EmConstrucao titulo={ABAS[abaAtiva]} />
+    }
+  }
 
   return (
     <div className="app">
@@ -80,13 +92,7 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="conteudo">
-        {abaAtiva === 0 ? (
-          <VisaoGeral analise={analise} />
-        ) : (
-          <EmConstrucao titulo={ABAS[abaAtiva]} />
-        )}
-      </main>
+      <main className="conteudo">{tela()}</main>
     </div>
   )
 }

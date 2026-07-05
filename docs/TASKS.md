@@ -142,7 +142,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 |----|------|-----|---------|--------|
 | T-801 | Shell global (topbar + nav das 6 abas) e roteamento de telas; tema segue o SO (toggle no T-904) | REQ-F-010 | M7 | ✅ |
 | T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar, `/estrategias`) | REQ-F-011 | T-801 | ✅ |
-| T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-012 | T-801 | ⬜ |
+| T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-012 | T-801 | 🟨 |
 | T-804 | Tela **Dívidas**: lista ordenada + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-013 | T-801 | ⬜ |
 
 ## Milestone M9 — Telas 4–6 + paridade (v2.3)

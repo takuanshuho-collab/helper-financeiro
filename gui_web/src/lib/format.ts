@@ -3,6 +3,16 @@
 export const brl = (v: number): string =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+/** Interpreta um texto pt-BR ("1.234,56", "R$ 800") como número (0 se vazio). */
+export function parseBR(s: string): number {
+  const limpo = s
+    .replace(/\s|R\$/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+  const n = Number.parseFloat(limpo)
+  return Number.isFinite(n) ? n : 0
+}
+
 export const pct0 = (frac: number): string => `${(frac * 100).toFixed(0)}%`
 
 export const taxaAm = (taxaMensal: number): string =>

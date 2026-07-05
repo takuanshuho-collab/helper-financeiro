@@ -85,6 +85,8 @@ def diagnostico(perfil_in: PerfilIn) -> dict:
     resposta = {k: v for k, v in resumo.items() if k not in _CHAVES_OBJETO}
     resposta["divida_mais_cara"] = _divida_dict(mais_cara) if mais_cara else None
     resposta["ranking"] = [_divida_dict(d) for d in resumo["ranking"]]
+    resposta["despesas_fixas"] = perfil.despesas_fixas
+    resposta["despesas_variaveis"] = perfil.despesas_variaveis
     resposta["meses_reserva"] = perfil.meses_reserva
     return resposta
 
