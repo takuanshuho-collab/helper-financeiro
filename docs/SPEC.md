@@ -1,6 +1,6 @@
 # SPEC — Helper Financeiro v2 (EARS)
 
-- **Versão:** 2.2.0 · **Status:** Ativo
+- **Versão:** 2.3.0 (ciclo aberto) · **Status:** Ativo
 - **Sintaxe:** EARS (Easy Approach to Requirements Syntax), em português
 - **Regido por:** `CONSTITUTION.md` · **Detalha:** `PRD.md`
 
@@ -55,6 +55,38 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   vazio é válido e vale zero por design. *(A regra de interpretação vive em
   `core.utils.texto_numerico_valido`; a GUI só aplica o estilo — REQ-NF-004.)*
 
+### 1.1 GUI web — redesign "Clareza" (v2.3, ADR-0009)
+
+> A apresentação migra para **Electron + React/TypeScript** (`gui_web/`)
+> consumindo o **sidecar** Python (REQ-NF-005). Toda a aritmética permanece no
+> `core` — a casca fina agora é o TS (REQ-NF-004). Migração **paralela** ao
+> `tkinter` até a paridade das 6 telas.
+
+- **REQ-F-010 (v2.3)** — O sistema DEVE apresentar um shell de janela larga com
+  topbar (marca + navegação das 6 telas) e alternância de tema; o modo escuro
+  DEVE ser **persistido** (`localStorage`) e reidratado ao abrir.
+- **REQ-F-011 (v2.3)** — A tela **Visão geral** DEVE exibir o diagnóstico de
+  saúde (anel de comprometimento da renda), 4 métricas (renda, despesas,
+  parcelas/mês, saldo devedor), a lista de dívidas ordenada e a estratégia
+  recomendada — todos derivados **ao vivo** do sidecar.
+- **REQ-F-012 (v2.3)** — A tela **Perfil/orçamento** DEVE apresentar a
+  itemização por categoria, a barra de alocação da renda e a barra-resumo
+  (fluxo / comprometimento / despesas), reusando o roll-up determinístico
+  (REQ-F-006/007/008).
+- **REQ-F-013 (v2.3)** — A tela **Dívidas** DEVE listar as dívidas ordenadas
+  por taxa e exibir as estatísticas (saldo total, parcelas/mês, **taxa média
+  ponderada pelo saldo**, custo até quitar), com CRUD (adicionar/editar/remover).
+- **REQ-F-014 (v2.3)** — A tela **Contrato PDF** DEVE permitir selecionar um
+  PDF, extrair os campos **localmente** com citação da fonte e exigir
+  **confirmação humana** antes de usá-los (reusa REQ-F-004 e REQ-GRD-005;
+  `interrupt`→resume do grafo).
+- **REQ-F-015 (v2.3)** — A tela **Análise** DEVE recalcular estratégias e
+  oportunidades de portabilidade conforme o pagamento extra e a taxa-alvo,
+  oferecer a análise sênior (IA, sob guardrails) e exportar `.xlsx`/`.docx`.
+- **REQ-F-016 (v2.3)** — A tela **Carta ao credor** DEVE oferecer os tipos de
+  proposta (quitação à vista / portabilidade / redução), campos contextuais por
+  tipo e pré-visualização **ao vivo**, gerando a carta `.docx`.
+
 ## 2. Requisitos do Agente (LLM)
 
 - **REQ-LLM-001** — O sistema DEVE oferecer uma análise qualitativa produzida
@@ -96,6 +128,13 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
 - **REQ-SEC-002** — A chave de API DEVE ser lida de variável de ambiente.
 - **REQ-SEC-003** — O mapa de anonimização (token → valor real) DEVE permanecer
   apenas em memória local durante a execução.
+- **REQ-SEC-004 (v2.3, ADR-0009)** — A GUI web DEVE falar com o núcleo apenas
+  por um **sidecar local** em `127.0.0.1` (porta efêmera) autenticado por
+  **token por sessão**; o Electron DEVE usar `contextIsolation`/`sandbox`,
+  `nodeIntegration` desligado, **CSP estrita** e **nenhum código remoto**. O
+  tracing (LangSmith) e o auto-updater são **opt-in via env**: o tracing DEVE
+  apontar para endpoint **local/self-hosted** (não trafega a terceiros) e o
+  updater DEVE usar pacote **assinado**; nenhum deles DEVE transmitir PII.
 
 ## 5. Não-funcionais
 
@@ -105,6 +144,10 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
 - **REQ-NF-003** — Toda planilha gerada DEVE ter **zero erro de fórmula**.
 - **REQ-NF-004** — O código DEVE seguir a arquitetura em camadas do `PLAN`
   (core sem dependência de GUI/LLM).
+- **REQ-NF-005 (v2.3, ADR-0009)** — A GUI web DEVE consumir a lógica de negócio
+  **exclusivamente** do sidecar Python (contrato RPC local sobre `core`/`agent`/
+  `guardrails`/`outputs`); o front **NÃO DEVE** reimplementar cálculo financeiro
+  em TypeScript — fonte única da verdade, extensão do REQ-NF-004.
 
 ---
 

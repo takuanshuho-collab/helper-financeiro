@@ -1,8 +1,8 @@
 # PRD — Helper Financeiro v2
 
 - **Produto:** Helper Financeiro (desktop, offline-first)
-- **Versão do documento:** 2.2.0
-- **Status:** Ativo (questões abertas resolvidas em 2026-07-04; ADR-0008)
+- **Versão do documento:** 2.3.0 (ciclo aberto)
+- **Status:** Ativo (DEC-2 refinada em 2026-07-05; ADR-0009)
 - **Codinome da camada de IA:** CONSELHEIRO (Agente Financeiro Sênior)
 - **Depende de:** `docs/CONSTITUTION.md`
 
@@ -94,8 +94,13 @@ com agente de código.
 - **DEC-1 (era NC-1):** Provider **agnóstico com local como padrão** —
   ratificada a assunção. Ollama é o caminho recomendado; nuvem é aceitável
   apenas com payload anonimizado (REQ-GRD-002). Nada muda no código.
-- **DEC-2 (era NC-2):** **Sim, operação 100% offline é requisito** — ratificada
-  a assunção: modo local ou degradação segura (P8, REQ-NF-002).
+- **DEC-2 (era NC-2; refinada 2026-07-05, ADR-0009):** **Offline por padrão,
+  conectividade opt-in.** No modo local (Ollama) a operação é integralmente
+  offline (P8, REQ-NF-002, H7). As únicas conexões externas são a **nuvem**
+  (provider LLM) e o **auto-updater**, ambas *opt-in* e **sem PII crua**
+  (payload anonimizado; updates assinados). O tracing **LangSmith é
+  local/self-hosted** (não sai da máquina), preservando o denylist da
+  CONSTITUTION. Substitui a redação original ("100% offline é requisito").
 - **DEC-3 (era NC-3):** **Sem orçamento formal de custo/tokens.** Como o local
   é o padrão, a nuvem é exceção consciente do usuário; o cache LRU evita
   chamadas repetidas. Ordem de grandeza documentada: **~2–4k tokens por

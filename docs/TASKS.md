@@ -128,7 +128,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-701 | SPEC v2.3 (REQ-F-010+, REQ-NF-005, REQ-SEC-004) + sync do PRD §8 (DEC-2) e do denylist da CONSTITUTION (exceção web/Electron da ADR-0009) | SPEC/PRD/CONST | — | ⬜ |
+| T-701 | SPEC v2.3 (REQ-F-010+, REQ-NF-005, REQ-SEC-004) + sync do PRD §8 (DEC-2) e do denylist da CONSTITUTION (exceção web/Electron da ADR-0009) | SPEC/PRD/CONST | — | ✅ |
 | T-702 | Scaffold `gui_web/` (Electron + Vite + React + TS) com *secure defaults* (`contextIsolation`/`sandbox`/CSP, `contextBridge`) | REQ-SEC-004 | T-701 | ⬜ |
 | T-703 | Sidecar FastAPI embrulhando `core`/`agent`/`guardrails`/`outputs`; loopback + porta efêmera + token por sessão | REQ-NF-005 | T-701 | ⬜ |
 | T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ⬜ |
@@ -141,17 +141,17 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-801 | Shell global (topbar + nav das 6 abas + alternância de tema) e roteamento de telas | REQ-F-010 | M7 | ⬜ |
-| T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar) | REQ-F-010 | T-801 | ⬜ |
-| T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-011 | T-801 | ⬜ |
-| T-804 | Tela **Dívidas**: lista ordenada + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-012 | T-801 | ⬜ |
+| T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar) | REQ-F-011 | T-801 | ⬜ |
+| T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-012 | T-801 | ⬜ |
+| T-804 | Tela **Dívidas**: lista ordenada + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-013 | T-801 | ⬜ |
 
 ## Milestone M9 — Telas 4–6 + paridade (v2.3)
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume) | REQ-F-013, GRD-005 | M8 | ⬜ |
-| T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx | REQ-F-014 | M8 | ⬜ |
-| T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-015 | M8 | ⬜ |
+| T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume) | REQ-F-014, GRD-005 | M8 | ⬜ |
+| T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx | REQ-F-015 | M8 | ⬜ |
+| T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ⬜ |
 | T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ⬜ |
 | T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ⬜ |
 
@@ -173,10 +173,11 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.3 ABERTO (ADR-0009).** O freeze v2.2.0 continua o registro válido do
-que foi congelado; o desenvolvimento reabre para o redesign hi-fi "Clareza",
-migrando a GUI de `tkinter` para **Electron + React/TypeScript** com o núcleo
-Python preservado como **sidecar** (FONTE DA VERDADE, sem cálculo em TS), em
-cadência **paralela/incremental**. Próximo passo: **M7 — T-701** (formalizar
-SPEC v2.3 com REQ-F-010+/REQ-NF-005/REQ-SEC-004 e sincronizar o PRD §8 com a
-DEC-2 refinada). Nova ata `FREEZE.md` v2.3.0 será lavrada no fechamento (M10).
+**Ciclo v2.3 ABERTO (ADR-0009).** **T-701 concluída**: SPEC v2.3 com
+REQ-F-010..016 (6 telas) + REQ-NF-005 (contrato do sidecar) + REQ-SEC-004
+(loopback+token, Electron seguro, telemetria local opt-in); PRD §8 DEC-2
+refinada para "offline por padrão, conectividade opt-in"; denylist da
+CONSTITUTION sincronizado (exceção web/Electron). Próximo passo:
+**M7 — T-702/T-703** (scaffold `gui_web/` Electron+Vite+React+TS com *secure
+defaults* + sidecar FastAPI do núcleo, loopback + token por sessão). Nova ata
+`FREEZE.md` v2.3.0 no fechamento (M10).

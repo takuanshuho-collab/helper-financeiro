@@ -78,7 +78,10 @@ O usuário nunca fica sem o resultado essencial por causa do LLM.
 
 - ❌ Bibliotecas de scraping/telemetria que enviem dados a terceiros.
 - ❌ Persistir chaves de API ou PII em texto claro no repositório ou em logs.
-- ❌ Frameworks web pesados (o produto é desktop tkinter — ver PLAN).
+- ❌ Frameworks web pesados na camada de **negócio/cálculo**. *(Exceção
+  delimitada da ADR-0009: a partir do ciclo v2.3 a **apresentação** migra para
+  Electron + React/TypeScript; o cálculo permanece 100% no `core` Python,
+  acessado por um sidecar de transporte — ver ADR-0009 e PLAN §3.)*
 - ❌ Calcular indicadores financeiros dentro de prompts do LLM.
 - ❌ "Consertar" um número do `core` no pós-processamento do LLM.
 
