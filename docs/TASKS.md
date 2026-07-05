@@ -134,7 +134,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ✅ |
 | T-705 | Design Tokens do brief (cores claro/escuro, Plus Jakarta Sans, radius/sombras) como base do tema | Design | T-702 | ✅ |
 | T-706 | CI: etapa Node (ESLint/Prettier + `tsc` + Vitest + build Vite); portões Python inalterados | Processo | T-702 | ⬜ |
-| T-707 | Testes `pytest` do contrato do sidecar (roundtrip core↔JSON, token/401, sem PII na fronteira anonimizada) | REQ-NF-005/SEC-004 | T-703 | ⬜ |
+| T-707 | Testes `pytest` do contrato do sidecar (token 401/inválido, validação 422, roundtrip determinístico, casos sem dívidas / reserva sem despesas / ordenação) | REQ-NF-005/SEC-004 | T-703 | ✅ |
 
 ## Milestone M8 — Telas 1–3 (v2.3)
 
@@ -150,7 +150,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume) | REQ-F-014, GRD-005 | M8 | ⬜ |
-| T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx | REQ-F-015 | M8 | ⬜ |
+| T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx; teste de anonimização da fronteira cloud (H2/SEC-003) | REQ-F-015 | M8 | ⬜ |
 | T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ⬜ |
 | T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ⬜ |
 | T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ⬜ |
