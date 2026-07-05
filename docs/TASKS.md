@@ -132,7 +132,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-702 | Scaffold `gui_web/` (Electron + Vite + React + TS) com *secure defaults* (`contextIsolation`/`sandbox`/CSP, `contextBridge`) | REQ-SEC-004 | T-701 | ✅ |
 | T-703 | Sidecar FastAPI embrulhando `core` (`/health`, `/diagnostico`); loopback + porta efêmera + token por sessão | REQ-NF-005 | T-701 | ✅ |
 | T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ⬜ |
-| T-705 | Design Tokens do brief (cores claro/escuro, Plus Jakarta Sans, radius/sombras) como base do tema | Design | T-702 | ⬜ |
+| T-705 | Design Tokens do brief (cores claro/escuro, Plus Jakarta Sans, radius/sombras) como base do tema | Design | T-702 | ✅ |
 | T-706 | CI: etapa Node (ESLint/Prettier + `tsc` + Vitest + build Vite); portões Python inalterados | Processo | T-702 | ⬜ |
 | T-707 | Testes `pytest` do contrato do sidecar (roundtrip core↔JSON, token/401, sem PII na fronteira anonimizada) | REQ-NF-005/SEC-004 | T-703 | ⬜ |
 
@@ -182,6 +182,8 @@ sidecar FastAPI (`/health`, `/diagnostico`, loopback + token, validado por
 `tests/test_sidecar.py` + smoke real) e o front `gui_web/` (Electron+Vite+React
 +TS, *secure defaults*, ponte `window.hf`) — **launch real confirmado pelo
 mantenedor** (a janela conecta ao sidecar e exibe o diagnóstico do `core`).
-Próximo passo: **T-704** (contrato tipado da ponte), **T-705** (Plus Jakarta
-Sans local + tokens completos), **T-706** (etapa Node no CI), **T-707** (mais
-testes de contrato). Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
+**T-705 concluída**: Plus Jakarta Sans self-hosted (Fontsource, empacotada no
+bundle — offline) + sistema completo de tokens claro/escuro/radius/sombras, com
+`data-theme` pronto para o toggle do T-904. Próximo passo: **T-704** (contrato
+tipado da ponte), depois **T-707** (mais testes de contrato) e **T-706** (etapa
+Node no CI). Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).

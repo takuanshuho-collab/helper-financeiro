@@ -1,33 +1,111 @@
 /*
- * Base do tema "Clareza" (ADR-0009 / Design Tokens do handoff).
- * Fonte: fallback system-ui por enquanto; o T-705 (M8) embute a Plus Jakarta
- * Sans local (offline, sem Google Fonts) para não violar o requisito offline.
+ * Sistema de tokens do tema "Clareza" (ADR-0009 / T-705).
+ * Fonte da verdade visual: Design/README.md (seção "Design Tokens").
+ *
+ * Estratégia de tema (segue o padrão theme-aware):
+ *  - :root                         → tema claro (padrão);
+ *  - @media prefers-color-scheme   → segue o SO, salvo se o usuário forçar claro;
+ *  - :root[data-theme="dark"]      → força escuro (toggle do T-904, M9).
+ * As cores semânticas (verde/laranja/vermelho/violeta) são iguais nos dois
+ * temas — preservam o diagnóstico — então vivem só no :root.
  */
 :root {
-  --bg-app: #f4f1ea;
+  /* Superfícies e texto — claro */
+  --bg-outer: #d9d4c9;
+  --app: #f4f1ea;
   --topbar: #ffffff;
   --surface: #ffffff;
   --text: #2a2435;
+  --text-soft: #6f687b;
   --muted: #8a8394;
+  --muted-2: #a59db0;
+
+  /* Bordas e inputs — claro */
   --border: #ece7dd;
-  --primary: #5343e0;
-  --accent: #6a5bf0;
+  --border-input: #e2dccf;
+  --divisor: #f1ece3;
+  --input-bg: #fbfaf6;
+  --focus: #8a7cf0;
+
+  /* Chrome de navegação — claro */
   --nav-on-bg: #efecfe;
+  --nav-on-text: #5343e0;
+  --nav-hover-bg: #f4f1fb;
+
+  /* Marca / primária (iguais nos dois temas) */
+  --primary: #5343e0;
+  --primary-hover: #4535d6;
+  --accent: #6a5bf0;
+  --marca-grad: linear-gradient(135deg, #6a5bf0, #4a38d8);
+  --avatar-grad: linear-gradient(135deg, #ff9a76, #ff7a59);
+
+  /* Semânticas (iguais nos dois temas) */
   --green: #12b886;
+  --green-2: #0e9f6e;
   --orange: #e8890c;
   --red: #fa5252;
+  --red-2: #e03131;
+  --tint-green: #eafaf1;
+  --tint-orange: #fff4e6;
+  --tint-red: #fff0ef;
+
+  /* Raios */
+  --r-janela: 16px;
+  --r-card: 18px;
+  --r-tile: 14px;
+  --r-chip: 11px;
+  --r-pill: 999px;
+
+  /* Sombras */
+  --sh-card: 0 10px 26px -20px rgba(90, 70, 20, 0.25);
+  --sh-hover: 0 8px 20px -14px rgba(90, 70, 20, 0.3);
+
+  color-scheme: light;
 }
 
+/* Chrome escuro — reutilizado pelo SO (salvo "forçar claro") e pelo toggle. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg-app: #15131e;
+  :root:not([data-theme='light']) {
+    --bg-outer: #0f0d16;
+    --app: #15131e;
     --topbar: #1c1929;
     --surface: #201c2e;
     --text: #f2eff8;
+    --text-soft: #c3bdd0;
     --muted: #948da5;
+    --muted-2: #7d7690;
     --border: #2c2642;
+    --border-input: #332c48;
+    --divisor: #2a2540;
+    --input-bg: #191622;
     --nav-on-bg: #2c2547;
+    --nav-on-text: #c3b8fb;
+    --nav-hover-bg: #241f36;
+    --sh-card: 0 10px 26px -20px rgba(0, 0, 0, 0.55);
+    --sh-hover: 0 8px 20px -14px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
   }
+}
+
+:root[data-theme='dark'] {
+  --bg-outer: #0f0d16;
+  --app: #15131e;
+  --topbar: #1c1929;
+  --surface: #201c2e;
+  --text: #f2eff8;
+  --text-soft: #c3bdd0;
+  --muted: #948da5;
+  --muted-2: #7d7690;
+  --border: #2c2642;
+  --border-input: #332c48;
+  --divisor: #2a2540;
+  --input-bg: #191622;
+  --nav-on-bg: #2c2547;
+  --nav-on-text: #c3b8fb;
+  --nav-hover-bg: #241f36;
+  --sh-card: 0 10px 26px -20px rgba(0, 0, 0, 0.55);
+  --sh-hover: 0 8px 20px -14px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
 }
 
 * {
@@ -36,9 +114,11 @@
 
 body {
   margin: 0;
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui,
+    -apple-system, sans-serif;
   color: var(--text);
-  background: var(--bg-app);
+  background: var(--app);
+  -webkit-font-smoothing: antialiased;
 }
 
 .app {
@@ -71,16 +151,18 @@ body {
   color: #fff;
   font-weight: 800;
   font-size: 13px;
-  background: linear-gradient(135deg, #6a5bf0, #4a38d8);
+  background: var(--marca-grad);
 }
 
 .marca-nome {
   font-size: 15px;
   font-weight: 800;
+  letter-spacing: -0.2px;
 }
 
 .marca-kicker {
   font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.15em;
   color: var(--accent);
 }
@@ -98,18 +180,19 @@ body {
   font-size: 13px;
   font-weight: 600;
   padding: 9px 14px;
-  border-radius: 11px;
+  border-radius: var(--r-chip);
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
 .nav-item:hover {
-  background: var(--nav-on-bg);
+  background: var(--nav-hover-bg);
   color: var(--primary);
 }
 
 .nav-item.on {
   background: var(--nav-on-bg);
-  color: var(--primary);
+  color: var(--nav-on-text);
 }
 
 .conteudo {
@@ -132,9 +215,9 @@ body {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--r-card);
   padding: 20px 22px;
-  box-shadow: 0 10px 26px -20px rgba(90, 70, 20, 0.25);
+  box-shadow: var(--sh-card);
 }
 
 .card-rotulo {
@@ -168,7 +251,7 @@ body {
 
 .metrica {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--r-tile);
   padding: 14px 16px;
 }
 
