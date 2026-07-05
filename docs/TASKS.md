@@ -131,7 +131,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-701 | SPEC v2.3 (REQ-F-010+, REQ-NF-005, REQ-SEC-004) + sync do PRD §8 (DEC-2) e do denylist da CONSTITUTION (exceção web/Electron da ADR-0009) | SPEC/PRD/CONST | — | ✅ |
 | T-702 | Scaffold `gui_web/` (Electron + Vite + React + TS) com *secure defaults* (`contextIsolation`/`sandbox`/CSP, `contextBridge`) | REQ-SEC-004 | T-701 | ✅ |
 | T-703 | Sidecar FastAPI embrulhando `core` (`/health`, `/diagnostico`); loopback + porta efêmera + token por sessão | REQ-NF-005 | T-701 | ✅ |
-| T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ⬜ |
+| T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ✅ |
 | T-705 | Design Tokens do brief (cores claro/escuro, Plus Jakarta Sans, radius/sombras) como base do tema | Design | T-702 | ✅ |
 | T-706 | CI: etapa Node (ESLint/Prettier + `tsc` + Vitest + build Vite); portões Python inalterados | Processo | T-702 | ⬜ |
 | T-707 | Testes `pytest` do contrato do sidecar (roundtrip core↔JSON, token/401, sem PII na fronteira anonimizada) | REQ-NF-005/SEC-004 | T-703 | ⬜ |
