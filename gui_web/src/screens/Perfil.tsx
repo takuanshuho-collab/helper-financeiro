@@ -154,7 +154,7 @@ export default function Perfil({
             <strong>
               {d?.meses_reserva == null
                 ? '—'
-                : `${d.meses_reserva.toFixed(1)} meses de despesas`}
+                : `${d.meses_reserva.toFixed(1).replace('.', ',')} meses de despesas`}
             </strong>
           </div>
         </Secao>

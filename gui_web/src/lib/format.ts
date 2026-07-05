@@ -3,6 +3,13 @@
 export const brl = (v: number): string =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+/** Número no padrão pt-BR com 2 casas ("1.000,00"), sem o símbolo R$. */
+export const numBR = (v: number): string =>
+  v.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
 /** Interpreta um texto pt-BR ("1.234,56", "R$ 800") como número (0 se vazio). */
 export function parseBR(s: string): number {
   const limpo = s

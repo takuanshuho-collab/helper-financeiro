@@ -23,17 +23,21 @@ export function useAnalise(perfil: PerfilIn, extra = 0): Analise {
 
   useEffect(() => {
     let vivo = true
-    Promise.all([hf.diagnostico(perfil), hf.estrategias(perfil, extra)])
-      .then(([d, e]) => {
-        if (!vivo) return
-        setEstado({ fase: 'ok', dados: d })
-        setEstrategias(e)
-      })
-      .catch((err: Error) => {
-        if (vivo) setEstado({ fase: 'erro', erro: err.message })
-      })
+    // Debounce: colapsa rajadas de digitação numa única chamada ao sidecar.
+    const timer = setTimeout(() => {
+      Promise.all([hf.diagnostico(perfil), hf.estrategias(perfil, extra)])
+        .then(([d, e]) => {
+          if (!vivo) return
+          setEstado({ fase: 'ok', dados: d })
+          setEstrategias(e)
+        })
+        .catch((err: Error) => {
+          if (vivo) setEstado({ fase: 'erro', erro: err.message })
+        })
+    }, 160)
     return () => {
       vivo = false
+      clearTimeout(timer)
     }
   }, [perfil, extra])
 

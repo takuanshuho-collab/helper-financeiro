@@ -1,11 +1,12 @@
 import { useState } from 'react'
 
-import { parseBR } from '../lib/format'
+import { numBR, parseBR } from '../lib/format'
 
 /**
- * Campo monetário com prefixo "R$" e texto alinhado à direita.
- * Mantém o texto exatamente como digitado (vírgula preservada) e reporta o
- * número interpretado ao pai — a soma/roll-up acontece no core (REQ-NF-005).
+ * Campo monetário com prefixo "R$", alinhado à direita.
+ * Sem foco, exibe o valor do perfil formatado ("1.000,00"); ao focar, mostra
+ * o número cru para edição livre e reporta o valor interpretado ao pai. A
+ * soma/roll-up acontece no core (REQ-NF-005).
  */
 export default function CampoMoeda({
   rotulo,
@@ -16,7 +17,10 @@ export default function CampoMoeda({
   valor: number
   onValor: (n: number) => void
 }) {
-  const [texto, setTexto] = useState(valor ? String(valor) : '')
+  const [foco, setFoco] = useState(false)
+  const [rascunho, setRascunho] = useState('')
+
+  const exibicao = foco ? rascunho : valor ? numBR(valor) : ''
 
   return (
     <label className="campo">
@@ -26,12 +30,17 @@ export default function CampoMoeda({
         <input
           className="campo-num"
           inputMode="decimal"
-          placeholder="0"
-          value={texto}
+          placeholder="0,00"
+          value={exibicao}
+          onFocus={() => {
+            setRascunho(valor ? String(valor).replace('.', ',') : '')
+            setFoco(true)
+          }}
           onChange={(ev) => {
-            setTexto(ev.target.value)
+            setRascunho(ev.target.value)
             onValor(parseBR(ev.target.value))
           }}
+          onBlur={() => setFoco(false)}
         />
       </span>
     </label>
