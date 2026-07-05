@@ -25,6 +25,19 @@ def ranking_dividas(perfil: PerfilFinanceiro) -> list[Divida]:
     return sorted(perfil.dividas, key=lambda d: d.taxa_mensal, reverse=True)
 
 
+def taxa_media_ponderada(perfil: PerfilFinanceiro) -> float:
+    """Taxa mensal média das dívidas, ponderada pelo saldo devedor.
+
+    Uma média simples pesaria igual uma dívida de R$ 100 e outra de R$ 50.000;
+    ponderar pelo saldo revela a taxa que de fato dói no bolso. Retorna 0.0
+    quando não há saldo devedor.
+    """
+    saldo_total = perfil.saldo_devedor_total
+    if saldo_total <= 0:
+        return 0.0
+    return sum(d.taxa_mensal * d.saldo_devedor for d in perfil.dividas) / saldo_total
+
+
 def resumo_diagnostico(perfil: PerfilFinanceiro) -> dict:
     """Consolida todos os números do diagnóstico em um dicionário."""
     comprometimento = perfil.comprometimento_renda
@@ -33,6 +46,7 @@ def resumo_diagnostico(perfil: PerfilFinanceiro) -> dict:
     ranking = ranking_dividas(perfil)
     divida_mais_cara = ranking[0] if ranking else None
     juros_totais_futuros = sum(d.juros_restantes for d in perfil.dividas)
+    custo_total_ate_quitar = sum(d.custo_total_restante for d in perfil.dividas)
 
     return {
         "renda_liquida": perfil.renda_liquida,
@@ -41,6 +55,8 @@ def resumo_diagnostico(perfil: PerfilFinanceiro) -> dict:
         "fluxo_caixa": perfil.fluxo_caixa,
         "saldo_devedor_total": perfil.saldo_devedor_total,
         "juros_totais_futuros": juros_totais_futuros,
+        "custo_total_ate_quitar": custo_total_ate_quitar,
+        "taxa_media_ponderada": taxa_media_ponderada(perfil),
         "comprometimento_renda": comprometimento,
         "classificacao": rotulo,
         "classificacao_explicacao": explicacao,

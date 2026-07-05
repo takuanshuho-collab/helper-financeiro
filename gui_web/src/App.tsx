@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import type { PerfilIn } from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
+import Dividas from './screens/Dividas'
 import EmConstrucao from './screens/EmConstrucao'
 import Perfil from './screens/Perfil'
 import VisaoGeral from './screens/VisaoGeral'
@@ -16,9 +17,8 @@ const ABAS = [
   'Carta ao credor',
 ] as const
 
-// Perfil semente (M8): dados de exemplo enquanto as telas Perfil (T-803) e
-// Dívidas (T-804) ainda não editam este estado. Vira "Atenção" para mostrar o
-// diagnóstico colorido.
+// Perfil semente (M8): ponto de partida editável pelas telas Perfil (T-803) e
+// Dívidas (T-804). Começa em "Atenção" para mostrar o diagnóstico colorido.
 const PERFIL_SEED: PerfilIn = {
   renda: { salario_liquido: 5000 },
   fixas: { moradia: 1400, contas_casa: 500, transporte: 300 },
@@ -64,6 +64,8 @@ export default function App() {
         return <VisaoGeral analise={analise} />
       case 1:
         return <Perfil perfil={perfil} setPerfil={setPerfil} analise={analise} />
+      case 2:
+        return <Dividas perfil={perfil} setPerfil={setPerfil} analise={analise} />
       default:
         return <EmConstrucao titulo={ABAS[abaAtiva]} />
     }

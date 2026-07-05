@@ -92,6 +92,11 @@ def test_diagnostico_roundtrip():
     assert mais_cara["taxa_anual"] > 0
     assert mais_cara["custo_total_restante"] == 1200.0 * 12
 
+    # Estatísticas ponderadas da tela Dívidas (T-804), calculadas no core.
+    assert dados["custo_total_ate_quitar"] == 1200.0 * 12
+    # Uma única dívida: a média ponderada é a própria taxa.
+    assert abs(dados["taxa_media_ponderada"] - 0.09) < 1e-9
+
 
 def test_diagnostico_sem_dividas():
     payload = {

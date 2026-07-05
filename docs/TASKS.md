@@ -143,7 +143,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-801 | Shell global (topbar + nav das 6 abas) e roteamento de telas; tema segue o SO (toggle no T-904) | REQ-F-010 | M7 | ✅ |
 | T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar, `/estrategias`) | REQ-F-011 | T-801 | ✅ |
 | T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-012 | T-801 | ✅ |
-| T-804 | Tela **Dívidas**: lista ordenada + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-013 | T-801 | ⬜ |
+| T-804 | Tela **Dívidas**: lista editável + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-013 | T-801 | ✅ |
 
 ## Milestone M9 — Telas 4–6 + paridade (v2.3)
 
@@ -182,9 +182,14 @@ sidecar FastAPI (`/health`, `/diagnostico`, loopback + token, validado por
 `tests/test_sidecar.py` + smoke real) e o front `gui_web/` (Electron+Vite+React
 +TS, *secure defaults*, ponte `window.hf`) — **launch real confirmado pelo
 mantenedor** (a janela conecta ao sidecar e exibe o diagnóstico do `core`).
-**M7 fechado; M8 quase completo.** T-801, T-802 e T-803 ✅ — **Visão geral**
-(dashboard reativo) e **Perfil/orçamento** editável (campos formatados pt-BR,
-subtotais/alocação/resumo do core ao vivo) confirmados visualmente. Falta
-**T-804 — Dívidas** (CRUD + estatísticas ponderadas: taxa média pelo saldo,
-custo até quitar), a última tela do M8. Depois M9 (telas 4–6: Contrato PDF,
-Análise, Carta). Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
+**M7 e M8 fechados.** T-801..T-804 ✅ — **Visão geral** (dashboard reativo),
+**Perfil/orçamento** editável (campos pt-BR, subtotais/alocação/resumo do core
+ao vivo) e **Dívidas** (CRUD add/editar/remover + estatísticas ponderadas —
+taxa média pelo saldo e custo até quitar calculados no `core` via
+`taxa_media_ponderada`/`custo_total_ate_quitar`, barra de participação por
+dívida) confirmadas visualmente. As três primeiras telas editam o mesmo perfil
+compartilhado e recalculam juntas. **Próximo: M9** — T-901 (Contrato PDF:
+drop-zone + extração local com citação, `interrupt`→resume), T-902 (Análise:
+job async + IA sênior + exportações + teste de anonimização H2/SEC-003), T-903
+(Carta ao credor), T-904 (modo escuro persistido), T-905 (paridade + E2E). Nova
+ata `FREEZE.md` v2.3.0 no fechamento (M10).

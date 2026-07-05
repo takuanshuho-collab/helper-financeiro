@@ -25,6 +25,13 @@ export const pct0 = (frac: number): string => `${(frac * 100).toFixed(0)}%`
 export const taxaAm = (taxaMensal: number): string =>
   `${(taxaMensal * 100).toFixed(1)}% a.m.`
 
+/** Formata uma fração decimal como percentual pt-BR sem símbolo ("0,025" → "2,5"). */
+export const pctBR = (frac: number): string =>
+  (frac * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+
+/** Interpreta um percentual pt-BR ("2,5") como fração decimal (0,025). */
+export const parsePct = (s: string): number => parseBR(s) / 100
+
 /** Cor da saúde financeira pela classificação do core. */
 export function corSaude(classificacao: string): string {
   if (classificacao === 'Saudável') return 'var(--green)'

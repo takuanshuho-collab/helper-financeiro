@@ -78,6 +78,8 @@ export interface DiagnosticoOut {
   fluxo_caixa: number
   saldo_devedor_total: number
   juros_totais_futuros: number
+  custo_total_ate_quitar: number
+  taxa_media_ponderada: number
   comprometimento_renda: number
   classificacao: string
   classificacao_explicacao: string

@@ -1,6 +1,6 @@
 """Núcleo determinístico (REQ-F-001..003)."""
 from core.calculos import calcular_cet_anual, parcela_price, taxa_implicita, taxa_mensal_para_anual
-from core.diagnostico import classificar_saude, resumo_diagnostico
+from core.diagnostico import classificar_saude, resumo_diagnostico, taxa_media_ponderada
 from core.estrategias import comparar_estrategias
 
 
@@ -37,3 +37,23 @@ def test_diagnostico_consistente(perfil_atencao):
     diag = resumo_diagnostico(perfil_atencao)
     assert diag["saldo_devedor_total"] == 34000
     assert diag["classificacao"] == "Atenção"
+
+
+def test_taxa_media_ponderada_pelo_saldo(perfil_atencao):
+    # (0,12*8000 + 0,025*20000 + 0,018*6000) / 34000 = 1568 / 34000 ≈ 0,046118
+    assert abs(taxa_media_ponderada(perfil_atencao) - 1568 / 34000) < 1e-9
+    # Dívida grande e barata puxa a média para baixo da mais cara (12% a.m.).
+    assert taxa_media_ponderada(perfil_atencao) < 0.12
+
+
+def test_taxa_media_ponderada_sem_dividas():
+    from core.models import PerfilFinanceiro
+
+    assert taxa_media_ponderada(PerfilFinanceiro()) == 0.0
+
+
+def test_diagnostico_estatisticas_de_dividas(perfil_atencao):
+    diag = resumo_diagnostico(perfil_atencao)
+    # Custo até quitar = soma das parcelas restantes: 900*12 + 700*36 + 350*20.
+    assert diag["custo_total_ate_quitar"] == 900 * 12 + 700 * 36 + 350 * 20
+    assert abs(diag["taxa_media_ponderada"] - 1568 / 34000) < 1e-9
