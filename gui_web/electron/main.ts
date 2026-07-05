@@ -7,6 +7,7 @@
  * só aqui — o renderer nunca o vê nem fala com a rede diretamente.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
+import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as readline from 'node:readline'
 
@@ -20,9 +21,20 @@ let sidecarToken = ''
 const repoRoot = path.resolve(__dirname, '..', '..')
 const devUrl = process.env.HF_DEV_URL // ex.: http://localhost:5173 (iteração de UI)
 
+// Interpretador do sidecar: respeita HF_PYTHON; senão prefere o venv do
+// projeto (onde fastapi/uvicorn estão instalados); por fim, o python do PATH.
+function pythonDoProjeto(): string {
+  if (process.env.HF_PYTHON) return process.env.HF_PYTHON
+  const candidatos = [
+    path.join(repoRoot, '.venv', 'Scripts', 'python.exe'), // Windows
+    path.join(repoRoot, '.venv', 'bin', 'python'), // POSIX
+  ]
+  return candidatos.find((c) => fs.existsSync(c)) ?? 'python'
+}
+
 function iniciarSidecar(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const python = process.env.HF_PYTHON || 'python'
+    const python = pythonDoProjeto()
     sidecar = spawn(python, ['-m', 'sidecar'], { cwd: repoRoot })
     sidecar.on('error', reject)
     const rl = readline.createInterface({ input: sidecar.stdout! })

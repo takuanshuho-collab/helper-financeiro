@@ -129,7 +129,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-701 | SPEC v2.3 (REQ-F-010+, REQ-NF-005, REQ-SEC-004) + sync do PRD §8 (DEC-2) e do denylist da CONSTITUTION (exceção web/Electron da ADR-0009) | SPEC/PRD/CONST | — | ✅ |
-| T-702 | Scaffold `gui_web/` (Electron + Vite + React + TS) com *secure defaults* (`contextIsolation`/`sandbox`/CSP, `contextBridge`) | REQ-SEC-004 | T-701 | 🟨 |
+| T-702 | Scaffold `gui_web/` (Electron + Vite + React + TS) com *secure defaults* (`contextIsolation`/`sandbox`/CSP, `contextBridge`) | REQ-SEC-004 | T-701 | ✅ |
 | T-703 | Sidecar FastAPI embrulhando `core` (`/health`, `/diagnostico`); loopback + porta efêmera + token por sessão | REQ-NF-005 | T-701 | ✅ |
 | T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ⬜ |
 | T-705 | Design Tokens do brief (cores claro/escuro, Plus Jakarta Sans, radius/sombras) como base do tema | Design | T-702 | ⬜ |
@@ -177,11 +177,11 @@ violado; (5) sem PII/chave em claro.
 REQ-F-010..016 (6 telas) + REQ-NF-005 (contrato do sidecar) + REQ-SEC-004
 (loopback+token, Electron seguro, telemetria local opt-in); PRD §8 DEC-2
 refinada para "offline por padrão, conectividade opt-in"; denylist da
-CONSTITUTION sincronizado (exceção web/Electron). **T-703 concluída**: sidecar
-FastAPI (`/health`, `/diagnostico`) com loopback + token por sessão, validado
-por `tests/test_sidecar.py` e smoke real (handshake + 401 sem token + roundtrip
-do `core`). **T-702 em andamento**: `gui_web/` (Electron+Vite+React+TS) com
-*secure defaults* e ponte `window.hf` — typecheck + build verdes; falta o launch
-real do Electron (precisa de display) e o E2E (T-905). Próximo passo:
-**T-704** (contrato tipado da ponte) e fechar o T-702 rodando `npm start`
-localmente. Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
+CONSTITUTION sincronizado (exceção web/Electron). **T-702 e T-703 concluídas**:
+sidecar FastAPI (`/health`, `/diagnostico`, loopback + token, validado por
+`tests/test_sidecar.py` + smoke real) e o front `gui_web/` (Electron+Vite+React
++TS, *secure defaults*, ponte `window.hf`) — **launch real confirmado pelo
+mantenedor** (a janela conecta ao sidecar e exibe o diagnóstico do `core`).
+Próximo passo: **T-704** (contrato tipado da ponte), **T-705** (Plus Jakarta
+Sans local + tokens completos), **T-706** (etapa Node no CI), **T-707** (mais
+testes de contrato). Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
