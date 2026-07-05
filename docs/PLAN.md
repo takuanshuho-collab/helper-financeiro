@@ -130,6 +130,32 @@ financeiro dentro de prompts.
   por duplo clique/Enter/Delete e tema consistente (molduras + lista
   zebrada). A GUI segue casca fina: a lógica testável fica no `core`.
 
+### Ciclo v2.3 — Redesign "Clareza" (GUI web, ADR-0009)
+
+> Migra a apresentação de `tkinter` para **Electron + React/TypeScript**
+> (sidecar Python como FONTE DA VERDADE — sem cálculo em TS). Cadência
+> **paralela/incremental**: `gui_web/` nasce ao lado de `gui/`, que segue
+> como entrypoint até a paridade das 6 telas. DEC-2 refinada para "offline
+> por padrão, conectividade opt-in".
+
+- **M7 — Fundação da GUI web**: SPEC v2.3 (REQ-F-010+, REQ-NF-005,
+  REQ-SEC-004) e sync do PRD §8 (DEC-2); scaffold Electron + Vite + React + TS
+  com *secure defaults* (`contextIsolation`/`sandbox`/CSP, `contextBridge`);
+  sidecar FastAPI embrulhando `core`/`agent`/`guardrails`/`outputs`
+  (loopback + token por sessão); Design Tokens do brief; CI com etapa de
+  `lint/test/build` do front.
+- **M8 — Telas 1–3**: Visão geral (dashboard + anel `conic-gradient`),
+  Perfil/orçamento (barra de alocação + resumo) e Dívidas (CRUD + estatísticas
+  ponderadas), consumindo o sidecar.
+- **M9 — Telas 4–6**: Contrato PDF (extração com citação + confirmação via
+  `interrupt`/resume), Análise (estratégias/portabilidade/IA sênior +
+  exportações) e Carta ao credor; modo escuro persistido (`localStorage`);
+  paridade funcional com o tkinter.
+- **M10 — Empacotamento & freeze v2.3.0**: build `electron-builder` +
+  sidecar PyInstaller (`extraResource`), tracing LangSmith local + updater
+  assinado (opt-in), revisão de segurança, troca do entrypoint e ata
+  `FREEZE.md` v2.3.0.
+
 ## 8. Riscos técnicos
 - Modelos locais pequenos podem não aderir bem ao schema → o `format` do
   Ollama restringe a gramática no servidor (ADR-0005); o que escapar, o

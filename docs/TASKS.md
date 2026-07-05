@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.2.0 · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.3.0 (ciclo aberto) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -119,6 +119,52 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-606 | Tema consistente: molduras no fundo padrão e lista de dívidas zebrada | NF-usabilidade | — | ✅ |
 | T-607 | Docs sincronizados (SPEC/PLAN/TASKS/HARNESS/INDEX) + smoke GUI + CI verde | Processo | todos | ✅ |
 
+## Milestone M7 — Fundação da GUI web (v2.3, ADR-0009)
+
+> Primeira mudança pós-freeze v2.2.0, autorizada pela ADR-0009. Migração
+> **paralela/incremental**: `gui_web/` nasce ao lado de `gui/` (tkinter segue
+> como entrypoint até a paridade). O núcleo Python continua a FONTE DA VERDADE
+> exposto por um sidecar — **sem cálculo em TypeScript**.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-701 | SPEC v2.3 (REQ-F-010+, REQ-NF-005, REQ-SEC-004) + sync do PRD §8 (DEC-2) e do denylist da CONSTITUTION (exceção web/Electron da ADR-0009) | SPEC/PRD/CONST | — | ⬜ |
+| T-702 | Scaffold `gui_web/` (Electron + Vite + React + TS) com *secure defaults* (`contextIsolation`/`sandbox`/CSP, `contextBridge`) | REQ-SEC-004 | T-701 | ⬜ |
+| T-703 | Sidecar FastAPI embrulhando `core`/`agent`/`guardrails`/`outputs`; loopback + porta efêmera + token por sessão | REQ-NF-005 | T-701 | ⬜ |
+| T-704 | Ponte tipada `window.hf` (preload) ↔ `main` ↔ sidecar; contrato de estados/erros | REQ-NF-005 | T-702/703 | ⬜ |
+| T-705 | Design Tokens do brief (cores claro/escuro, Plus Jakarta Sans, radius/sombras) como base do tema | Design | T-702 | ⬜ |
+| T-706 | CI: etapa Node (ESLint/Prettier + `tsc` + Vitest + build Vite); portões Python inalterados | Processo | T-702 | ⬜ |
+| T-707 | Testes `pytest` do contrato do sidecar (roundtrip core↔JSON, token/401, sem PII na fronteira anonimizada) | REQ-NF-005/SEC-004 | T-703 | ⬜ |
+
+## Milestone M8 — Telas 1–3 (v2.3)
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-801 | Shell global (topbar + nav das 6 abas + alternância de tema) e roteamento de telas | REQ-F-010 | M7 | ⬜ |
+| T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar) | REQ-F-010 | T-801 | ⬜ |
+| T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-011 | T-801 | ⬜ |
+| T-804 | Tela **Dívidas**: lista ordenada + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-012 | T-801 | ⬜ |
+
+## Milestone M9 — Telas 4–6 + paridade (v2.3)
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume) | REQ-F-013, GRD-005 | M8 | ⬜ |
+| T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx | REQ-F-014 | M8 | ⬜ |
+| T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-015 | M8 | ⬜ |
+| T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ⬜ |
+| T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ⬜ |
+
+## Milestone M10 — Empacotamento & freeze v2.3.0
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1001 | Build `electron-builder` + sidecar PyInstaller (`extraResource`); startup/health + shutdown do sidecar | — | M9 | ⬜ |
+| T-1002 | Telemetria LangSmith **local/self-hosted** (não sai da máquina) + auto-updater assinado/HTTPS, opt-in via env | REQ-SEC-004 | T-1001 | ⬜ |
+| T-1003 | Revisão de segurança do shell web (CSP, sem código remoto, loopback+token, sem PII) → doc | SEC | T-1001 | ⬜ |
+| T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ⬜ |
+| T-1005 | Ata de freeze v2.3.0 (SHA-256 dos artefatos + binário) e docs sincronizados | Processo | todos | ⬜ |
+
 ---
 
 ## Definição de Pronto (DoD)
@@ -127,9 +173,10 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.2 fechado e congelado.** M5 (perfil como orçamento detalhado,
-ADR-0008) e M6 (revisão de UI/UX) entregues; versão congelada em `FREEZE.md`
-v2.2.0, com a ata ampliada para cobrir todo o código de primeira parte + o
-harness (104 testes offline, cobertura 95,4%) e o `.exe` rebuild (93,8 MB).
-Daqui em diante, qualquer mudança nos artefatos congelados exige nova ADR +
-incremento de versão + nova ata (P-freeze).
+**Ciclo v2.3 ABERTO (ADR-0009).** O freeze v2.2.0 continua o registro válido do
+que foi congelado; o desenvolvimento reabre para o redesign hi-fi "Clareza",
+migrando a GUI de `tkinter` para **Electron + React/TypeScript** com o núcleo
+Python preservado como **sidecar** (FONTE DA VERDADE, sem cálculo em TS), em
+cadência **paralela/incremental**. Próximo passo: **M7 — T-701** (formalizar
+SPEC v2.3 com REQ-F-010+/REQ-NF-005/REQ-SEC-004 e sincronizar o PRD §8 com a
+DEC-2 refinada). Nova ata `FREEZE.md` v2.3.0 será lavrada no fechamento (M10).

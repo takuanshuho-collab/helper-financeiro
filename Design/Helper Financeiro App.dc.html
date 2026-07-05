@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#d9d4c9;font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+  .app{width:1280px;height:840px;margin:0 auto;background:#f4f1ea;color:#2a2435;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;box-shadow:0 30px 80px -30px rgba(60,45,20,.45)}
+  .num{font-variant-numeric:tabular-nums}
+  /* top bar */
+  .bbar{display:flex;align-items:center;gap:22px;padding:14px 26px;background:#fff;border-bottom:1px solid #ece7dd;flex:none}
+  .brand{display:flex;align-items:center;gap:11px}
+  .bmk{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,#6a5bf0,#4a38d8);color:#fff}
+  .bmk svg{width:19px;height:19px}
+  .brand b{font-size:15px;letter-spacing:-.2px;display:block;line-height:1}
+  .brand span{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#6a5bf0;font-weight:700}
+  .bnav{display:flex;gap:3px;margin-left:6px}
+  .bnav a{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:11px;font-size:13px;font-weight:600;color:#8a8394;cursor:pointer;transition:.15s;user-select:none}
+  .bnav a svg{width:16px;height:16px}
+  .bnav a:hover{background:#f4f1fb;color:#6a5bf0}
+  .bnav a.on{background:#efecfe;color:#5343e0}
+  .bava{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .bava .who{text-align:right}
+  .bava .who b{display:block;font-size:12.5px;line-height:1.2}
+  .bava .who small{font-size:10.5px;color:#8a8394}
+  .pic{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#ff9a76,#ff7a59);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+  /* content scroll */
+  .scr{flex:1;overflow-y:auto;padding:24px 30px 30px}
+  .scr::-webkit-scrollbar{width:9px}.scr::-webkit-scrollbar-thumb{background:#d8d0c2;border-radius:5px;border:2px solid #f4f1ea}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+  .head h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.5px}
+  .head .sub{font-size:13px;color:#8a8394;margin-top:4px}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:700}
+  .pill .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+  .pill.warn{background:#fff4e6;color:#e8890c;border:1px solid #ffe4c2}
+  .pill.ok{background:#e7f8f0;color:#0e9f6e;border:1px solid #b8ecd6}
+  .pill.bad{background:#ffecec;color:#e03131;border:1px solid #ffd0d0}
+  /* generic cards */
+  .card{background:#fff;border:1px solid #ece7dd;border-radius:20px;box-shadow:0 10px 26px -20px rgba(90,70,20,.25)}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .mcard{background:#fff;border:1px solid #ece7dd;border-radius:18px;padding:16px 17px}
+  .mcard .k{font-size:12px;color:#8a8394;font-weight:600;display:flex;align-items:center;gap:8px}
+  .mcard .ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
+  .mcard .v{font-size:23px;font-weight:800;margin-top:11px;letter-spacing:-.6px}
+  .mcard .d{font-size:11px;margin-top:5px;font-weight:600}
+  .pos{color:#12b886}.neg{color:#fa5252}.wr{color:#e8890c}.vi{color:#5343e0}
+  /* hero */
+  .hero{padding:24px 26px;display:grid;grid-template-columns:1fr 250px;gap:24px;align-items:center;margin-bottom:16px}
+  .htag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a59db0;font-weight:700}
+  .hbig{font-size:32px;font-weight:800;letter-spacing:-.6px;margin:8px 0 8px}
+  .hbig small{display:block;font-size:14px;color:#2a2435;font-weight:600;margin-top:4px}
+  .hdesc{font-size:13px;color:#6f687b;line-height:1.6;max-width:440px}
+  .ring{width:150px;height:150px;border-radius:50%;margin:0 auto;display:grid;place-items:center;position:relative}
+  .ring::before{content:"";position:absolute;inset:14px;border-radius:50%;background:#fff}
+  .ringin{position:relative;text-align:center}
+  .ringin b{font-size:29px;font-weight:800;letter-spacing:-1px}
+  .ringin span{display:block;font-size:10.5px;color:#8a8394;margin-top:1px}
+  /* columns */
+  .cols{display:grid;grid-template-columns:1.12fr 1fr;gap:16px;align-items:start}
+  .panel{padding:20px 22px}
+  .panel h3{margin:0;font-size:16px;font-weight:800;letter-spacing:-.3px}
+  .panel .ph{font-size:12px;color:#8a8394;margin:3px 0 14px;font-weight:500}
+  .drow{display:flex;align-items:center;gap:13px;padding:11px 0;border-top:1px solid #f1ece3}
+  .drow:first-of-type{border-top:0}
+  .dico{width:36px;height:36px;border-radius:11px;flex:none;display:grid;place-items:center;font-weight:800;font-size:12px}
+  .dname{font-size:13.5px;font-weight:700;display:flex;align-items:center}
+  .dmeta{font-size:11px;color:#8a8394;margin-top:2px}
+  .dval{margin-left:auto;text-align:right}
+  .dval b{font-size:13.5px;font-weight:700}
+  .drate{font-size:11px;font-weight:800;margin-top:2px}
+  .tag{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:7px;background:#ffe3e3;color:#e03131;margin-left:8px}
+  /* strategy */
+  .scard{border-radius:16px;padding:15px 16px;margin-bottom:11px}
+  .scard.win{background:linear-gradient(135deg,#eafaf1,#f2fbf6);border:1.5px solid #b5e8cd}
+  .scard.alt{background:#f7f5ff;border:1.5px solid #e6e0fb}
+  .stitle{display:flex;align-items:center;gap:9px;font-size:14.5px;font-weight:800}
+  .stag{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:4px 9px;border-radius:999px;background:#12b886;color:#fff}
+  .sgrid{display:flex;gap:22px;margin-top:12px}
+  .sgrid .c b{display:block;font-size:18px;font-weight:800;letter-spacing:-.4px}
+  .sgrid .c span{font-size:10.5px;color:#8a8394;font-weight:600}
+  .cta{margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;background:#5343e0;color:#fff;font-weight:800;font-size:13.5px;cursor:pointer;border:0;width:100%;font-family:inherit}
+  .cta:hover{background:#4535d6}
+  .cta.g{background:#12b886}.cta.g:hover{background:#0ea678}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;border:1px solid #ece7dd;background:#fff;color:#2a2435;font-family:inherit}
+  .btn:hover{border-color:#d8cfc0;background:#faf8f3}
+  .btn.pri{background:#5343e0;color:#fff;border-color:#5343e0}.btn.pri:hover{background:#4535d6}
+  .btn svg{width:16px;height:16px}
+  /* forms */
+  .fgroup{margin-bottom:16px}
+  .flabel{font-size:12.5px;font-weight:700;color:#6f687b;margin-bottom:6px;display:block}
+  .brow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0}
+  .brow label{font-size:13px;color:#3f3a49;font-weight:500}
+  .inp{width:100%;border:1px solid #e2dccf;border-radius:11px;padding:10px 12px;font-size:13.5px;font-family:inherit;color:#2a2435;background:#fbfaf6;font-weight:600}
+  .inp:focus{outline:0;border-color:#8a7cf0;background:#fff;box-shadow:0 0 0 3px rgba(106,91,240,.15)}
+  .ipre{display:flex;align-items:center;gap:0;width:132px;flex:none;border:1px solid #e2dccf;border-radius:11px;background:#fbfaf6;padding-left:11px;overflow:hidden}
+  .ipre span{font-size:12px;color:#a59db0;font-weight:700}
+  .ipre input{border:0;background:transparent;text-align:right;width:100%;padding:9px 11px 9px 6px;font-size:13.5px;font-family:inherit;font-weight:700;color:#2a2435}
+  .ipre input:focus{outline:0}
+  .ipre:focus-within{border-color:#8a7cf0;background:#fff}
+  .sel{width:100%;border:1px solid #e2dccf;border-radius:11px;padding:10px 12px;font-size:13.5px;font-family:inherit;font-weight:600;color:#2a2435;background:#fbfaf6;cursor:pointer}
+  .cattot{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px dashed #e6e0d5;font-weight:800}
+  .cattot span{font-size:12px;color:#8a8394;font-weight:700}
+  .cattot b{font-size:15px;color:#5343e0;letter-spacing:-.3px}
+  .sectitle{margin:0 0 12px;display:flex;align-items:center;gap:11px}
+  .secico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none}
+  .secico svg{width:16px;height:16px}
+  .secname{flex:1;font-size:14px;font-weight:800;letter-spacing:-.2px}
+  .secval{font-size:15px;font-weight:800;letter-spacing:-.3px}
+  .allocbar{display:flex;height:18px;border-radius:9px;overflow:hidden;background:#f1ece3;gap:2px}
+  .allocbar>div{height:100%;min-width:0;transition:width .35s cubic-bezier(.4,0,.2,1)}
+  .alloclegend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:13px}
+  .alloclegend span{display:flex;align-items:center;gap:7px;font-size:12px;color:#6f687b;font-weight:600}
+  .alloclegend i{width:10px;height:10px;border-radius:3px;flex:none}
+  .alloclegend b{color:#2a2435;font-weight:800}
+  /* summary bar */
+  .sumbar{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:18px;overflow:hidden;border:1px solid #ece7dd;background:#fff;margin-top:4px}
+  .sumbar>div{padding:16px 20px;border-right:1px solid #f1ece3}
+  .sumbar>div:last-child{border-right:0}
+  .sumbar .k{font-size:11.5px;color:#8a8394;font-weight:700}
+  .sumbar .v{font-size:20px;font-weight:800;letter-spacing:-.5px;margin-top:5px}
+  .sumbar .m{font-size:11px;font-weight:600;margin-top:3px}
+  /* meter */
+  .meter{position:relative;height:9px;border-radius:6px;margin:14px 0 7px;background:linear-gradient(90deg,#12b886 0 50%,#e8890c 50% 83.3%,#fa5252 83.3% 100%)}
+  .mk{position:absolute;top:-5px;width:3px;height:19px;border-radius:2px;background:#fff;box-shadow:0 0 0 3px rgba(0,0,0,.08),0 1px 3px rgba(0,0,0,.3)}
+  .mscale{display:flex;justify-content:space-between;font-size:9.5px;color:#a59db0;font-weight:600}
+  /* list rows in dívidas */
+  .dcard{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #ece7dd;border-radius:16px;margin-bottom:10px;background:#fff;transition:.15s}
+  .dcard:hover{border-color:#d8cfc0;box-shadow:0 8px 20px -14px rgba(90,70,20,.3)}
+  .dacts{display:flex;gap:6px;margin-left:14px}
+  .iconbtn{width:32px;height:32px;border-radius:9px;border:1px solid #ece7dd;background:#fff;display:grid;place-items:center;cursor:pointer;color:#8a8394}
+  .iconbtn:hover{background:#f4f1fb;color:#5343e0;border-color:#d8d0e8}
+  .iconbtn.rm:hover{background:#fff0ef;color:#fa5252;border-color:#f5cdc8}
+  .iconbtn svg{width:15px;height:15px}
+  .dstats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+  .dstats>div{background:#fff;border:1px solid #ece7dd;border-radius:16px;padding:14px 16px}
+  .dstats .k{font-size:11px;color:#8a8394;font-weight:700;display:block}
+  .dstats b{font-size:19px;font-weight:800;letter-spacing:-.5px;display:block;margin-top:6px}
+  .dstats .wr{color:#e8890c}
+  .sharewrap{display:flex;align-items:center;gap:9px;margin-top:9px}
+  .shtrack{flex:1;max-width:190px;height:5px;border-radius:3px;background:#f1ece3;overflow:hidden}
+  .shbar{height:100%;border-radius:3px;transition:width .35s cubic-bezier(.4,0,.2,1)}
+  .sharewrap span{font-size:10.5px;color:#a59db0;font-weight:700;white-space:nowrap}
+  /* progress / console */
+  .console{background:#faf8f3;border:1px solid #ece7dd;border-radius:14px;padding:16px 18px;font-size:12.5px;line-height:1.7;color:#3f3a49;min-height:120px}
+  .kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #ece7dd}
+  .kv:last-child{border:0}
+  .kv .kk{color:#8a8394;font-weight:600}
+  .kv .vv{font-weight:800}
+  .rec{display:flex;gap:11px;padding:10px 0;border-top:1px solid #f1ece3;font-size:13px;line-height:1.5}
+  .rec:first-of-type{border-top:0}
+  .rnum{width:22px;height:22px;border-radius:7px;flex:none;background:#efecfe;color:#5343e0;font-weight:800;font-size:11px;display:grid;place-items:center;margin-top:1px}
+  .aibox{background:linear-gradient(135deg,#f7f5ff,#fdf4fb);border:1.5px solid #e9e2fb;border-radius:18px;padding:20px 22px}
+  .aibadge{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#7c5cf0;background:#fff;border:1px solid #e9e2fb;padding:5px 11px;border-radius:999px}
+  .letter{background:#fff;border:1px solid #ece7dd;border-radius:16px;padding:30px 34px;font-size:12.5px;line-height:1.85;color:#3f3a49;box-shadow:0 10px 26px -20px rgba(90,70,20,.25)}
+  .letter h4{margin:0 0 4px;font-size:14px;color:#2a2435}
+  .letter p{margin:0 0 12px}
+  .propcards{display:flex;flex-direction:column;gap:8px}
+  .propcard{display:flex;gap:12px;align-items:flex-start;border:1.5px solid #e2dccf;border-radius:14px;padding:12px 14px;cursor:pointer;transition:.15s;background:#fbfaf6}
+  .propcard:hover{border-color:#c9bff0;background:#faf8ff}
+  .propcard.on{border-color:#5343e0;background:#efecfe;box-shadow:0 0 0 3px rgba(83,67,224,.12)}
+  .pcico{width:32px;height:32px;border-radius:9px;background:#efecfe;color:#5343e0;display:grid;place-items:center;flex:none}
+  .propcard.on .pcico{background:#5343e0;color:#fff}
+  .pcico svg{width:17px;height:17px}
+  .propcard b{display:block;font-size:13px;font-weight:800}
+  .propcard span{display:block;font-size:11px;color:#8a8394;line-height:1.45;margin-top:2px}
+  .hintbox{background:#f4f1fb;border:1px solid #e6e0fb;border-radius:12px;padding:12px 14px;font-size:12px;color:#5a5368;line-height:1.5;font-weight:500}
+  .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;display:inline-block}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .empty{text-align:center;padding:34px;color:#a59db0;font-size:13px;font-weight:600}
+  .dropzone{display:flex;gap:22px;align-items:center;background:#faf8ff;border:2px dashed #d9d2f5;border-radius:20px;padding:24px 28px;margin-bottom:16px}
+  .dzicon{width:64px;height:64px;border-radius:18px;background:#efecfe;color:#5343e0;display:grid;place-items:center;flex:none}
+  .dzicon svg{width:30px;height:30px}
+  .dztitle{font-size:17px;font-weight:800;letter-spacing:-.3px}
+  .dzsub{font-size:12.5px;color:#8a8394;margin-top:5px;line-height:1.5;max-width:560px}
+  .dzbtns{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:6px}
+  .stepc{display:flex;gap:13px;align-items:flex-start;background:#faf8f3;border:1px solid #efe9df;border-radius:16px;padding:16px}
+  .stepn{width:30px;height:30px;border-radius:9px;background:#efecfe;color:#5343e0;font-weight:800;font-size:14px;display:grid;place-items:center;flex:none}
+  .stepc b{display:block;font-size:13.5px;font-weight:800;margin-bottom:4px}
+  .stepc span{font-size:11.5px;color:#8a8394;line-height:1.5}
+  .confbadge{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#0e9f6e;background:#e7f8f0;border:1px solid #b8ecd6;padding:5px 10px;border-radius:999px;white-space:nowrap}
+  .fieldgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .ftile{background:#faf8f3;border:1px solid #efe9df;border-radius:12px;padding:11px 13px}
+  .ftile.wide{grid-column:1/-1}
+  .ftile span{font-size:11px;color:#8a8394;font-weight:700;display:block}
+  .ftile b{font-size:16px;font-weight:800;letter-spacing:-.3px;display:block;margin-top:4px}
+  .ftile.hot{background:#fff0ef;border-color:#f8d3ce}
+  .darkbtn{width:38px;height:38px;border-radius:11px;border:1px solid #ece7dd;background:#fff;color:#6a5bf0;display:grid;place-items:center;cursor:pointer;margin-right:4px}
+  .darkbtn:hover{background:#f4f1fb;border-color:#d8d0e8}
+  .darkbtn svg{width:18px;height:18px}
+  /* ===== DARK MODE ===== */
+  .app.dark{background:#15131e;color:#e9e6f0}
+  .app.dark .bbar{background:#1c1929;border-bottom-color:#2a2540}
+  .app.dark .brand b{color:#f2eff8}
+  .app.dark .bnav a{color:#9a93ab}
+  .app.dark .bnav a:hover{background:#241f36;color:#b9adf5}
+  .app.dark .bnav a.on{background:#2c2547;color:#c3b8fb}
+  .app.dark .bava .who small{color:#8a8298}
+  .app.dark .darkbtn{background:#241f36;border-color:#2a2540;color:#c3b8fb}
+  .app.dark .darkbtn:hover{background:#2c2547}
+  .app.dark .scr::-webkit-scrollbar-thumb{background:#332c48;border-color:#15131e}
+  .app.dark .head .sub,.app.dark .mcard .k,.app.dark .dmeta,.app.dark .panel .ph,.app.dark .sumbar .k,.app.dark .dstats .k,.app.dark .ftile span,.app.dark .stepc span,.app.dark .propcard span,.app.dark .sgrid .c span,.app.dark .sharewrap span{color:#948da5}
+  .app.dark .head h1,.app.dark .panel h3,.app.dark .sectitle .secname,.app.dark .mcard .v,.app.dark .sumbar .v,.app.dark .dstats b,.app.dark .dname,.app.dark .dval b,.app.dark .ftile b,.app.dark .stepc b,.app.dark .propcard b,.app.dark .sgrid .c b,.app.dark .cattot b,.app.dark .kv .vv,.app.dark .alloclegend b{color:#f2eff8}
+  .app.dark .card,.app.dark .mcard,.app.dark .dcard,.app.dark .dstats>div,.app.dark .sumbar,.app.dark .sumbar>div{background:#201c2e;border-color:#2c2642}
+  .app.dark .sumbar{border-color:#2c2642}
+  .app.dark .sumbar>div{border-right-color:#2c2642}
+  .app.dark .hero .ring::before{background:#201c2e}
+  .app.dark .drow{border-top-color:#2a2540}
+  .app.dark .hbig small{color:#e9e6f0}
+  .app.dark .hdesc,.app.dark .rec,.app.dark .letter p{color:#c3bdd0}
+  .app.dark .inp,.app.dark .ipre,.app.dark .sel{background:#191622;border-color:#332c48;color:#ede9f5}
+  .app.dark .inp:focus,.app.dark .ipre:focus-within,.app.dark .sel:focus{background:#201c2e;border-color:#7c6cf0}
+  .app.dark .ipre input{color:#ede9f5}
+  .app.dark .flabel,.app.dark .brow label{color:#a79fbb}
+  .app.dark .cattot{border-top-color:#2c2642}
+  .app.dark .kv{border-bottom-color:#2a2540}
+  .app.dark .console{background:#191622;border-color:#2c2642;color:#c3bdd0}
+  .app.dark .btn{background:#241f36;border-color:#2c2642;color:#e9e6f0}
+  .app.dark .btn:hover{background:#2c2547;border-color:#3a3358}
+  .app.dark .btn.pri{background:#5343e0;border-color:#5343e0;color:#fff}
+  .app.dark .iconbtn{background:#241f36;border-color:#2c2642;color:#9a93ab}
+  .app.dark .iconbtn:hover{background:#2c2547;color:#c3b8fb;border-color:#3a3358}
+  .app.dark .allocbar,.app.dark .shtrack{background:#2a2540}
+  .app.dark .aibox{background:linear-gradient(135deg,#221c38,#2a1d34);border-color:#3a3358}
+  .app.dark .aibadge{background:#191622;border-color:#3a3358;color:#b9adf5}
+  .app.dark .aibox p,.app.dark .aibox div[style*="color:#3f3a49"]{color:#d6d0e4!important}
+  .app.dark .letter{background:#201c2e;border-color:#2c2642}
+  .app.dark .letter h4{color:#f2eff8}
+  .app.dark .scard.win{background:linear-gradient(135deg,#16281f,#182c24);border-color:#255140}
+  .app.dark .scard.alt{background:#231d3a;border-color:#3a3358}
+  .app.dark .scard div[style*="color:#6f687b"]{color:#b3aac6!important}
+  .app.dark .dropzone{background:#201a33;border-color:#3a3162}
+  .app.dark .dzsub,.app.dark .dztitle{color:#e9e6f0}
+  .app.dark .dzsub{color:#948da5}
+  .app.dark .stepc,.app.dark .ftile{background:#191622;border-color:#2c2642}
+  .app.dark .propcard{background:#191622;border-color:#332c48}
+  .app.dark .propcard:hover{background:#221c38;border-color:#4a3f7a}
+  .app.dark .propcard.on{background:#2a2447;border-color:#6a5bf0}
+  .app.dark .hintbox{background:#231d3a;border-color:#3a3358;color:#b9b2cc}
+  .app.dark .empty{color:#7d7691}
+  .app.dark .letter div[style*="border-top"]{border-color:#443c5e!important}
+  .app.dark .console .kv{border-color:#2a2540}
+  .app.dark .rec{border-top-color:#2a2540}
+  .app.dark .drow:first-of-type,.app.dark .rec:first-of-type{border-top:0}
+</style>
+</helmet>
+
+<div class="app {{ darkCls }}">
+  <div class="bbar">
+    <div class="brand"><div class="bmk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><b>Helper Financeiro</b><span>Diagnóstico · Estratégias · Propostas</span></div></div>
+    <nav class="bnav">
+      <a class="{{ act.geral }}" onClick="{{ nav.geral }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Visão geral</a>
+      <a class="{{ act.perfil }}" onClick="{{ nav.perfil }}">Perfil</a>
+      <a class="{{ act.dividas }}" onClick="{{ nav.dividas }}">Dívidas</a>
+      <a class="{{ act.contrato }}" onClick="{{ nav.contrato }}">Contrato PDF</a>
+      <a class="{{ act.analise }}" onClick="{{ nav.analise }}">Análise</a>
+      <a class="{{ act.carta }}" onClick="{{ nav.carta }}">Carta ao credor</a>
+    </nav>
+    <div class="bava"><button class="darkbtn" onClick="{{ toggleDark }}" title="Alternar tema">
+      <sc-if value="{{ darkOff }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg></sc-if>
+      <sc-if value="{{ darkOn }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg></sc-if>
+    </button><div class="who"><b>{{ nome }}</b><small>Plano pessoal</small></div><div class="pic">{{ iniciais }}</div></div>
+  </div>
+
+  <div class="scr">
+
+    <!-- ============ VISÃO GERAL ============ -->
+    <sc-if value="{{ isGeral }}" hint-placeholder-val="{{ true }}">
+      <div class="head">
+        <div><h1>Olá, {{ primeiroNome }} 👋</h1><div class="sub">Vamos organizar suas dívidas — um passo de cada vez.</div></div>
+        <div class="pill {{ health.pill }}"><span class="dot"></span>Saúde: {{ health.label }}</div>
+      </div>
+      <div class="card hero">
+        <div>
+          <div class="htag">Diagnóstico de saúde financeira</div>
+          <div class="hbig" style="color:{{ health.color }}">{{ health.label }}<small>{{ health.frase }}</small></div>
+          <div class="hdesc">Você compromete <b style="color:{{ health.color }}">{{ compPct }}</b> da renda com dívidas e {{ fluxoFrase }} É {{ folgaFrase }} — atacar a dívida mais cara agora protege esse respiro e acelera a saída.</div>
+        </div>
+        <div>
+          <div class="ring" style="background:{{ ringBg }}"><div class="ringin"><b>{{ compPct }}</b><span>da renda</span></div></div>
+          <div style="text-align:center;font-size:11.5px;color:#8a8394;margin-top:10px;font-weight:600">comprometida com parcelas</div>
+        </div>
+      </div>
+      <div class="grid4" style="margin-bottom:16px">
+        <div class="mcard"><div class="k"><span class="ic" style="background:#eafaf1;color:#12b886">↑</span>Renda líquida</div><div class="v">{{ rendaFmt }}</div><div class="d pos">salário + extra</div></div>
+        <div class="mcard"><div class="k"><span class="ic" style="background:#fff4e6;color:#e8890c">↓</span>Despesas</div><div class="v">{{ despesasFmt }}</div><div class="d" style="color:#8a8394">fixas + variáveis</div></div>
+        <div class="mcard"><div class="k"><span class="ic" style="background:#fff0ef;color:#fa5252">%</span>Parcelas / mês</div><div class="v wr">{{ parcelasFmt }}</div><div class="d wr">{{ nDividas }} dívidas ativas</div></div>
+        <div class="mcard"><div class="k"><span class="ic" style="background:#f4f1fb;color:#5343e0">Σ</span>Saldo devedor</div><div class="v">{{ saldoFmt }}</div><div class="d neg">{{ jurosFmt }} são juros</div></div>
+      </div>
+      <div class="cols">
+        <div class="card panel">
+          <h3>Suas dívidas</h3><div class="ph">Da mais cara para a mais barata</div>
+          <sc-for list="{{ ranking }}" as="d" hint-placeholder-count="4">
+            <div class="drow"><div class="dico" style="background:{{ d.bg }};color:{{ d.fg }}">{{ d.ini }}</div><div><div class="dname">{{ d.tipo }}<sc-if value="{{ d.top }}"><span class="tag">Mais cara</span></sc-if></div><div class="dmeta">{{ d.credor }} · {{ d.restLabel }}</div></div><div class="dval"><b>{{ d.saldoFmt }}</b><div class="drate" style="color:{{ d.fg }}">{{ d.taxaFmt }}</div></div></div>
+          </sc-for>
+        </div>
+        <div class="card panel">
+          <h3>Estratégia de quitação</h3><div class="ph">Com {{ extraFmt }} extra por mês</div>
+          <div class="scard win">
+            <div class="stitle">Avalanche<span class="stag">Recomendada</span></div>
+            <div class="sgrid"><div class="c"><b>{{ avMeses }}</b><span>para quitar</span></div><div class="c"><b style="color:#12b886">{{ avJuros }}</b><span>juros pagos</span></div></div>
+            <div style="font-size:11.5px;color:#6f687b;margin-top:10px;line-height:1.5">Ataca a dívida mais cara primeiro e economiza <b style="color:#12b886">{{ avEcon }}</b> em juros.</div>
+          </div>
+          <div class="scard alt">
+            <div class="stitle">Bola de neve</div>
+            <div class="sgrid"><div class="c"><b>{{ snMeses }}</b><span>para quitar</span></div><div class="c"><b>{{ snJuros }}</b><span>juros pagos</span></div></div>
+            <div style="font-size:11.5px;color:#6f687b;margin-top:10px;line-height:1.5">Quita o menor saldo primeiro — 1ª vitória em {{ snPrim }}.</div>
+          </div>
+          <button class="cta" onClick="{{ nav.analise }}">Ver análise completa →</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ PERFIL ============ -->
+    <sc-if value="{{ isPerfil }}">
+      <div class="head">
+        <div><h1>Perfil e orçamento</h1><div class="sub">Preencha cada categoria — os totais e o resumo são calculados na hora.</div></div>
+        <div class="pill {{ health.pill }}"><span class="dot"></span>{{ health.label }}</div>
+      </div>
+      <div class="card panel" style="margin-bottom:16px">
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px"><label class="flabel">Nome completo</label><input class="inp" value="{{ nome }}" onChange="{{ setNome }}" placeholder="Seu nome"></div>
+          <div style="width:220px"><label class="flabel">CPF</label><input class="inp" value="{{ cpf }}" onChange="{{ setCpf }}" placeholder="000.000.000-00"></div>
+        </div>
+      </div>
+      <div class="card panel" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:15px;flex-wrap:wrap">
+          <div><h3 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.3px">Para onde vai a sua renda</h3><div class="ph" style="margin:3px 0 0">Distribuição de {{ rendaFmt }} de renda líquida — atualiza enquanto você digita</div></div>
+          <div style="text-align:right"><div style="font-size:11.5px;color:#8a8394;font-weight:700">Sobra no mês</div><div style="font-size:22px;font-weight:800;letter-spacing:-.5px;color:{{ fluxoCor }}">{{ fluxoFmt }}</div></div>
+        </div>
+        <div class="allocbar">
+          <div style="width:{{ allocFixW }};background:#fa5252"></div>
+          <div style="width:{{ allocVarW }};background:#e8890c"></div>
+          <div style="width:{{ allocParcW }};background:#5343e0"></div>
+          <div style="width:{{ allocSobW }};background:#12b886"></div>
+        </div>
+        <div class="alloclegend">
+          <span><i style="background:#fa5252"></i>Fixas <b>{{ fixasFmt }}</b> · {{ allocFixPct }}</span>
+          <span><i style="background:#e8890c"></i>Variáveis <b>{{ varFmt }}</b> · {{ allocVarPct }}</span>
+          <span><i style="background:#5343e0"></i>Parcelas <b>{{ parcelasFmt }}</b> · {{ allocParcPct }}</span>
+          <span><i style="background:#12b886"></i>Sobra <b>{{ fluxoFmt }}</b> · {{ allocSobPct }}</span>
+        </div>
+      </div>
+      <div class="cols" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card panel">
+            <div class="sectitle"><span class="secico" style="background:#eafaf1;color:#12b886"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-7"/><path d="M17 8h4v4"/></svg></span><span class="secname">Renda líquida mensal</span><b class="secval" style="color:#12b886">{{ rendaFmt }}</b></div>
+            <sc-for list="{{ rendaView }}" as="r" hint-placeholder-count="3">
+              <div class="brow"><label>{{ r.label }}</label><div class="ipre"><span>R$</span><input value="{{ r.value }}" onChange="{{ r.on }}" placeholder="0,00"></div></div>
+            </sc-for>
+
+          </div>
+          <div class="card panel">
+            <div class="sectitle"><span class="secico" style="background:#fff4e6;color:#e8890c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7h12l-1 13H7L6 7Z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg></span><span class="secname">Despesas variáveis</span><b class="secval">{{ varFmt }}</b></div>
+            <sc-for list="{{ varView }}" as="r" hint-placeholder-count="5">
+              <div class="brow"><label>{{ r.label }}</label><div class="ipre"><span>R$</span><input value="{{ r.value }}" onChange="{{ r.on }}" placeholder="0,00"></div></div>
+            </sc-for>
+
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card panel">
+            <div class="sectitle"><span class="secico" style="background:#fff0ef;color:#fa5252"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg></span><span class="secname">Despesas fixas</span><b class="secval">{{ fixasFmt }}</b></div>
+            <sc-for list="{{ fixasView }}" as="r" hint-placeholder-count="7">
+              <div class="brow"><label>{{ r.label }}</label><div class="ipre"><span>R$</span><input value="{{ r.value }}" onChange="{{ r.on }}" placeholder="0,00"></div></div>
+            </sc-for>
+
+          </div>
+          <div class="card panel">
+            <div class="sectitle"><span class="secico" style="background:#efecfe;color:#5343e0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v6c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6l7-3Z"/></svg></span><span class="secname">Reserva e FGTS</span></div>
+            <div class="brow"><label>Reserva de emergência</label><div class="ipre"><span>R$</span><input value="{{ f.reserva }}" onChange="{{ inF.reserva }}" placeholder="0,00"></div></div>
+            <div class="brow"><label>Saldo de FGTS</label><div class="ipre"><span>R$</span><input value="{{ f.fgts }}" onChange="{{ inF.fgts }}" placeholder="0,00"></div></div>
+            <div class="cattot"><span>Cobertura da reserva</span><b style="color:{{ reservaCor }}">{{ reservaLabel }}</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="sumbar">
+        <div><div class="k">Fluxo de caixa livre</div><div class="v" style="color:{{ fluxoCor }}">{{ fluxoFmt }}</div><div class="m" style="color:{{ fluxoCor }}">{{ fluxoMsg }}</div></div>
+        <div><div class="k">Comprometimento com dívidas</div><div class="v" style="color:{{ health.color }}">{{ compPct }}</div><div class="m" style="color:{{ health.color }}">{{ health.label }}</div></div>
+        <div><div class="k">Despesas totais</div><div class="v">{{ despesasFmt }}</div><div class="m" style="color:#8a8394">de {{ rendaFmt }} de renda</div></div>
+      </div>
+    </sc-if>
+
+    <!-- ============ DÍVIDAS ============ -->
+    <sc-if value="{{ isDividas }}">
+      <div class="head">
+        <div><h1>Suas dívidas</h1><div class="sub">Cadastre cada dívida — o ranking por taxa é montado automaticamente.</div></div>
+        <div class="pill vi" style="background:#efecfe;border:1px solid #ddd6f7">{{ nDividas }} dívidas · {{ saldoFmt }}</div>
+      </div>
+      <div class="cols" style="grid-template-columns:1.25fr 1fr">
+        <div>
+          <sc-if value="{{ temDividas }}" hint-placeholder-val="{{ true }}">
+            <div class="dstats">
+              <div><span class="k">Saldo devedor total</span><b>{{ saldoFmt }}</b></div>
+              <div><span class="k">Parcelas por mês</span><b class="wr">{{ parcelasFmt }}</b></div>
+              <div><span class="k">Taxa média (a.m.)</span><b>{{ taxaMediaFmt }}</b></div>
+              <div><span class="k">Custo até quitar</span><b>{{ custoTotalFmt }}</b></div>
+            </div>
+            <sc-for list="{{ ranking }}" as="d" hint-placeholder-count="4">
+              <div class="dcard" style="border-left:4px solid {{ d.fg }}"><div class="dico" style="background:{{ d.bg }};color:{{ d.fg }};width:40px;height:40px;border-radius:12px">{{ d.ini }}</div>
+                <div style="flex:1"><div class="dname" style="font-size:14px">{{ d.tipo }}<sc-if value="{{ d.top }}"><span class="tag">Mais cara</span></sc-if></div><div class="dmeta">{{ d.credor }} · parcela {{ d.parcelaFmt }} · {{ d.restLabel }}</div><div class="sharewrap"><div class="shtrack"><div class="shbar" style="width:{{ d.share }};background:{{ d.fg }}"></div></div><span>{{ d.sharePct }} do saldo total</span></div></div>
+                <div class="dval"><b style="font-size:15px">{{ d.saldoFmt }}</b><div class="drate" style="color:{{ d.fg }}">{{ d.taxaFmt }} a.m.</div></div>
+                <div class="dacts"><button class="iconbtn" onClick="{{ d.onEdit }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button class="iconbtn rm" onClick="{{ d.onRemove }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>
+              </div>
+            </sc-for>
+          </sc-if>
+          <sc-if value="{{ semDividas }}"><div class="card"><div class="empty">Nenhuma dívida cadastrada ainda.<br>Use o formulário ao lado para adicionar a primeira.</div></div></sc-if>
+        </div>
+        <div class="card panel">
+          <h3>{{ formTitulo }}</h3><div class="ph">Enter em qualquer campo adiciona</div>
+          <div class="fgroup"><label class="flabel">Credor</label><input class="inp" value="{{ novo.credor }}" onChange="{{ inN.credor }}" placeholder="Nome do banco ou loja"></div>
+          <div class="fgroup"><label class="flabel">Tipo</label>
+            <select class="sel" value="{{ novo.tipo }}" onChange="{{ inN.tipo }}">
+              <sc-for list="{{ tiposDivida }}" as="t" hint-placeholder-count="7"><option value="{{ t }}">{{ t }}</option></sc-for>
+            </select>
+          </div>
+          <div style="display:flex;gap:12px" class="fgroup">
+            <div style="flex:1"><label class="flabel">Saldo devedor (R$)</label><input class="inp" value="{{ novo.saldo }}" onChange="{{ inN.saldo }}" placeholder="0,00"></div>
+            <div style="width:120px"><label class="flabel">Taxa (% a.m.)</label><input class="inp" value="{{ novo.taxa }}" onChange="{{ inN.taxa }}" placeholder="0,0"></div>
+          </div>
+          <div style="display:flex;gap:12px" class="fgroup">
+            <div style="flex:1"><label class="flabel">Parcela (R$)</label><input class="inp" value="{{ novo.parcela }}" onChange="{{ inN.parcela }}" placeholder="0,00"></div>
+            <div style="width:120px"><label class="flabel">Parcelas rest.</label><input class="inp" value="{{ novo.restantes }}" onChange="{{ inN.restantes }}" placeholder="0"></div>
+          </div>
+          <button class="cta" onClick="{{ addDivida }}">{{ formBtn }}</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ CONTRATO PDF ============ -->
+    <sc-if value="{{ isContrato }}">
+      <div class="head">
+        <div><h1>Extração de contrato (PDF)</h1><div class="sub">Os dados extraídos vão para o formulário de Dívidas para você conferir antes de adicionar.</div></div>
+      </div>
+      <div class="dropzone">
+        <div class="dzicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3v5h5"/><path d="M6 3h8l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M12 11v6M9.5 14.5 12 17l2.5-2.5"/></svg></div>
+        <div style="flex:1">
+          <div class="dztitle">Arraste o contrato aqui ou selecione um PDF</div>
+          <div class="dzsub">A IA local lê o documento e extrai os campos com a citação de origem — tudo roda offline, nada sai da sua máquina.</div>
+          <div class="dzbtns">
+            <button class="btn pri" onClick="{{ extrairContrato }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>Selecionar contrato PDF…</button>
+            <button class="btn" onClick="{{ extrairContrato }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>Extrair com IA local</button>
+          </div>
+        </div>
+      </div>
+      <sc-if value="{{ contratoRun }}">
+        <div class="cols" style="grid-template-columns:1fr 1fr">
+          <div class="card panel">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px">
+              <div><h3>Campos encontrados</h3><div class="ph" style="margin-bottom:0">contrato_nubank_2024.pdf · cada campo com citação de origem</div></div>
+              <span class="confbadge">confiança alta</span>
+            </div>
+            <div class="fieldgrid">
+              <div class="ftile wide"><span>Tipo</span><b>Cartão de crédito</b></div>
+              <div class="ftile"><span>Valor financiado</span><b>R$ 3.900,00</b></div>
+              <div class="ftile"><span>Valor da parcela</span><b>R$ 520,00</b></div>
+              <div class="ftile hot"><span>Taxa mensal</span><b style="color:#fa5252">12,00%</b></div>
+              <div class="ftile"><span>Nº de parcelas</span><b>18</b></div>
+              <div class="ftile"><span>Taxa anual</span><b>289,6%</b></div>
+              <div class="ftile"><span>CET anual</span><b>312,4%</b></div>
+            </div>
+          </div>
+          <div class="aibox">
+            <div class="aibadge"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>Confira antes de usar</div>
+            <p style="font-size:13px;line-height:1.65;color:#3f3a49;margin:14px 0 16px">O modelo extraiu os campos ao lado, cada um com a citação literal do documento. O contrato traz os <b>valores originais</b> — ajuste o <b>saldo devedor atual</b> e as <b>parcelas restantes</b> antes de adicionar.</p>
+            <div style="background:#fff;border:1px solid #ece7dd;border-radius:11px;padding:12px 14px;font-size:11.5px;color:#6f687b;line-height:1.55;margin-bottom:16px">"…taxa de juros remuneratórios de <b>12,00% ao mês</b>, em 18 parcelas de R$ 520,00…"<div style="color:#a59db0;margin-top:6px">fonte: cláusula 4ª · confiança: alta</div></div>
+            <button class="cta" onClick="{{ nav.dividas }}">Enviar para Dívidas →</button>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ contratoIdle }}" hint-placeholder-val="{{ true }}">
+        <div class="card panel">
+          <h3>Como funciona</h3><div class="ph">Extração Code-First — o modelo extrai, o código confere, você confirma</div>
+          <div class="steps">
+            <div class="stepc"><div class="stepn">1</div><div><b>Selecione o PDF</b><span>Contrato de empréstimo, financiamento ou fatura de cartão.</span></div></div>
+            <div class="stepc"><div class="stepn">2</div><div><b>A IA local extrai</b><span>Cada campo vem com a citação literal do documento; valor sem fonte verificável é descartado.</span></div></div>
+            <div class="stepc"><div class="stepn">3</div><div><b>Você confere e envia</b><span>Ajuste o saldo atual e as parcelas restantes e mande para Dívidas.</span></div></div>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <!-- ============ ANÁLISE ============ -->
+    <sc-if value="{{ isAnalise }}">
+      <div class="head">
+        <div><h1>Análise</h1><div class="sub">Diagnóstico determinístico e, se quiser, a análise sênior assistida por IA.</div></div>
+        <div class="pill {{ health.pill }}"><span class="dot"></span>{{ health.label }}</div>
+      </div>
+      <div class="card panel" style="margin-bottom:16px">
+        <div style="display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap">
+          <div><label class="flabel">Pagamento extra por mês (R$)</label><input class="inp" style="width:150px" value="{{ extra }}" onChange="{{ setExtra }}"></div>
+          <div><label class="flabel">Taxa-alvo p/ portabilidade (% a.m.)</label><input class="inp" style="width:150px" value="{{ alvo }}" onChange="{{ setAlvo }}"></div>
+          <button class="btn pri" onClick="{{ analisar }}" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Analisar</button>
+        </div>
+      </div>
+      <div class="grid4" style="margin-bottom:16px">
+        <div class="mcard"><div class="k">Classificação</div><div class="v" style="color:{{ health.color }}">{{ health.label }}</div><div class="d" style="color:#8a8394">{{ health.frase }}</div></div>
+        <div class="mcard"><div class="k">Fluxo de caixa</div><div class="v" style="color:{{ fluxoCor }}">{{ fluxoFmt }}</div><div class="d" style="color:#8a8394">livre por mês</div></div>
+        <div class="mcard"><div class="k">Saldo devedor</div><div class="v">{{ saldoFmt }}</div><div class="d neg">{{ jurosFmt }} em juros futuros</div></div>
+        <div class="mcard"><div class="k">Comprometimento</div><div class="v" style="color:{{ health.color }}">{{ compPct }}</div><div class="d" style="color:#8a8394">da renda líquida</div></div>
+      </div>
+      <div class="cols" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
+        <div class="card panel">
+          <h3>Estratégias de quitação</h3><div class="ph">Com {{ extraFmt }} extra por mês</div>
+          <div class="scard win"><div class="stitle">Avalanche<span class="stag">Recomendada</span></div><div class="sgrid"><div class="c"><b>{{ avMeses }}</b><span>para quitar</span></div><div class="c"><b style="color:#12b886">{{ avJuros }}</b><span>juros pagos</span></div><div class="c"><b style="color:#12b886">{{ avEcon }}</b><span>economia</span></div></div><div style="font-size:11.5px;color:#6f687b;margin-top:10px;line-height:1.5">Ataca a taxa mais alta primeiro ({{ avAlvoLabel }}). Menor custo total.</div></div>
+          <div class="scard alt"><div class="stitle">Bola de neve</div><div class="sgrid"><div class="c"><b>{{ snMeses }}</b><span>para quitar</span></div><div class="c"><b>{{ snJuros }}</b><span>juros pagos</span></div><div class="c"><b>{{ snPrim }}</b><span>1ª quitação</span></div></div><div style="font-size:11.5px;color:#6f687b;margin-top:10px;line-height:1.5">Quita o menor saldo primeiro ({{ snAlvoLabel }}). Vitória rápida pra manter o ânimo.</div></div>
+        </div>
+        <div class="card panel">
+          <h3>Recomendações</h3><div class="ph">Ações priorizadas para o seu caso</div>
+          <div class="rec"><div class="rnum">1</div><div>Priorize quitar o <b>cartão de crédito (13,5% a.m.)</b> — é a dívida mais cara e a que mais cresce.</div></div>
+          <div class="rec"><div class="rnum">2</div><div>Direcione os <b>{{ fluxoFmt }}</b> de folga mensal para amortizar, não para novas despesas.</div></div>
+          <div class="rec"><div class="rnum">3</div><div>Reforce a <b>reserva de emergência</b> (hoje {{ reservaLabel }}; meta de 3 meses de despesas).</div></div>
+          <div class="rec"><div class="rnum">4</div><div>Avalie <b>portabilidade</b> das dívidas acima da taxa-alvo de {{ alvo }}% a.m.</div></div>
+          <div class="rec"><div class="rnum">5</div><div>Evite o <b>cheque especial</b> — quite-o assim que possível.</div></div>
+        </div>
+      </div>
+      <div class="card panel" style="margin-bottom:16px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div><h3>Oportunidades de portabilidade</h3><div class="ph">Dívidas acima da taxa-alvo de {{ alvoFmt }} a.m. — leve para outro banco e reduza a parcela</div></div>
+          <sc-if value="{{ temPortab }}"><div style="text-align:right"><div style="font-size:11.5px;color:#8a8394;font-weight:700">Economia potencial total</div><div style="font-size:22px;font-weight:800;letter-spacing:-.5px;color:#12b886">{{ portabTotal }}</div></div></sc-if>
+        </div>
+        <sc-if value="{{ temPortab }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ portab }}" as="p" hint-placeholder-count="2">
+            <div class="drow" style="padding:13px 0">
+              <div class="dico" style="background:{{ p.bg }};color:{{ p.fg }};width:40px;height:40px;border-radius:12px">{{ p.ini }}</div>
+              <div style="flex:1"><div class="dname" style="font-size:14px">{{ p.tipo }}</div><div class="dmeta">{{ p.credor }} · {{ p.nRest }} · parcela {{ p.parcelaAtual }} → <b style="color:#12b886">{{ p.parcelaNova }}</b></div></div>
+              <div style="text-align:right;margin-right:18px"><div style="font-size:11px;color:#8a8394;font-weight:700">de <b style="color:{{ p.fg }}">{{ p.taxaAtual }}</b> p/ {{ alvoFmt }}</div><div style="font-size:11px;color:#8a8394;margin-top:3px">−{{ p.economiaMensal }}/mês</div></div>
+              <div class="dval"><b style="font-size:16px;color:#12b886">{{ p.economiaTotal }}</b><div style="font-size:10.5px;color:#8a8394;font-weight:700;margin-top:2px">economia total</div></div>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#8a8394;margin-top:12px;line-height:1.5">Simulação pelo sistema Price mantendo o mesmo prazo. Confirme a taxa efetiva (CET) na proposta do banco concorrente antes de migrar.</div>
+        </sc-if>
+        <sc-if value="{{ semPortab }}">
+          <div class="empty" style="padding:24px">Nenhuma dívida acima da taxa-alvo de {{ alvoFmt }} a.m.<br>Suas taxas já estão competitivas — ou ajuste a taxa-alvo acima.</div>
+        </sc-if>
+      </div>
+      <div class="aibox" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div class="aibadge"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>Análise sênior · assistida por IA</div>
+          <button class="btn pri" onClick="{{ gerarIA }}" style="margin-left:auto">
+            <sc-if value="{{ iaLoading }}"><span class="spin"></span>Gerando…</sc-if>
+            <sc-if value="{{ iaIdleBtn }}" hint-placeholder-val="{{ true }}">Gerar análise sênior</sc-if>
+          </button>
+        </div>
+        <sc-if value="{{ iaRun }}">
+          <div style="margin-top:16px;font-size:13px;line-height:1.7;color:#3f3a49">
+            <sc-for list="{{ iaParas }}" as="p" hint-placeholder-count="3"><p style="margin:0 0 12px">{{ p }}</p></sc-for>
+          </div>
+          <div style="font-size:11px;color:#a59db0;margin-top:14px;font-weight:600">Conteúdo assistido por IA — revise antes de agir. Entra no relatório .docx.</div>
+        </sc-if>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>Gerar planilha (.xlsx)</button>
+        <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></svg>Gerar relatório (.docx)</button>
+        <span style="font-size:11.5px;color:#8a8394;font-weight:600;align-self:center">O relatório inclui a última análise da IA, quando houver.</span>
+      </div>
+    </sc-if>
+
+    <!-- ============ CARTA AO CREDOR ============ -->
+    <sc-if value="{{ isCarta }}">
+      <div class="head">
+        <div><h1>Carta ao credor</h1><div class="sub">Gere a proposta de negociação para o credor escolhido.</div></div>
+      </div>
+      <div class="cols" style="grid-template-columns:0.85fr 1.15fr">
+        <div class="card panel">
+          <h3>Proposta de negociação</h3><div class="ph">Os campos usados variam conforme o tipo</div>
+          <div class="fgroup"><label class="flabel">Dívida (credor)</label>
+            <select class="sel" value="{{ carta.credor }}" onChange="{{ inC.credor }}">
+              <sc-for list="{{ credores }}" as="c" hint-placeholder-count="4"><option value="{{ c }}">{{ c }}</option></sc-for>
+            </select>
+          </div>
+          <div class="fgroup"><label class="flabel">Tipo de proposta</label>
+            <div class="propcards">
+              <div class="propcard {{ tipoQuit.cls }}" onClick="{{ tipoQuit.on }}"><div class="pcico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div><div><b>Quitação à vista com desconto</b><span>Pague o saldo à vista com abatimento e encerre a dívida.</span></div></div>
+              <div class="propcard {{ tipoPort.cls }}" onClick="{{ tipoPort.on }}"><div class="pcico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 4l4 4-4 4"/><path d="M21 8H8"/><path d="M7 20l-4-4 4-4"/><path d="M3 16h13"/></svg></div><div><b>Portabilidade / contraproposta</b><span>Leve a dívida a outro banco com taxa menor; peça contraproposta.</span></div></div>
+              <div class="propcard {{ tipoRed.cls }}" onClick="{{ tipoRed.on }}"><div class="pcico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg></div><div><b>Redução de taxa / renegociação</b><span>Repactue parcelas e juros conforme sua capacidade atual.</span></div></div>
+            </div>
+          </div>
+          <div class="fgroup"><label class="flabel">Nº do contrato (opcional)</label><input class="inp" value="{{ carta.contrato }}" onChange="{{ inC.contrato }}" placeholder="000123-4"></div>
+          <sc-if value="{{ isQuit }}" hint-placeholder-val="{{ true }}">
+            <div class="fgroup"><label class="flabel">Valor proposto à vista (R$)</label><input class="inp" value="{{ carta.valor }}" onChange="{{ inC.valor }}" placeholder="0,00"></div>
+          </sc-if>
+          <sc-if value="{{ isPort }}">
+            <div style="display:flex;gap:12px" class="fgroup">
+              <div style="flex:1"><label class="flabel">Banco concorrente</label><input class="inp" value="{{ carta.banco }}" onChange="{{ inC.banco }}" placeholder="Ex.: Caixa"></div>
+              <div style="width:130px"><label class="flabel">Taxa conc. (%)</label><input class="inp" value="{{ carta.taxa }}" onChange="{{ inC.taxa }}" placeholder="1,8"></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isRed }}">
+            <div class="hintbox">Este tipo usa apenas os seus dados e o contrato — sem valor à vista ou banco concorrente. A carta pede a repactuação das parcelas e dos juros.</div>
+          </sc-if>
+          <button class="cta" style="margin-top:16px" onClick="{{ nada }}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:2px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Gerar carta (.docx)</button>
+        </div>
+        <div class="letter">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #f1ece3">
+            <div style="display:flex;gap:11px;align-items:center"><div class="pcico" style="width:36px;height:36px;border-radius:10px;background:#efecfe;color:#5343e0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div><div><h4 style="margin:0">Proposta de {{ cartaTipoCurto }}</h4><div style="font-size:11px;color:#a59db0;font-weight:600">para {{ carta.credor }} · atualiza ao vivo</div></div></div>
+            <div style="font-size:11px;color:#a59db0;text-align:right">São Paulo,<br>5 de julho de 2026</div>
+          </div>
+          <p><b>Ao setor de negociação — {{ carta.credor }}</b></p>
+          <p>Prezados,</p>
+          <p>Eu, <b>{{ nomeCarta }}</b>{{ cpfCarta }}, na condição de titular do contrato{{ contratoCarta }}, venho por meio desta apresentar proposta de <b>{{ cartaTipoTexto }}</b> referente à minha dívida junto a esta instituição.</p>
+          <p>{{ cartaCorpo }}</p>
+          <p>Coloco-me à disposição para formalizar o acordo e solicito retorno com a posição de Vossa instituição. Desde já agradeço a atenção.</p>
+          <p style="margin:22px 0 0">Atenciosamente,</p>
+          <div style="margin-top:30px;border-top:1px solid #cfc8bd;width:240px;padding-top:7px"><b>{{ nomeCarta }}</b></div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    screen: 'geral', dark: false,
+    nome: 'Camila Duarte', cpf: '',
+    f: { salario:'4.600', extra:'600', outras:'', moradia:'1.150', contas:'380', transporte:'320', saude:'240', educacao:'', assinaturas:'110', outrasfixas:'', mercado:'620', lazer:'250', vestuario:'130', imprevistos:'100', outrasvar:'50', reserva:'1.800', fgts:'8.500' },
+    debts: [
+      { credor:'Nubank', tipo:'Cartão de crédito', saldo:3900, taxa:12.0, parcela:520, restantes:18 },
+      { credor:'Itaú', tipo:'Cheque especial', saldo:1600, taxa:8.0, parcela:300, restantes:8 },
+      { credor:'Losango', tipo:'CDC (Crédito Direto ao Consumidor)', saldo:7200, taxa:2.9, parcela:420, restantes:22 },
+      { credor:'BMG', tipo:'Consignado', saldo:9400, taxa:1.7, parcela:380, restantes:30 },
+    ],
+    novo: { credor:'', tipo:'CDC (Crédito Direto ao Consumidor)', saldo:'', taxa:'', parcela:'', restantes:'' },
+    editIdx: -1,
+    extra: '210', alvo: '1,8',
+    iaRun: false, iaLoading: false,
+    contratoRun: false,
+    carta: { credor:'Nubank', tipo:'Quitação à vista com desconto', contrato:'', valor:'', banco:'', taxa:'' },
+  };
+
+  TIPOS = ['CDC (Crédito Direto ao Consumidor)','Consignado','Cartão de crédito','Cheque especial','Financiamento','Empréstimo pessoal','Outro'];
+  TIPOS_PROP = ['Quitação à vista com desconto','Portabilidade / contraproposta','Redução de taxa / renegociação'];
+
+  parse(s){ if(s===undefined||s===null) return 0; const n=parseFloat(String(s).replace(/\./g,'').replace(',','.')); return isNaN(n)?0:n; }
+  brl(n){ return 'R$ '+Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  brl0(n){ return 'R$ '+Math.round(n).toLocaleString('pt-BR'); }
+  pct1(n){ return (n*100).toFixed(1).replace('.',',')+'%'; }
+  taxaFmt(n){ return n.toFixed(1).replace('.',',')+'%'; }
+
+  cor(taxa){ if(taxa>=8) return {bg:'#fff0ef',fg:'#fa5252'}; if(taxa>=2.5) return {bg:'#fff4e6',fg:'#e8890c'}; return {bg:'#eafaf1',fg:'#12b886'}; }
+  ini(tipo){ const m={'Cartão de crédito':'CC','Cheque especial':'CE','CDC (Crédito Direto ao Consumidor)':'CD','Consignado':'CG','Financiamento':'FI','Empréstimo pessoal':'EP','Outro':'OU'}; return m[tipo]||tipo.slice(0,2).toUpperCase(); }
+
+  go(s){ return () => this.setState({ screen:s, iaLoading:false }); }
+
+  componentDidMount(){ try{ if(localStorage.getItem('hf_dark')==='1') this.setState({dark:true}); }catch(e){} }
+  toggleDark(){ this.setState(s=>{ const d=!s.dark; try{ localStorage.setItem('hf_dark', d?'1':'0'); }catch(e){} return {dark:d}; }); }
+
+  addDivida(){
+    const n=this.state.novo; const credor=(n.credor||'').trim();
+    if(!credor){ return; }
+    const d={ credor, tipo:n.tipo, saldo:this.parse(n.saldo), taxa:this.parse(n.taxa), parcela:this.parse(n.parcela), restantes:Math.round(this.parse(n.restantes)) };
+    this.setState(st=>({ debts:[...st.debts, d], novo:{ credor:'', tipo:'CDC (Crédito Direto ao Consumidor)', saldo:'', taxa:'', parcela:'', restantes:'' }, editIdx:-1 }));
+  }
+  editDivida(i){ return () => { const d=this.state.debts[i]; this.setState(st=>({ novo:{ credor:d.credor, tipo:d.tipo, saldo:String(d.saldo).replace('.',','), taxa:String(d.taxa).replace('.',','), parcela:String(d.parcela).replace('.',','), restantes:String(d.restantes) }, debts:st.debts.filter((_,j)=>j!==i), editIdx:i })); }; }
+  removeDivida(i){ return () => this.setState(st=>({ debts:st.debts.filter((_,j)=>j!==i) })); }
+
+  gerarIA(){ if(this.state.iaLoading) return; this.setState({ iaLoading:true }); setTimeout(()=>this.setState({ iaLoading:false, iaRun:true }), 1500); }
+
+  // Porta de core/calculos.parcela_price (PMT do sistema Price, numericamente estável).
+  parcelaPrice(pv, i, n){ if(n<=0) return 0; if(i===0) return pv/n; const fator=-Math.expm1(-n*Math.log1p(i)); return pv*(i/fator); }
+
+  // Porta fiel de core/estrategias.simular_quitacao: roda o filme mês a mês.
+  simular(extra, metodo){
+    const ds = this.state.debts.map(d=>({saldo:d.saldo, taxa:d.taxa/100, parcela:d.parcela, tipo:d.tipo}));
+    if(!ds.length) return {meses:0, juros:0, quitavel:true, primeira:0, alvo:''};
+    const ord = arr => metodo==='avalanche' ? [...arr].sort((a,b)=>b.taxa-a.taxa) : [...arr].sort((a,b)=>a.saldo-b.saldo);
+    const alvo = ord(ds)[0].tipo;
+    let juros=0, meses=0, primeira=null, zeradasPrev=0; const MAX=600;
+    while(ds.some(d=>d.saldo>0.005)){
+      meses++;
+      if(meses>MAX) return {meses:null, juros:Math.round(juros), quitavel:false, primeira, alvo};
+      for(const d of ds){ if(d.saldo>0){ const j=d.saldo*d.taxa; juros+=j; d.saldo+=j; } }
+      let orc = ds.filter(d=>d.saldo>0).reduce((a,d)=>a+d.parcela,0) + extra;
+      for(const d of ds.filter(d=>d.saldo>0)){ const pg=Math.min(d.parcela,d.saldo); d.saldo-=pg; orc-=pg; }
+      for(const d of ord(ds.filter(x=>x.saldo>0))){ if(orc<=0) break; const ab=Math.min(orc,d.saldo); d.saldo-=ab; orc-=ab; }
+      const zeradas = ds.filter(d=>d.saldo<=0.005).length;
+      if(primeira===null && zeradas>zeradasPrev) primeira=meses;
+      zeradasPrev=zeradas;
+    }
+    return {meses, juros:Math.round(juros), quitavel:true, primeira:primeira||meses, alvo};
+  }
+
+  renderVals(){
+    const S=this.state, f=S.f;
+    // budget totals
+    const rendaKeys=['salario','extra','outras'], fixKeys=['moradia','contas','transporte','saude','educacao','assinaturas','outrasfixas'], varKeys=['mercado','lazer','vestuario','imprevistos','outrasvar'];
+    const sum=ks=>ks.reduce((a,k)=>a+this.parse(f[k]),0);
+    const renda=sum(rendaKeys), fixas=sum(fixKeys), variaveis=sum(varKeys);
+    const despesas=fixas+variaveis;
+    const parcelas=S.debts.reduce((a,d)=>a+d.parcela,0);
+    const saldo=S.debts.reduce((a,d)=>a+d.saldo,0);
+    const jurosFut=S.debts.reduce((a,d)=>a+Math.max(d.parcela*d.restantes-d.saldo,0),0);
+    const taxaMedia = saldo>0 ? S.debts.reduce((a,d)=>a+d.taxa*d.saldo,0)/saldo : 0; // ponderada pelo saldo
+    const custoTotal = S.debts.reduce((a,d)=>a+d.parcela*d.restantes,0);
+    const fluxo=renda-despesas-parcelas;
+    const comp=renda>0?parcelas/renda:0;
+    const reservaN=this.parse(f.reserva);
+    const meses=despesas>0?reservaN/despesas:null;
+
+    // health
+    let health;
+    if(comp<=0.30) health={label:'Saudável',color:'#0e9f6e',pill:'ok',frase:'As parcelas cabem no orçamento com folga.'};
+    else if(comp<=0.50) health={label:'Atenção',color:'#e8890c',pill:'warn',frase:'As parcelas já pesam, mas dá pra virar o jogo.'};
+    else health={label:'Crítico',color:'#e03131',pill:'bad',frase:'As parcelas consomem grande parte da renda.'};
+
+    const ringPct=(comp*100).toFixed(1);
+    const ringBg=`conic-gradient(${health.color} 0 ${ringPct}%, ${S.dark?'#2b2740':'#efeaf6'} ${ringPct}% 100%)`;
+
+    // Distribuição da renda (barra ao vivo do Perfil).
+    const denomA=Math.max(renda, fixas+variaveis+parcelas, 1);
+    const wpct=v=>(Math.max(v,0)/denomA*100).toFixed(2)+'%';
+    const opct=v=>renda>0?Math.round(v/renda*100)+'%':'0%';
+    const alloc={
+      allocFixW:wpct(fixas), allocVarW:wpct(variaveis), allocParcW:wpct(parcelas), allocSobW:fluxo>0?wpct(fluxo):'0%',
+      allocFixPct:opct(fixas), allocVarPct:opct(variaveis), allocParcPct:opct(parcelas), allocSobPct:fluxo>0?opct(fluxo):'0%',
+    };
+
+    // ranking
+    const ranked=[...S.debts].map((d,i)=>({d,i})).sort((a,b)=>b.d.taxa-a.d.taxa);
+    const ranking=ranked.map(({d,i},pos)=>{ const c=this.cor(d.taxa); return {
+      credor:d.credor, tipo:d.tipo, ini:this.ini(d.tipo), bg:c.bg, fg:c.fg,
+      saldoFmt:this.brl0(d.saldo), parcelaFmt:this.brl0(d.parcela), taxaFmt:this.taxaFmt(d.taxa),
+      restLabel:`${d.restantes} parcelas`, top:pos===0, onEdit:this.editDivida(i), onRemove:this.removeDivida(i),
+      share:(saldo>0?(d.saldo/saldo*100):0).toFixed(1)+'%', sharePct:(saldo>0?Math.round(d.saldo/saldo*100):0)+'%',
+    };});
+
+    // estratégias dinâmicas (simulação real sobre as dívidas atuais)
+    const extraN=this.parse(S.extra);
+    const av=this.simular(extraN,'avalanche'), sn=this.simular(extraN,'bola_de_neve');
+    const mFmt=m=>m===null?'não quita':`${m} ${m===1?'mês':'meses'}`;
+    const economia=(av.quitavel&&sn.quitavel)?Math.max(sn.juros-av.juros,0):0;
+    const avAlvoLabel = ranking.length?`${ranking[0].tipo} · ${ranking[0].taxaFmt} a.m.`:'—';
+    const snAlvoDeb = [...S.debts].sort((a,b)=>a.saldo-b.saldo)[0];
+    const snAlvoLabel = snAlvoDeb?snAlvoDeb.tipo:'—';
+    const strat={
+      avMeses:mFmt(av.meses), avJuros:av.quitavel?this.brl0(av.juros):'—', avEcon:this.brl0(economia), avEconNeg:economia>0?'−'+this.brl0(economia):'R$ 0',
+      snMeses:mFmt(sn.meses), snJuros:sn.quitavel?this.brl0(sn.juros):'—', snPrim:sn.quitavel?mFmt(sn.primeira):'—',
+      avAlvoLabel, snAlvoLabel,
+      avQuitavel:av.quitavel, semEconomia:economia<=0,
+    };
+
+    // portabilidade dinâmica (porta de core.simular_portabilidade / oportunidades_portabilidade)
+    const alvoDec=this.parse(S.alvo)/100;
+    const portab=S.debts.map(d=>{
+      const iA=d.taxa/100, n=d.restantes;
+      if(!(iA>alvoDec) || n<=0) return null;
+      const pa=this.parcelaPrice(d.saldo,iA,n), pn=this.parcelaPrice(d.saldo,alvoDec,n);
+      const em=pa-pn; if(em<=0.005) return null;
+      const et=em*n; const c=this.cor(d.taxa);
+      return { credor:d.credor, tipo:d.tipo, ini:this.ini(d.tipo), bg:c.bg, fg:c.fg,
+        taxaAtual:this.taxaFmt(d.taxa), nRest:`${n} parcelas`,
+        parcelaAtual:this.brl0(pa), parcelaNova:this.brl0(pn),
+        economiaMensal:this.brl0(em), economiaTotal:this.brl0(et), _et:et };
+    }).filter(Boolean).sort((a,b)=>b._et-a._et);
+    const portabTotal=this.brl0(portab.reduce((a,p)=>a+p._et,0));
+    const alvoFmt=this.taxaFmt(this.parse(S.alvo));
+
+    // Narrativa da análise sênior gerada a partir dos números reais (o LLM só
+    // interpretaria; aqui montamos o texto determinístico com os dados vivos).
+    const fgtsN=this.parse(f.fgts), fgtsFmt=this.brl0(fgtsN);
+    const nome1=(S.nome.trim().split(' ')[0])||'Você';
+    const d0=ranking[0];
+    const iaParas=[];
+    iaParas.push(`${nome1}, sua saúde financeira está classificada como ${health.label}. ${health.frase}`
+      + (d0?` O que mais pesa é ${d0.tipo.toLowerCase()} do ${d0.credor}, a ${d0.taxaFmt} a.m. — a dívida mais cara e a que mais cresce a cada mês.`:''));
+    if(fluxo>0)
+      iaParas.push(`A vantagem real é que sobra ${this.brl0(fluxo)} de caixa por mês. Direcionando essa folga pela estratégia avalanche, o plano fecha em ${strat.avMeses} e custa ${strat.avEcon} a menos em juros do que a bola de neve — por isso ela é a recomendada.`);
+    else
+      iaParas.push(`Antes de acelerar a quitação, é preciso gerar sobra no mês: hoje o fluxo de caixa está em ${this.brl0(fluxo)}. Cortar despesas ou aumentar a renda vem primeiro — sem folga, nenhuma estratégia de quitação avança.`);
+    const alav=[];
+    if(portab.length) alav.push(`vale pedir portabilidade das dívidas acima de ${alvoFmt} a.m., com economia potencial de até ${portabTotal}`);
+    if(meses!==null && meses<3) alav.push(`reforce a reserva de emergência (hoje cobre ${meses.toFixed(1).replace('.',',')} mês(es)) até cobrir cerca de 3 meses de despesas`);
+    if(fgtsN>0) alav.push(`há ${fgtsFmt} de FGTS que, se fizer sentido, pode antecipar parte do plano`);
+    if(alav.length){ const c=alav[0].charAt(0).toUpperCase()+alav[0].slice(1); iaParas.push(c + (alav.length>1?'; '+alav.slice(1).join('; '):'') + '.'); }
+
+    // field views
+    const labels={ salario:'Salário / benefício líquido', extra:'Renda extra ou autônoma', outras:'Outras rendas (aluguel, pensão)', moradia:'Moradia (aluguel, condomínio)', contas:'Contas da casa (luz, água, internet)', transporte:'Transporte', saude:'Saúde (plano, remédios contínuos)', educacao:'Educação', assinaturas:'Assinaturas e academia', outrasfixas:'Outras despesas fixas', mercado:'Mercado e alimentação', lazer:'Lazer e delivery', vestuario:'Vestuário e cuidados pessoais', imprevistos:'Imprevistos', outrasvar:'Outras despesas variáveis' };
+    const inF={}; Object.keys(f).forEach(k=>{ inF[k]=e=>this.setState(st=>({f:{...st.f,[k]:e.target.value}})); });
+    const view=ks=>ks.map(k=>({label:labels[k], value:f[k], on:inF[k]}));
+
+    // novo handlers
+    const inN={}; ['credor','tipo','saldo','taxa','parcela','restantes'].forEach(k=>{ inN[k]=e=>this.setState(st=>({novo:{...st.novo,[k]:e.target.value}})); });
+    // carta handlers
+    const inC={}; ['credor','tipo','contrato','valor','banco','taxa'].forEach(k=>{ inC[k]=e=>this.setState(st=>({carta:{...st.carta,[k]:e.target.value}})); });
+
+    // reserva label
+    let reservaLabel, reservaCor;
+    if(meses===null){ reservaLabel='—'; reservaCor='#8a8394'; }
+    else { reservaLabel=meses.toFixed(1).replace('.',',')+' mês(es)'; reservaCor = meses>=3?'#0e9f6e':meses>=1?'#e8890c':'#e03131'; }
+
+    // fluxo
+    const fluxoCor = fluxo>0?'#0e9f6e':fluxo===0?'#e8890c':'#e03131';
+    const fluxoMsg = fluxo>0?'sobra no mês':fluxo===0?'no limite':'déficit no mês';
+    const fluxoFrase = fluxo>0?`ainda sobram ${this.brl0(fluxo)} por mês.`:`já falta caixa (${this.brl0(fluxo)} no mês).`;
+    const folgaFrase = fluxo>0 && fluxo<400 ? 'pouca folga' : fluxo>=400 ? 'uma folga que dá pra usar a favor' : 'um alerta';
+
+    // carta preview
+    const nomeCarta = S.nome.trim()||'[seu nome]';
+    const cpfCarta = S.cpf.trim()?`, CPF ${S.cpf.trim()}`:'';
+    const contratoCarta = S.carta.contrato.trim()?` nº ${S.carta.contrato.trim()}`:'';
+    const tipoMap={ 'Quitação à vista com desconto':{curto:'quitação',texto:'quitação à vista com desconto'}, 'Portabilidade / contraproposta':{curto:'portabilidade',texto:'portabilidade da dívida / contraproposta'}, 'Redução de taxa / renegociação':{curto:'renegociação',texto:'redução de taxa e renegociação das condições'} };
+    const tp=tipoMap[S.carta.tipo]||tipoMap['Quitação à vista com desconto'];
+    let corpo;
+    const valorTxt=S.carta.valor.trim()?this.brl(this.parse(S.carta.valor)):'[valor a definir]';
+    if(S.carta.tipo.startsWith('Quitação')) corpo=`Proponho a quitação integral e imediata do saldo devedor mediante pagamento à vista no valor de ${valorTxt}, com a consequente baixa do débito e liberação de eventuais garantias.`;
+    else if(S.carta.tipo.startsWith('Portabilidade')) corpo=`Recebi proposta de portabilidade do banco ${S.carta.banco.trim()||'[concorrente]'} à taxa de ${S.carta.taxa.trim()||'[taxa]'}% ao mês. Solicito que esta instituição apresente contraproposta com taxa igual ou inferior para que eu mantenha o contrato.`;
+    else corpo=`Solicito a redução da taxa de juros e a repactuação das parcelas de forma compatível com a minha capacidade de pagamento atual, evitando a inadimplência e preservando a relação com esta instituição.`;
+
+    const iaMode=S.screen==='analise';
+
+    return {
+      nome:S.nome, cpf:S.cpf, iniciais:(S.nome.trim()[0]||'?').toUpperCase()+((S.nome.trim().split(' ')[1]||' ')[0]||'').toUpperCase(),
+      primeiroNome:S.nome.trim().split(' ')[0]||'você',
+      setNome:e=>this.setState({nome:e.target.value}), setCpf:e=>this.setState({cpf:e.target.value}),
+      nav:{ geral:this.go('geral'), perfil:this.go('perfil'), dividas:this.go('dividas'), contrato:this.go('contrato'), analise:this.go('analise'), carta:this.go('carta') },
+      act:{ geral:S.screen==='geral'?'on':'', perfil:S.screen==='perfil'?'on':'', dividas:S.screen==='dividas'?'on':'', contrato:S.screen==='contrato'?'on':'', analise:S.screen==='analise'?'on':'', carta:S.screen==='carta'?'on':'' },
+      isGeral:S.screen==='geral', isPerfil:S.screen==='perfil', isDividas:S.screen==='dividas', isContrato:S.screen==='contrato', isAnalise:S.screen==='analise', isCarta:S.screen==='carta',
+      health, compPct:this.pct1(comp), ringBg,
+      rendaFmt:this.brl0(renda), fixasFmt:this.brl0(fixas), varFmt:this.brl0(variaveis), despesasFmt:this.brl0(despesas),
+      parcelasFmt:this.brl0(parcelas), saldoFmt:this.brl0(saldo), jurosFmt:this.brl0(jurosFut),
+      fluxoFmt:this.brl0(fluxo), fluxoCor, fluxoMsg, fluxoFrase, folgaFrase,
+      nDividas:S.debts.length, temDividas:S.debts.length>0, semDividas:S.debts.length===0,
+      taxaMediaFmt:this.taxaFmt(taxaMedia), custoTotalFmt:this.brl0(custoTotal),
+      ranking, extraFmt:this.brl0(this.parse(S.extra)), ...strat,
+      portab, portabTotal, alvoFmt, temPortab:portab.length>0, semPortab:portab.length===0,
+      iaParas, ...alloc,
+      rendaView:view(rendaKeys), fixasView:view(fixKeys), varView:view(varKeys), f, inF,
+      reservaLabel, reservaCor,
+      novo:S.novo, inN, addDivida:()=>this.addDivida(), tiposDivida:this.TIPOS,
+      formTitulo:S.editIdx>=0?'Editar dívida':'Adicionar dívida', formBtn:S.editIdx>=0?'Salvar dívida':'+ Adicionar dívida',
+      extra:S.extra, alvo:S.alvo, setExtra:e=>this.setState({extra:e.target.value}), setAlvo:e=>this.setState({alvo:e.target.value}),
+      analisar:()=>this.setState({screen:'analise'}),
+      gerarIA:()=>this.gerarIA(), iaRun:S.iaRun, iaLoading:S.iaLoading, iaIdleBtn:!S.iaLoading,
+      contratoRun:S.contratoRun, contratoIdle:!S.contratoRun, extrairContrato:()=>this.setState({contratoRun:true}),
+      carta:S.carta, inC, credores:S.debts.map(d=>d.credor), tiposProposta:this.TIPOS_PROP,
+      isQuit:S.carta.tipo.startsWith('Quitação'), isPort:S.carta.tipo.startsWith('Portabilidade'), isRed:S.carta.tipo.startsWith('Redução'),
+      tipoQuit:{on:()=>this.setState(st=>({carta:{...st.carta,tipo:this.TIPOS_PROP[0]}})), cls:S.carta.tipo.startsWith('Quitação')?'on':''},
+      tipoPort:{on:()=>this.setState(st=>({carta:{...st.carta,tipo:this.TIPOS_PROP[1]}})), cls:S.carta.tipo.startsWith('Portabilidade')?'on':''},
+      tipoRed:{on:()=>this.setState(st=>({carta:{...st.carta,tipo:this.TIPOS_PROP[2]}})), cls:S.carta.tipo.startsWith('Redução')?'on':''},
+      nomeCarta, cpfCarta, contratoCarta, cartaTipoCurto:tp.curto, cartaTipoTexto:tp.texto, cartaCorpo:corpo,
+      nada:()=>{},
+      darkCls:S.dark?'dark':'', dark:S.dark, darkOn:S.dark, darkOff:!S.dark, toggleDark:()=>this.toggleDark(),
+    };
+  }
+}
+</script>
+</body>
+</html>

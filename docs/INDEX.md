@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0008) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0009) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
@@ -46,7 +46,15 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   contextual, edição por duplo clique/Enter/Delete e lista zebrada. Ata
   ampliada para congelar todo o código de primeira parte + o harness (104
   testes offline, cobertura 95,4%) e o `.exe` rebuild (93,8 MB).
-- **Mudanças exigem nova ADR + incremento de versão + nova ata.**
+- **Ciclo v2.3 ABERTO (ADR-0009):** redesign hi-fi "Clareza" migrando a GUI de
+  `tkinter` para **Electron + React/TypeScript**, com o núcleo Python
+  preservado como **sidecar** (FONTE DA VERDADE — sem cálculo em TS). Migração
+  **paralela/incremental** (`gui_web/` ao lado de `gui/`; troca de entrypoint só
+  na paridade das 6 telas). DEC-2 refinada para "offline por padrão,
+  conectividade opt-in". Milestones M7..M10; nova ata `FREEZE.md` v2.3.0 no
+  fechamento.
+- **Mudanças nos artefatos congelados (v2.2.0) exigem nova ADR + incremento de
+  versão + nova ata.**
 
 ## Rodar
 ```bash
