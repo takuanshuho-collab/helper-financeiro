@@ -5,7 +5,12 @@
  * tipados e erros tipados. `HfErro.indisponivel` distingue "sidecar fora do ar
  * / fora do Electron" de um erro devolvido pelo backend.
  */
-import type { DiagnosticoOut, PerfilIn, SaudeOut } from './contract'
+import type {
+  DiagnosticoOut,
+  EstrategiasOut,
+  PerfilIn,
+  SaudeOut,
+} from './contract'
 
 export class HfErro extends Error {
   constructor(
@@ -38,4 +43,6 @@ export const hf = {
   saude: (): Promise<SaudeOut> => chamar('/health'),
   diagnostico: (perfil: PerfilIn): Promise<DiagnosticoOut> =>
     chamar('/diagnostico', perfil),
+  estrategias: (perfil: PerfilIn, extra = 0): Promise<EstrategiasOut> =>
+    chamar('/estrategias', { perfil, extra }),
 }

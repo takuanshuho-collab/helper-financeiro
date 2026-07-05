@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
-import { hf } from './hf/client'
-import type { DiagnosticoOut, Estado, PerfilIn } from './hf/contract'
+import type { PerfilIn } from './hf/contract'
+import { useAnalise } from './hf/useAnalise'
+import EmConstrucao from './screens/EmConstrucao'
+import VisaoGeral from './screens/VisaoGeral'
 
-// As 6 telas do redesign "Clareza" (REQ-F-010..016). No M7 são placeholders;
-// M8/M9 constroem cada uma consumindo o sidecar.
+// As 6 telas do redesign "Clareza" (REQ-F-010..016).
 const ABAS = [
   'Visão geral',
   'Perfil',
@@ -14,47 +15,47 @@ const ABAS = [
   'Carta ao credor',
 ] as const
 
-// Perfil de exemplo — só para provar a ponte com o sidecar no andaime.
-const PERFIL_EXEMPLO: PerfilIn = {
+// Perfil semente (M8): dados de exemplo enquanto as telas Perfil (T-803) e
+// Dívidas (T-804) ainda não editam este estado. Vira "Atenção" para mostrar o
+// diagnóstico colorido.
+const PERFIL_SEED: PerfilIn = {
   renda: { salario_liquido: 5000 },
-  fixas: { moradia: 1500, contas_casa: 500 },
+  fixas: { moradia: 1400, contas_casa: 500, transporte: 300 },
   variaveis: { mercado: 800 },
-  reserva_emergencia: 6000,
+  reserva_emergencia: 3000,
+  saldo_fgts: 3000,
   dividas: [
     {
-      credor: 'Banco X',
+      credor: 'Cartão Banco A',
       tipo: 'Cartão de crédito',
-      saldo_devedor: 10000,
-      taxa_mensal: 0.09,
-      parcela: 1200,
+      saldo_devedor: 8000,
+      taxa_mensal: 0.12,
+      parcela: 900,
       parcelas_restantes: 12,
+    },
+    {
+      credor: 'CDC Veículo',
+      tipo: 'CDC (Crédito Direto ao Consumidor)',
+      saldo_devedor: 20000,
+      taxa_mensal: 0.025,
+      parcela: 700,
+      parcelas_restantes: 36,
+    },
+    {
+      credor: 'Consignado',
+      tipo: 'Consignado',
+      saldo_devedor: 6000,
+      taxa_mensal: 0.018,
+      parcela: 350,
+      parcelas_restantes: 20,
     },
   ],
 }
 
-const ROTULO_ESTADO: Record<Estado<unknown>['fase'], string> = {
-  ocioso: 'ocioso',
-  carregando: 'conectando…',
-  ok: 'conectado ao sidecar',
-  erro: 'sem conexão',
-}
-
 export default function App() {
   const [abaAtiva, setAbaAtiva] = useState(0)
-  const [estado, setEstado] = useState<Estado<DiagnosticoOut>>({
-    fase: 'carregando',
-  })
-
-  useEffect(() => {
-    hf.saude()
-      .then(() => hf.diagnostico(PERFIL_EXEMPLO))
-      .then((dados) => setEstado({ fase: 'ok', dados }))
-      .catch((e: Error) => setEstado({ fase: 'erro', erro: e.message }))
-  }, [])
-
-  const diag = estado.fase === 'ok' ? estado.dados : null
-  const textoStatus =
-    estado.fase === 'erro' ? `erro: ${estado.erro}` : ROTULO_ESTADO[estado.fase]
+  const [perfil] = useState<PerfilIn>(PERFIL_SEED)
+  const analise = useAnalise(perfil)
 
   return (
     <div className="app">
@@ -80,47 +81,12 @@ export default function App() {
       </header>
 
       <main className="conteudo">
-        <h1 className="titulo">{ABAS[abaAtiva]}</h1>
-        <p className="sub">Andaime do redesign "Clareza" (ADR-0009) — M7.</p>
-
-        <section className="card">
-          <div className="card-rotulo">Ponte com o núcleo (sidecar)</div>
-          <div className={`status status-${estado.fase === 'ok' ? 'ok' : 'wait'}`}>
-            {textoStatus}
-          </div>
-          {diag && (
-            <div className="metricas">
-              <Metrica titulo="Classificação" valor={diag.classificacao} />
-              <Metrica
-                titulo="Comprometimento"
-                valor={`${(diag.comprometimento_renda * 100).toFixed(0)}%`}
-              />
-              <Metrica titulo="Fluxo de caixa" valor={brl(diag.fluxo_caixa)} />
-              <Metrica
-                titulo="Cobertura da reserva"
-                valor={
-                  diag.meses_reserva == null
-                    ? '—'
-                    : `${diag.meses_reserva.toFixed(1)} meses`
-                }
-              />
-            </div>
-          )}
-        </section>
+        {abaAtiva === 0 ? (
+          <VisaoGeral analise={analise} />
+        ) : (
+          <EmConstrucao titulo={ABAS[abaAtiva]} />
+        )}
       </main>
     </div>
   )
-}
-
-function Metrica({ titulo, valor }: { titulo: string; valor: string }) {
-  return (
-    <div className="metrica">
-      <div className="metrica-titulo">{titulo}</div>
-      <div className="metrica-valor">{valor}</div>
-    </div>
-  )
-}
-
-function brl(v: number): string {
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }

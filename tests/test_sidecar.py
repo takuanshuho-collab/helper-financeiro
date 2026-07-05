@@ -144,3 +144,47 @@ def test_ranking_ordena_por_taxa():
     # Avalanche: a mais cara (0,12) vem primeiro.
     assert dados["divida_mais_cara"]["credor"] == "Cartão"
     assert [d["credor"] for d in dados["ranking"]] == ["Cartão", "Consignado"]
+
+
+# --- Estratégias (avalanche vs. bola de neve) --------------------------------
+
+
+def test_estrategias_sem_token_401():
+    resposta = cliente.post("/estrategias", json={"perfil": {}})
+    assert resposta.status_code == 401
+
+
+def test_estrategias_compara_metodos():
+    payload = {
+        "perfil": {
+            "renda": {"salario_liquido": 5000.0},
+            "dividas": [
+                {
+                    "credor": "Cartão",
+                    "tipo": "Cartão de crédito",
+                    "saldo_devedor": 3000.0,
+                    "taxa_mensal": 0.12,
+                    "parcela": 600.0,
+                    "parcelas_restantes": 8,
+                },
+                {
+                    "credor": "Consignado",
+                    "tipo": "Consignado",
+                    "saldo_devedor": 5000.0,
+                    "taxa_mensal": 0.018,
+                    "parcela": 300.0,
+                    "parcelas_restantes": 20,
+                },
+            ],
+        },
+        "extra": 200.0,
+    }
+    resposta = cliente.post("/estrategias", json=payload, headers=CABECALHO)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+
+    assert set(dados) == {"avalanche", "bola_de_neve"}
+    # Avalanche ataca a mais cara primeiro (Cartão, 12% a.m.).
+    assert dados["avalanche"]["ordem"][0] == "Cartão"
+    assert dados["avalanche"]["quitavel"] is True
+    assert dados["avalanche"]["meses"] is not None

@@ -140,8 +140,8 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-801 | Shell global (topbar + nav das 6 abas + alternância de tema) e roteamento de telas | REQ-F-010 | M7 | ⬜ |
-| T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar) | REQ-F-011 | T-801 | ⬜ |
+| T-801 | Shell global (topbar + nav das 6 abas) e roteamento de telas; tema segue o SO (toggle no T-904) | REQ-F-010 | M7 | ✅ |
+| T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar, `/estrategias`) | REQ-F-011 | T-801 | 🟨 |
 | T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-012 | T-801 | ⬜ |
 | T-804 | Tela **Dívidas**: lista ordenada + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-013 | T-801 | ⬜ |
 
@@ -182,11 +182,11 @@ sidecar FastAPI (`/health`, `/diagnostico`, loopback + token, validado por
 `tests/test_sidecar.py` + smoke real) e o front `gui_web/` (Electron+Vite+React
 +TS, *secure defaults*, ponte `window.hf`) — **launch real confirmado pelo
 mantenedor** (a janela conecta ao sidecar e exibe o diagnóstico do `core`).
-**M7 (fundação da GUI web) FECHADO** — T-701..T-707 concluídas: SPEC v2.3 +
-governança sincronizada; sidecar FastAPI (loopback + token) com 8 testes de
-contrato; front `gui_web/` (Electron+Vite+React+TS) com *secure defaults*, ponte
-tipada `window.hf`, tema "Clareza" (Plus Jakarta Sans local + tokens completos)
-e CI `gate-front` (lint + typecheck + build). Launch real confirmado pelo
-mantenedor. Próximo passo: **M8** — construir as telas 1–3 (Visão geral com anel
-`conic-gradient`, Perfil/orçamento, Dívidas) sobre o esqueleto, consumindo o
-sidecar. Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
+**M7 fechado; M8 em andamento.** T-801 ✅ (shell + roteamento) e T-802 🟨
+(tela **Visão geral**: hero + anel `conic-gradient` de comprometimento, 4
+métricas, lista de dívidas ordenada por taxa com chip colorido por faixa e
+estratégias avalanche/bola de neve — endpoint `/estrategias` no sidecar).
+Build/lint/typecheck verdes e 114 testes Python passando; **aguardando
+confirmação visual** (`npm start`). Próximo: **T-803** (Perfil/orçamento
+editável, que passa a alimentar o dashboard no lugar do perfil semente) e
+**T-804** (Dívidas/CRUD). Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).

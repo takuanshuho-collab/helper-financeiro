@@ -85,6 +85,18 @@ export interface DiagnosticoOut {
   meses_reserva: number | null
 }
 
+export interface EstrategiaOut {
+  meses: number | null
+  juros_pagos: number
+  quitavel: boolean
+  ordem: string[]
+}
+
+export interface EstrategiasOut {
+  avalanche: EstrategiaOut
+  bola_de_neve: EstrategiaOut
+}
+
 export interface SaudeOut {
   status: string
   servico: string

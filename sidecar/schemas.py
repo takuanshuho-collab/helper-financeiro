@@ -56,3 +56,10 @@ class PerfilIn(BaseModel):
     reserva_emergencia: float = 0.0
     saldo_fgts: float = 0.0
     dividas: list[DividaIn] = Field(default_factory=list)
+
+
+class EstrategiasIn(BaseModel):
+    """Perfil + pagamento extra mensal para simular a quitação."""
+
+    perfil: PerfilIn
+    extra: float = 0.0

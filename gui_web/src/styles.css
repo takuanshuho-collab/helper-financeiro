@@ -26,6 +26,7 @@
   --divisor: #f1ece3;
   --input-bg: #fbfaf6;
   --focus: #8a7cf0;
+  --trilha: #efeae0;
 
   /* Chrome de navegação — claro */
   --nav-on-bg: #efecfe;
@@ -78,11 +79,15 @@
     --border-input: #332c48;
     --divisor: #2a2540;
     --input-bg: #191622;
+    --trilha: #2a2540;
     --nav-on-bg: #2c2547;
     --nav-on-text: #c3b8fb;
     --nav-hover-bg: #241f36;
     --sh-card: 0 10px 26px -20px rgba(0, 0, 0, 0.55);
     --sh-hover: 0 8px 20px -14px rgba(0, 0, 0, 0.6);
+    --tint-green: #16281f;
+    --tint-orange: #2b2013;
+    --tint-red: #2a181a;
     color-scheme: dark;
   }
 }
@@ -269,8 +274,314 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 720px) {
-  .metricas {
+/* ---- Cabeçalho de tela + pill de status ---- */
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pill {
+  border: 1px solid;
+  border-radius: var(--r-pill);
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---- Hero ---- */
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 250px;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.hero-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.hero-label {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  margin: 6px 0 10px;
+}
+
+.hero-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-soft);
+  max-width: 52ch;
+}
+
+.hero-desc strong {
+  color: var(--text);
+}
+
+/* ---- Anel de comprometimento (conic-gradient) ---- */
+.anel-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.anel {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.anel-centro {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.anel-num {
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.anel-cap {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---- 4 métricas ---- */
+.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.mcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 16px 18px;
+  box-shadow: var(--sh-card);
+}
+
+.mchip {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-chip);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+}
+
+.mrotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.mvalor {
+  font-size: 23px;
+  font-weight: 800;
+  margin: 4px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mnota {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+/* ---- Duas colunas: dívidas + estratégia ---- */
+.cols {
+  display: grid;
+  grid-template-columns: 1.12fr 1fr;
+  gap: 16px;
+}
+
+.card-titulo {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  margin-bottom: 14px;
+}
+
+.lista-div {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ldiv {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--divisor);
+}
+
+.ldiv:last-child {
+  border-bottom: 0;
+}
+
+.ldiv-chip {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-chip);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.ldiv-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ldiv-tipo {
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selo-cara {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--red);
+  background: var(--tint-red);
+  border-radius: 7px;
+  padding: 2px 6px;
+}
+
+.ldiv-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.ldiv-num {
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+.ldiv-saldo {
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ldiv-taxa {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---- Estratégias ---- */
+.estrats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scard {
+  border: 1px solid var(--border);
+  border-radius: var(--r-tile);
+  padding: 14px 16px;
+}
+
+.scard-win {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+  background: var(--tint-green);
+}
+
+.scard-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.scard-nome {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.scard-selo {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--green-2);
+  background: var(--surface);
+  border-radius: 7px;
+  padding: 2px 7px;
+}
+
+.scard-meses {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.scard-juros {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ---- Placeholder / erro ---- */
+.placeholder {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.placeholder-emoji {
+  font-size: 32px;
+}
+
+.aviso-erro {
+  background: var(--tint-red);
+  color: var(--red-2);
+  border: 1px solid var(--red);
+  border-radius: var(--r-tile);
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .cols {
+    grid-template-columns: 1fr;
+  }
+
+  .grid4 {
     grid-template-columns: repeat(2, 1fr);
   }
 }

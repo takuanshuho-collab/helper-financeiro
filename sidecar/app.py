@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI
 
 from core.diagnostico import resumo_diagnostico
+from core.estrategias import comparar_estrategias
 from core.models import (
     ComposicaoRenda,
     DespesasFixas,
@@ -18,7 +19,7 @@ from core.models import (
     PerfilFinanceiro,
 )
 
-from .schemas import DividaIn, PerfilIn
+from .schemas import DividaIn, EstrategiasIn, PerfilIn
 from .security import exigir_token
 
 app = FastAPI(title="Helper Financeiro — sidecar", version="2.3.0")
@@ -86,3 +87,10 @@ def diagnostico(perfil_in: PerfilIn) -> dict:
     resposta["ranking"] = [_divida_dict(d) for d in resumo["ranking"]]
     resposta["meses_reserva"] = perfil.meses_reserva
     return resposta
+
+
+@app.post("/estrategias", dependencies=[Depends(exigir_token)])
+def estrategias(entrada: EstrategiasIn) -> dict:
+    """Compara avalanche vs. bola de neve para o pagamento extra informado."""
+    perfil = _para_perfil(entrada.perfil)
+    return comparar_estrategias(perfil, entrada.extra)
