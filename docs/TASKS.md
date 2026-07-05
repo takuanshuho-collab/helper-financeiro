@@ -141,7 +141,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-801 | Shell global (topbar + nav das 6 abas) e roteamento de telas; tema segue o SO (toggle no T-904) | REQ-F-010 | M7 | ✅ |
-| T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar, `/estrategias`) | REQ-F-011 | T-801 | 🟨 |
+| T-802 | Tela **Visão geral**: hero + anel `conic-gradient` + 4 métricas + dívidas + estratégia (do sidecar, `/estrategias`) | REQ-F-011 | T-801 | ✅ |
 | T-803 | Tela **Perfil/orçamento**: cards de categoria + barra de alocação animada + barra-resumo (roll-up do `core`) | REQ-F-012 | T-801 | ⬜ |
 | T-804 | Tela **Dívidas**: lista ordenada + estatísticas ponderadas + formulário CRUD (add/editar/remover) | REQ-F-013 | T-801 | ⬜ |
 
@@ -182,11 +182,10 @@ sidecar FastAPI (`/health`, `/diagnostico`, loopback + token, validado por
 `tests/test_sidecar.py` + smoke real) e o front `gui_web/` (Electron+Vite+React
 +TS, *secure defaults*, ponte `window.hf`) — **launch real confirmado pelo
 mantenedor** (a janela conecta ao sidecar e exibe o diagnóstico do `core`).
-**M7 fechado; M8 em andamento.** T-801 ✅ (shell + roteamento) e T-802 🟨
-(tela **Visão geral**: hero + anel `conic-gradient` de comprometimento, 4
-métricas, lista de dívidas ordenada por taxa com chip colorido por faixa e
-estratégias avalanche/bola de neve — endpoint `/estrategias` no sidecar).
-Build/lint/typecheck verdes e 114 testes Python passando; **aguardando
-confirmação visual** (`npm start`). Próximo: **T-803** (Perfil/orçamento
-editável, que passa a alimentar o dashboard no lugar do perfil semente) e
-**T-804** (Dívidas/CRUD). Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
+**M7 fechado; M8 em andamento.** T-801 e T-802 ✅ — tela **Visão geral**
+confirmada visualmente (anel `conic-gradient`, 4 métricas, lista de dívidas
+colorida por faixa e estratégias avalanche/bola de neve, com tratamento do caso
+"não quita"). Em andamento: **T-803** — Perfil/orçamento **editável**
+(itemização por categoria + barra de alocação + resumo), que substitui o
+perfil-semente e faz o dashboard reagir ao vivo. Depois **T-804** (Dívidas/CRUD).
+Nova ata `FREEZE.md` v2.3.0 no fechamento (M10).
