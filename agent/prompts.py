@@ -61,10 +61,32 @@ Responda SOMENTE no formato estruturado solicitado (JSON conforme o schema).\
 
 
 def montar_prompt_extracao(texto_documento: str) -> str:
-    """Documento entra delimitado: é DADO a extrair, nunca instrução (P5/H5)."""
+    """Documento entra delimitado (DADO, nunca instrução — P5/H5), com uma lista
+    INCISIVA dos alvos.
+
+    Dizer exatamente O QUE procurar (com sinônimos brasileiros) e mandar copiar a
+    LINHA INTEIRA como citação eleva bastante a extração de modelos locais
+    pequenos — em vez de deixá-los "procurar" livremente.
+    """
     return (
-        "Extraia as variáveis financeiras do documento a seguir, conforme suas "
-        "regras. Campos ausentes devem ser null.\n\n"
+        "Localize no DOCUMENTO abaixo, se existirem, EXATAMENTE estes campos "
+        "(devolva null para os que não aparecerem — nunca invente):\n"
+        "1. credor — nome do banco/instituição que concedeu o crédito.\n"
+        "2. tipo — tipo do crédito: consignado, CDC, financiamento, cartão de "
+        "crédito, cheque especial ou empréstimo pessoal.\n"
+        "3. saldo_devedor — quanto ainda se deve (procure por 'saldo devedor', "
+        "'valor total financiado', 'valor do crédito', 'principal').\n"
+        "4. taxa_mensal — juros AO MÊS como fração (1,42% a.m. = 0.0142); se o "
+        "documento só trouxer taxa ANUAL, devolva null neste campo.\n"
+        "5. parcela — valor de UMA parcela mensal ('valor da parcela', "
+        "'prestação mensal').\n"
+        "6. parcelas_restantes — quantas parcelas faltam ('prazo', 'nº de "
+        "parcelas', 'em N vezes').\n\n"
+        "Para CADA campo encontrado, copie em trecho_fonte a LINHA INTEIRA do "
+        "documento onde o valor aparece, exatamente como está escrita.\n"
+        "Exemplo — se o documento tiver a linha 'Saldo devedor atual: "
+        "R$ 3.500,00', então saldo_devedor = {\"valor\": 3500.0, "
+        "\"trecho_fonte\": \"Saldo devedor atual: R$ 3.500,00\"}.\n\n"
         "<DOCUMENTO>\n" + texto_documento + "\n</DOCUMENTO>"
     )
 
