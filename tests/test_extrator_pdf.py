@@ -54,3 +54,41 @@ def test_regex_classico_no_texto_plano():
     assert campos["tipo"] == "Consignado"
     assert abs(campos["taxa_mensal"] - 0.0142) < 1e-9
     assert campos["num_parcelas"] == 48
+
+
+# Resumo de contrato com layout tabular ACHATADO pelo extrator de texto:
+# o rótulo fica numa linha e o valor na SEGUINTE (caso real: resumo Itaú).
+DOC_RESUMO_TABULAR = """\
+Contrato de empréstimo consignado
+Resumo
+Valor a receber Parcelamento
+R$ 45.000,00 96x de R$ 899,47
+Taxa de juros Total a pagar
+1,42% ao mês e 18,43% ao ano R$ 86.349,12
+IOF máximo Valor da renda após a contratação
+R$ 1.533,20 (3,29% do total financiado) R$ 8.472,33
+Total financiado Período de pagamento
+R$ 46.533,20 Agosto/2026 a Julho/2034
+"""
+
+
+def test_regex_nao_captura_pontuacao_como_valor():
+    """Bug real: 'com base no Valor Liberado. Caso...' capturava '.' ⇒ 0.0."""
+    campos = parsear_campos(
+        "O IOF Efetivo será calculado com base no Valor Liberado. Caso o IOF "
+        "seja financiado, esse valor muda."
+    )
+    assert campos["valor_liberado"] is None
+    assert campos["valor_financiado"] is None
+
+
+def test_regex_resumo_tabular_estilo_itau():
+    campos = parsear_campos(DOC_RESUMO_TABULAR)
+    assert campos["tipo"] == "Consignado"
+    # Rótulo numa linha, valor na seguinte — e NÃO o "total financiado" da
+    # frase do IOF (R$ 8.472,33) nem o "valor a receber" (menos específico).
+    assert campos["valor_financiado"] == 46533.20
+    # Notação compacta "96x de R$ 899,47".
+    assert campos["num_parcelas"] == 96
+    assert campos["valor_parcela"] == 899.47
+    assert abs(campos["taxa_mensal"] - 0.0142) < 1e-9

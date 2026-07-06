@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -143,6 +144,41 @@ def _classico_para_campos(parse: dict) -> dict:
     return campos
 
 
+# "96x de R$ 899,47": nº de parcelas embutido no trecho citado para a parcela.
+_RE_PARCELAS_NO_TRECHO = re.compile(r"(\d{1,3})\s*x\b", re.IGNORECASE)
+
+_CAMPOS_EXTRACAO = ("credor", "tipo", "saldo_devedor", "taxa_mensal",
+                    "parcela", "parcelas_restantes")
+
+
+def _fundir_com_classico(campos: dict, texto_plano: str) -> dict:
+    """Completa com fontes determinísticas os campos que a LLM devolveu null.
+
+    Modelos locais pequenos falham no MAPEAMENTO semântico mesmo com o dado no
+    contexto (caso real: citaram "96x de R$ 899,47" na parcela e devolveram
+    parcelas_restantes=null). Dois resgates, ambos sem LLM: (1) derivar
+    `parcelas_restantes` do trecho já citado — e verificado pelo quote-check —
+    da parcela; (2) preencher o que faltar com a extração clássica por regex no
+    texto plano. A IA nunca é sobrescrita, só completada; o usuário confirma
+    tudo na tela (REQ-F-014).
+    """
+    campos = dict(campos)
+    if not campos.get("parcelas_restantes") and (p := campos.get("parcela")):
+        m = _RE_PARCELAS_NO_TRECHO.search(str(p.get("trecho_fonte", "")))
+        if m:
+            campos["parcelas_restantes"] = {
+                "valor": int(m.group(1)),
+                "trecho_fonte": p.get("trecho_fonte", ""),
+                "confianca": p.get("confianca", 0.0),
+            }
+    if faltantes := [c for c in _CAMPOS_EXTRACAO if not campos.get(c)]:
+        classico = _classico_para_campos(parsear_campos(texto_plano))
+        for chave in faltantes:
+            if chave in classico:
+                campos[chave] = classico[chave]
+    return campos
+
+
 def _form_para_lista(form: dict) -> list[dict]:
     """Serializa o formulário na ordem canônica dos rótulos (credor→restantes)."""
     return [
@@ -223,7 +259,11 @@ def contrato_extrair(
     _tid, estado = iniciar_extracao(contexto, cfg=cfg, extrator=extrator)
     if "__interrupt__" in estado:  # o grafo pausou para a confirmação humana
         payload = estado["__interrupt__"][0].value
-        form = campos_para_formulario(payload["campos"])
+        # Fusão: campos que a IA não achou são completados pelo regex clássico
+        # (determinístico, sem citação) antes de irem à tela de confirmação.
+        form = campos_para_formulario(
+            _fundir_com_classico(payload["campos"], texto_plano)
+        )
         return {"modo": "ia", "thread_id": _tid,
                 "campos": _form_para_lista(form),
                 "descartados": payload["descartados"],

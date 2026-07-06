@@ -167,7 +167,14 @@ def campos_para_formulario(campos: dict[str, Any]) -> dict[str, dict[str, str]]:
     if c := campos.get("credor"):
         form["credor"] = item(c, str(c["valor"]).strip())
     if c := campos.get("tipo"):
-        form["tipo"] = item(c, mapear_tipo_divida(str(c["valor"])))
+        # O trecho citado é literal do documento (garantido pelo quote-check);
+        # o `valor` é paráfrase do modelo e pode contradizê-lo (caso real: valor
+        # "empréstimo pessoal" com trecho "Contrato de empréstimo consignado").
+        # Classifica o trecho primeiro; a paráfrase é fallback.
+        rotulo = mapear_tipo_divida(str(c.get("trecho_fonte", "")))
+        if rotulo == "Outro":
+            rotulo = mapear_tipo_divida(str(c["valor"]))
+        form["tipo"] = item(c, rotulo)
     if c := campos.get("saldo_devedor"):
         form["saldo"] = item(c, _num_form(float(c["valor"])))
     if c := campos.get("taxa_mensal"):

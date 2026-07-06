@@ -283,6 +283,38 @@ def test_contrato_extrair_fallback_classico(monkeypatch):
         cliente.app.dependency_overrides.clear()
 
 
+def test_fusao_classica_completa_campos_da_ia():
+    """LLM pequena devolve null em campos presentes no doc ⇒ resgate sem LLM."""
+    from sidecar.app import _fundir_com_classico
+
+    campos = {
+        "credor": {"valor": "Banco X", "trecho_fonte": "Credor: Banco X",
+                   "confianca": 0.9},
+        "tipo": None,
+        "saldo_devedor": None,
+        "taxa_mensal": {"valor": 0.0142, "trecho_fonte": "1,42% ao mês",
+                        "confianca": 0.9},
+        "parcela": {"valor": 899.47, "trecho_fonte": "96x de R$ 899,47",
+                    "confianca": 0.9},
+        "parcelas_restantes": None,
+    }
+    texto = ("Contrato de empréstimo consignado\n"
+             "Total financiado Período de pagamento\n"
+             "R$ 46.533,20 Agosto/2026 a Julho/2034\n")
+    fundido = _fundir_com_classico(campos, texto)
+
+    # `restantes` derivado do trecho já citado (e verificado) da parcela.
+    assert fundido["parcelas_restantes"]["valor"] == 96
+    assert fundido["parcelas_restantes"]["trecho_fonte"] == "96x de R$ 899,47"
+    # `saldo` e `tipo` resgatados pelo regex clássico (sem citação).
+    assert fundido["saldo_devedor"]["valor"] == 46533.20
+    assert fundido["saldo_devedor"]["trecho_fonte"] == ""
+    assert fundido["tipo"]["valor"] == "Consignado"
+    # O que a IA achou nunca é sobrescrito.
+    assert fundido["parcela"]["valor"] == 899.47
+    assert fundido["credor"]["valor"] == "Banco X"
+
+
 def test_contexto_trunca_para_openai_compat_local():
     """LM Studio (sem embeddings): trunca o documento em vez de tentar /api/embed."""
     from agent.config import ConfigAgente

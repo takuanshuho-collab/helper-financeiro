@@ -70,35 +70,42 @@ def extrair_markdown_pdf_bytes(dados: bytes) -> str:
 # O primeiro que casar vence.
 _PADROES = {
     "valor_financiado": [
-        r"valor\s+(?:total\s+)?financiad[oa][:\s]*R?\$?\s*([\d\.,]+)",
-        r"valor\s+do\s+cr[ée]dito[:\s]*R?\$?\s*([\d\.,]+)",
-        r"valor\s+liberad[oa][:\s]*R?\$?\s*([\d\.,]+)",
-        r"principal[:\s]*R?\$?\s*([\d\.,]+)",
+        r"valor\s+(?:total\s+)?financiad[oa][:\s]*R?\$?\s*(\d[\d\.,]*)",
+        r"valor\s+do\s+cr[ée]dito[:\s]*R?\$?\s*(\d[\d\.,]*)",
+        r"valor\s+liberad[oa][:\s]*R?\$?\s*(\d[\d\.,]*)",
+        r"principal[:\s]*R?\$?\s*(\d[\d\.,]*)",
+        # Resumo tabular achatado pelo extrator de texto (rótulo numa linha,
+        # valor na SEGUINTE) — ex. Itaú: "Total financiado ...\nR$ 46.533,20".
+        r"total\s+financiad[oa][^\n]*\n\s*R?\$?\s*(\d[\d\.,]*)",
+        r"valor\s+a\s+receber[^\n]*\n\s*R?\$?\s*(\d[\d\.,]*)",
     ],
     "valor_liberado": [
-        r"valor\s+l[íi]quido\s+(?:liberad[oa]|credit[oa]d[oa])[:\s]*R?\$?\s*([\d\.,]+)",
-        r"valor\s+liberad[oa][:\s]*R?\$?\s*([\d\.,]+)",
+        r"valor\s+l[íi]quido\s+(?:liberad[oa]|credit[oa]d[oa])[:\s]*R?\$?\s*(\d[\d\.,]*)",
+        r"valor\s+liberad[oa][:\s]*R?\$?\s*(\d[\d\.,]*)",
     ],
     "taxa_mensal": [
-        r"taxa\s+de\s+juros?\s*(?:remunerat[óo]rios?)?[^\d%]{0,30}?([\d\.,]+)\s*%\s*a[o]?\.?\s*m",
-        r"([\d\.,]+)\s*%\s*a[o]?\.?\s*m[êe]?s?",
+        r"taxa\s+de\s+juros?\s*(?:remunerat[óo]rios?)?[^\d%]{0,30}?(\d[\d\.,]*)\s*%\s*a[o]?\.?\s*m",
+        r"(\d[\d\.,]*)\s*%\s*a[o]?\.?\s*m[êe]?s?",
     ],
     "taxa_anual": [
-        r"taxa\s+de\s+juros?\s*(?:remunerat[óo]rios?)?[^\d%]{0,30}?([\d\.,]+)\s*%\s*a[o]?\.?\s*a",
-        r"([\d\.,]+)\s*%\s*a[o]?\.?\s*an[o]?",
+        r"taxa\s+de\s+juros?\s*(?:remunerat[óo]rios?)?[^\d%]{0,30}?(\d[\d\.,]*)\s*%\s*a[o]?\.?\s*a",
+        r"(\d[\d\.,]*)\s*%\s*a[o]?\.?\s*an[o]?",
     ],
     "cet_anual": [
-        r"cet[^\d%]{0,30}?([\d\.,]+)\s*%\s*a[o]?\.?\s*a",
-        r"custo\s+efetivo\s+total[^\d%]{0,30}?([\d\.,]+)\s*%",
+        r"cet[^\d%]{0,30}?(\d[\d\.,]*)\s*%\s*a[o]?\.?\s*a",
+        r"custo\s+efetivo\s+total[^\d%]{0,30}?(\d[\d\.,]*)\s*%",
     ],
     "num_parcelas": [
         r"(?:em\s+)?(\d{1,3})\s*(?:parcelas|presta[çc][õo]es|vezes)",
         r"(?:quantidade|n[úu]mero)\s+de\s+parcelas[:\s]*(\d{1,3})",
+        # Notação compacta dos resumos de contrato: "96x de R$ 899,47".
+        r"(\d{1,3})\s*x\s+de\s+R?\$",
     ],
     "valor_parcela": [
-        r"valor\s+d[ae]\s+(?:parcela|presta[çc][ãa]o)[:\s]*R?\$?\s*([\d\.,]+)",
-        r"parcelas?\s+(?:mensais\s+)?de[:\s]*R?\$?\s*([\d\.,]+)",
-        r"presta[çc][õo]es\s+(?:mensais\s+)?de[:\s]*R?\$?\s*([\d\.,]+)",
+        r"valor\s+d[ae]\s+(?:parcela|presta[çc][ãa]o)[:\s]*R?\$?\s*(\d[\d\.,]*)",
+        r"parcelas?\s+(?:mensais\s+)?de[:\s]*R?\$?\s*(\d[\d\.,]*)",
+        r"presta[çc][õo]es\s+(?:mensais\s+)?de[:\s]*R?\$?\s*(\d[\d\.,]*)",
+        r"\d{1,3}\s*x\s+de\s+R?\$?\s*(\d[\d\.,]*)",
     ],
 }
 

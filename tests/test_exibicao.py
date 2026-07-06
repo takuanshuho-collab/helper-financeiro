@@ -140,6 +140,25 @@ def test_campos_ausentes_sao_omitidos():
     assert campos_para_formulario(ExtracaoContrato().model_dump()) == {}
 
 
+def test_tipo_classifica_pelo_trecho_quando_contradiz_o_valor():
+    """O trecho é literal do doc (quote-check); a paráfrase do modelo pode
+    contradizê-lo — caso real: valor "pessoal" com trecho "consignado"."""
+    form = campos_para_formulario({
+        "tipo": {"valor": "empréstimo pessoal",
+                 "trecho_fonte": "Contrato de empréstimo consignado",
+                 "confianca": 0.0},
+    })
+    assert form["tipo"]["valor"] == "Consignado"
+
+
+def test_tipo_usa_o_valor_quando_o_trecho_nao_classifica():
+    form = campos_para_formulario({
+        "tipo": {"valor": "cartão de crédito",
+                 "trecho_fonte": "modalidade rotativa", "confianca": 0.0},
+    })
+    assert form["tipo"]["valor"] == "Cartão de crédito"
+
+
 def test_mapear_tipo_divida():
     assert mapear_tipo_divida("empréstimo consignado privado") == "Consignado"
     assert mapear_tipo_divida("CDC veicular") == "CDC (Crédito Direto ao Consumidor)"
