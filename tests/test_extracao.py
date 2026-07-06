@@ -128,6 +128,27 @@ def test_normalizacao_tolera_espacos_e_acentos():
     assert v.extracao.credor is not None
 
 
+def test_normalizacao_tolera_markdown_e_pontuacao():
+    """Citação com Markdown/pontuação diferente ainda casa (pymupdf4llm, ADR-0010)."""
+    extracao = extracao_fiel()
+    assert extracao.taxa_mensal is not None
+    # O modelo citou o trecho com **negrito** e sem os dois-pontos do documento.
+    extracao.taxa_mensal.trecho_fonte = "Taxa de juros **2,00% ao mês**"
+    v = verificar_extracao(extracao, DOC_CONTRATO)
+    assert v.extracao.taxa_mensal is not None
+    assert "taxa_mensal:SEM_FONTE" not in v.descartados
+
+
+def test_quote_check_ainda_pega_alucinacao_com_normalizacao_tolerante():
+    """A tolerância a formatação não pode deixar passar valor inexistente (H1)."""
+    extracao = extracao_fiel()
+    assert extracao.taxa_mensal is not None
+    extracao.taxa_mensal.trecho_fonte = "Taxa de juros **9,99% ao mês**"  # não existe
+    v = verificar_extracao(extracao, DOC_CONTRATO)
+    assert v.extracao.taxa_mensal is None
+    assert "taxa_mensal:SEM_FONTE" in v.descartados
+
+
 # ------------------------------------------------------------- grafo (interrupt)
 def test_fluxo_pausa_para_confirmacao_e_retoma():
     """O grafo extrai, verifica, PAUSA (interrupt) e retoma com a confirmação."""

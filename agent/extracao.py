@@ -130,11 +130,21 @@ def obter_extrator(cfg: ConfigAgente) -> Extrator:
 
 
 # ------------------------------------------------------------------ verificador
+# Reduz a comparação a letras/dígitos/percentual: tolera ruído de FORMATAÇÃO na
+# citação — OCR, Markdown do pymupdf4llm (**negrito**, `|` de tabela, `#`) e
+# pontuação que o modelo reorganiza (dois-pontos, etc.). Não afrouxa o
+# anti-alucinação: o VALOR extraído ainda é conferido contra o trecho cru
+# (`_valor_confere_com_trecho`), e a sequência de tokens do trecho continua tendo
+# de existir no documento (ADR-0010).
+_RE_SO_ESSENCIAL = re.compile(r"[^0-9a-z%\s]")
+
+
 def _normalizar(texto: str) -> str:
-    """Espaços colapsados, sem acentos, casefold — comparação tolerante a OCR."""
+    """Sem acentos, sem ruído de formatação, espaços colapsados, casefold."""
     sem_acentos = "".join(c for c in unicodedata.normalize("NFKD", texto)
                           if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", sem_acentos).strip().casefold()
+    so_essencial = _RE_SO_ESSENCIAL.sub(" ", sem_acentos.casefold())
+    return re.sub(r"\s+", " ", so_essencial).strip()
 
 
 _RE_NUMERO = re.compile(r"\d[\d.,]*")
