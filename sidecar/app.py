@@ -156,9 +156,24 @@ def _form_para_lista(form: dict) -> list[dict]:
     ]
 
 
+# O retrieval (embeddings via LlamaIndex) só existe no Ollama (`/api/embed`).
+# Servidores locais OpenAI-compatible (LM Studio/llama.cpp) não têm embeddings
+# compatíveis — tentar o retrieval bate num endpoint inexistente e ainda joga o
+# documento inteiro no prompt (lento no modelo local). Nesses casos, truncamos.
+_PROVIDERS_COM_EMBEDDINGS = {"local", "ollama"}
+
+
 def _contexto_seguro(texto: str, cfg: ConfigAgente | None) -> str:
-    """Prepara o contexto (retrieval p/ documentos longos) com degradação suave."""
+    """Prepara o contexto p/ a extração: retrieval no Ollama; truncagem no resto.
+
+    Documento curto vai inteiro (o `preparar_contexto` já decide isso). Documento
+    longo: só o Ollama faz retrieval por embeddings; para OpenAI-compat local,
+    trunca em `LIMITE_DIRETO_CHARS` — determinístico, sem `/api/embed` e com um
+    prompt enxuto (crucial em modelos locais lentos).
+    """
     conf = cfg or carregar_config()
+    if conf.provider.strip().lower() not in _PROVIDERS_COM_EMBEDDINGS:
+        return texto[:LIMITE_DIRETO_CHARS]
     try:
         return preparar_contexto(texto, conf)
     except Exception:  # noqa: BLE001 — sem embeddings ⇒ melhor esforço (texto direto)

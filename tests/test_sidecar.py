@@ -285,6 +285,17 @@ def test_contrato_extrair_fallback_classico(monkeypatch):
         cliente.app.dependency_overrides.clear()
 
 
+def test_contexto_trunca_para_openai_compat_local():
+    """LM Studio (sem embeddings): trunca o documento em vez de tentar /api/embed."""
+    from agent.config import ConfigAgente
+    from agent.ingestao import LIMITE_DIRETO_CHARS
+    from sidecar.app import _contexto_seguro
+
+    longo = "x" * (LIMITE_DIRETO_CHARS + 500)
+    cfg = ConfigAgente(provider="openai_compat", base_url="http://localhost:1234/v1")
+    assert _contexto_seguro(longo, cfg) == longo[:LIMITE_DIRETO_CHARS]
+
+
 def test_contrato_pdf_sem_texto(monkeypatch):
     """PDF escaneado (sem texto) ⇒ aviso, sem consultar o modelo."""
     monkeypatch.setattr("sidecar.app.extrair_texto_pdf_bytes", lambda _b: "   ")
