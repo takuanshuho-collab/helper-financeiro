@@ -167,17 +167,24 @@ class OllamaProvider:
 
 
 class OpenAICompatProvider:
-    """Nuvem via endpoint OpenAI-compatible (T-202). Chave SÓ via env (SEC-002)."""
+    """Endpoint OpenAI-compatible — nuvem OU servidor local (LM Studio, etc.).
+
+    A chave vem SÓ via env (SEC-002) e é EXIGIDA apenas para endpoints remotos;
+    um servidor local em loopback dispensa chave (ADR-0010). O documento/os
+    fatos nunca saem da máquina quando o endpoint é local.
+    """
 
     def __init__(self, cfg: ConfigAgente):
-        if not cfg.api_key:
+        if not cfg.api_key and not cfg.endpoint_local:
             raise RuntimeError(
-                "HF_API_KEY ausente: o provider cloud exige chave via variável "
+                "HF_API_KEY ausente: endpoint remoto exige chave via variável "
                 "de ambiente (REQ-SEC-002).")
         self.cfg = cfg
         self.url = cfg.base_url.rstrip("/") + "/chat/completions"
 
     def analisar(self, fatos: FatosFinanceiros) -> AnaliseAgente:
+        headers = ({"Authorization": f"Bearer {self.cfg.api_key}"}
+                   if self.cfg.api_key else {})
         resposta = _post_json(self.url, {
             "model": self.cfg.model,
             "messages": _mensagens(fatos),
@@ -187,8 +194,7 @@ class OpenAICompatProvider:
                 "json_schema": {"name": "AnaliseAgente", "strict": True,
                                 "schema": schema_estrito()},
             },
-        }, headers={"Authorization": f"Bearer {self.cfg.api_key}"},
-            timeout_s=self.cfg.timeout_s)
+        }, headers=headers, timeout_s=self.cfg.timeout_s)
         conteudo = resposta["choices"][0]["message"]["content"]
         return AnaliseAgente.model_validate_json(conteudo)
 

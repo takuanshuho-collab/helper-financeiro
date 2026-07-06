@@ -7,6 +7,8 @@ aqui. Nenhum cálculo financeiro vive neste módulo.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -63,3 +65,21 @@ class EstrategiasIn(BaseModel):
 
     perfil: PerfilIn
     extra: float = 0.0
+
+
+class ContratoIn(BaseModel):
+    """PDF de contrato (base64) para extração LOCAL dos campos (REQ-F-014).
+
+    O binário viaja só na loopback; o sidecar o decodifica em memória, extrai o
+    texto e roda a extração local — nada é persistido em disco nem vai à nuvem.
+    """
+
+    pdf_base64: str
+    nome: str = ""
+
+
+class ConfirmarContratoIn(BaseModel):
+    """Retomada do grafo de extração pausado (interrupt→resume, ADR-0006)."""
+
+    thread_id: str
+    confirmacao: dict[str, Any] = Field(default_factory=dict)

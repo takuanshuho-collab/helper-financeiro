@@ -37,6 +37,9 @@ function iniciarSidecar(): Promise<void> {
     const python = pythonDoProjeto()
     sidecar = spawn(python, ['-m', 'sidecar'], { cwd: repoRoot })
     sidecar.on('error', reject)
+    // Ecoa os logs do sidecar (Python/uvicorn logam em stderr) no terminal do
+    // Electron — assim erros de extração/provider ficam visíveis no `npm start`.
+    sidecar.stderr?.on('data', (d: Buffer) => process.stderr.write(`[sidecar] ${d}`))
     const rl = readline.createInterface({ input: sidecar.stdout! })
     rl.once('line', (linha) => {
       try {

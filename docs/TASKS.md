@@ -149,7 +149,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume) | REQ-F-014, GRD-005 | M8 | ⬜ |
+| T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume); PDF→Markdown + LLM local OpenAI-compat (ADR-0010) | REQ-F-014, GRD-005 | M8 | ✅ |
 | T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx; teste de anonimização da fronteira cloud (H2/SEC-003) | REQ-F-015 | M8 | ⬜ |
 | T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ⬜ |
 | T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ⬜ |
@@ -187,9 +187,13 @@ mantenedor** (a janela conecta ao sidecar e exibe o diagnóstico do `core`).
 ao vivo) e **Dívidas** (CRUD add/editar/remover + estatísticas ponderadas —
 taxa média pelo saldo e custo até quitar calculados no `core` via
 `taxa_media_ponderada`/`custo_total_ate_quitar`, barra de participação por
-dívida) confirmadas visualmente. As três primeiras telas editam o mesmo perfil
-compartilhado e recalculam juntas. **Próximo: M9** — T-901 (Contrato PDF:
-drop-zone + extração local com citação, `interrupt`→resume), T-902 (Análise:
-job async + IA sênior + exportações + teste de anonimização H2/SEC-003), T-903
-(Carta ao credor), T-904 (modo escuro persistido), T-905 (paridade + E2E). Nova
-ata `FREEZE.md` v2.3.0 no fechamento (M10).
+dívida) confirmadas visualmente. **M9 em andamento: T-901 ✅** — **Contrato
+PDF**: drop-zone, extração **local** com citação da fonte e `interrupt`→resume.
+No caminho, a **ADR-0010**: extração PDF→**Markdown** (`pymupdf4llm`, fallback
+`pdfplumber`) para dar mais sinal à LLM, e suporte a **LLM local
+OpenAI-compatible** (LM Studio/llama.cpp) — a invariante H2 passou a ser **por
+endpoint (loopback)**, não pelo nome do provider. Extração assistida validada
+end-to-end com o LM Studio (`scripts/diag_llm.py`). **Próximo: T-902** (Análise:
+job async + IA sênior + exportações + teste de anonimização H2/SEC-003), depois
+T-903 (Carta), T-904 (modo escuro), T-905 (paridade + E2E). Nova ata
+`FREEZE.md` v2.3.0 no fechamento (M10).

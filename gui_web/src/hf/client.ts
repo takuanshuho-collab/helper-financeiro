@@ -6,6 +6,7 @@
  * / fora do Electron" de um erro devolvido pelo backend.
  */
 import type {
+  ContratoExtraidoOut,
   DiagnosticoOut,
   EstrategiasOut,
   PerfilIn,
@@ -45,4 +46,14 @@ export const hf = {
     chamar('/diagnostico', perfil),
   estrategias: (perfil: PerfilIn, extra = 0): Promise<EstrategiasOut> =>
     chamar('/estrategias', { perfil, extra }),
+  contratoExtrair: (
+    pdfBase64: string,
+    nome: string,
+  ): Promise<ContratoExtraidoOut> =>
+    chamar('/contrato/extrair', { pdf_base64: pdfBase64, nome }),
+  contratoConfirmar: (
+    threadId: string,
+    confirmacao: Record<string, string>,
+  ): Promise<{ ok: boolean }> =>
+    chamar('/contrato/confirmar', { thread_id: threadId, confirmacao }),
 }

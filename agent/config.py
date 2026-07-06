@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 
 @dataclass
 class ConfigAgente:
-    # "local" (Ollama) | "openai_compat" | "fake"
+    # "local" (Ollama) | "openai_compat" (nuvem OU servidor local, ex.: LM Studio)
+    # | "fake". O que separa local de nuvem é o ENDPOINT (loopback), não o nome —
+    # ver `endpoint_local` e ADR-0010.
     provider: str = field(default_factory=lambda: os.getenv("HF_PROVIDER", "local"))
     base_url: str = field(
         default_factory=lambda: os.getenv("HF_BASE_URL", "http://localhost:11434/v1"))
@@ -29,6 +32,18 @@ class ConfigAgente:
     # Cache em memória de análises aprovadas (T-205): mesma entrada → sem nova
     # chamada ao LLM. Desligue com HF_CACHE=0.
     cache: bool = field(default_factory=lambda: os.getenv("HF_CACHE", "1") == "1")
+
+    @property
+    def endpoint_local(self) -> bool:
+        """True se `base_url` aponta para a própria máquina (loopback).
+
+        É a invariante real do H2 (ADR-0010): o documento/os fatos só saem da
+        máquina quando o endpoint é remoto. Um LM Studio em `localhost:1234` é
+        local; `https://api.openai.com` é nuvem — independente do nome do
+        provider.
+        """
+        host = (urlparse(self.base_url).hostname or "").lower()
+        return host in {"localhost", "::1"} or host.startswith("127.")
 
 
 def carregar_config() -> ConfigAgente:

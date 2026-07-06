@@ -75,13 +75,58 @@ class OllamaExtrator:
         return ExtracaoContrato.model_validate_json(resposta["message"]["content"])
 
 
+class OpenAICompatExtrator:
+    """Extração via endpoint OpenAI-compatible LOCAL (LM Studio/llama.cpp/vLLM).
+
+    Usa `/v1/chat/completions` com `response_format` json_schema (structured
+    output). Só é instanciado para endpoints loopback — `obter_extrator` garante
+    o H2 (o documento com PII jamais sai da máquina). Sem `strict` de propósito:
+    maximiza a compatibilidade entre servidores locais; se a saída não fechar o
+    schema, o grafo recupera (1 retry) e degrada para o regex (P8).
+    """
+
+    def __init__(self, cfg: ConfigAgente):
+        self.cfg = cfg
+        self.url = cfg.base_url.rstrip("/") + "/chat/completions"
+
+    def extrair(self, texto: str) -> ExtracaoContrato:
+        headers = ({"Authorization": f"Bearer {self.cfg.api_key}"}
+                   if self.cfg.api_key else {})
+        resposta = _post_json(self.url, {
+            "model": self.cfg.model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT_EXTRACAO},
+                {"role": "user", "content": montar_prompt_extracao(texto)},
+            ],
+            "temperature": TEMPERATURA_EXTRACAO,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "ExtracaoContrato",
+                                "schema": ExtracaoContrato.model_json_schema()},
+            },
+        }, headers=headers, timeout_s=self.cfg.timeout_s)
+        conteudo = resposta["choices"][0]["message"]["content"]
+        return ExtracaoContrato.model_validate_json(conteudo)
+
+
+# Só o Ollama fala a API nativa (`/api/chat`); qualquer outro servidor local
+# (LM Studio, llama.cpp, vLLM, ...) fala OpenAI-compatible (`/v1`). Por isso o
+# Ollama é o caso EXPLÍCITO e todo o resto cai no dialeto OpenAI — robusto a
+# grafias/variações do provider ("openai_compat", "lmstudio", espaços, etc.).
+_PROVIDERS_OLLAMA = {"local", "ollama"}
+
+
 def obter_extrator(cfg: ConfigAgente) -> Extrator:
-    """Fábrica. Cloud é RECUSADA: o documento bruto contém PII (H2/REQ-GRD-002)."""
-    if cfg.provider == "local":
+    """Fábrica. Extração exige endpoint LOCAL (loopback): o documento bruto tem
+    PII e nunca pode sair da máquina (H2/ADR-0010). O dialeto segue o provider —
+    Ollama (API nativa) ou OpenAI-compatible (LM Studio/llama.cpp/vLLM)."""
+    if not cfg.endpoint_local:
+        raise RuntimeError(
+            f"EXTRACAO_LOCAL_ONLY: extração exige endpoint local (loopback); "
+            f"base_url='{cfg.base_url}' é remoto (H2 — o documento contém PII).")
+    if cfg.provider.strip().lower() in _PROVIDERS_OLLAMA:
         return OllamaExtrator(cfg)
-    raise RuntimeError(
-        f"EXTRACAO_LOCAL_ONLY: extração de documentos exige provider local "
-        f"(H2 — o documento bruto contém PII); provider atual: '{cfg.provider}'.")
+    return OpenAICompatExtrator(cfg)
 
 
 # ------------------------------------------------------------------ verificador

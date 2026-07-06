@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0009) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0010) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
@@ -52,7 +52,10 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   **paralela/incremental** (`gui_web/` ao lado de `gui/`; troca de entrypoint só
   na paridade das 6 telas). DEC-2 refinada para "offline por padrão,
   conectividade opt-in". Milestones M7..M10; nova ata `FREEZE.md` v2.3.0 no
-  fechamento.
+  fechamento. **ADR-0010** (durante o T-901): extração PDF→**Markdown**
+  (`pymupdf4llm`, fallback `pdfplumber`) e suporte a **LLM local
+  OpenAI-compatible** (LM Studio/llama.cpp) — a invariante H2 passa a ser **por
+  endpoint (loopback)**, não pelo nome do provider.
 - **Mudanças nos artefatos congelados (v2.2.0) exigem nova ADR + incremento de
   versão + nova ata.**
 

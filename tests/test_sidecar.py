@@ -5,16 +5,21 @@ Usam o `TestClient` do FastAPI (sem rede real). Cobrem a autenticação por
 token, a validação de entrada e o roundtrip determinístico core <-> JSON,
 incluindo os casos de borda (sem dívidas, reserva sem despesas, ordenação).
 """
+import base64
 import os
 
 from fastapi.testclient import TestClient
 
-from sidecar.app import app
+from sidecar.app import app, contexto_extracao
 from sidecar.security import VAR_TOKEN
+from tests.test_extracao import CFG_TESTE, DOC_CONTRATO, FakeExtrator
 
 TOKEN = "token-de-teste"
 CABECALHO = {"X-HF-Token": TOKEN}
 cliente = TestClient(app)
+
+# PDF fantasma: o texto real é injetado via monkeypatch de extrair_texto_pdf_bytes.
+PDF_B64 = base64.b64encode(b"%PDF-1.4 fake").decode()
 
 
 def setup_module(_module):
@@ -195,3 +200,99 @@ def test_estrategias_compara_metodos():
     assert dados["avalanche"]["ordem"][0] == "Cartão"
     assert dados["avalanche"]["quitavel"] is True
     assert dados["avalanche"]["meses"] is not None
+
+
+# --- Contrato PDF: extração local + interrupt→resume (REQ-F-014) --------------
+
+
+def test_contrato_sem_token_401():
+    resposta = cliente.post("/contrato/extrair", json={"pdf_base64": PDF_B64})
+    assert resposta.status_code == 401
+
+
+def test_contrato_base64_invalido_422():
+    cliente.app.dependency_overrides[contexto_extracao] = lambda: (CFG_TESTE, FakeExtrator())
+    try:
+        resposta = cliente.post(
+            "/contrato/extrair", json={"pdf_base64": "nao-e-base64!!"}, headers=CABECALHO
+        )
+        assert resposta.status_code == 422
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_contrato_extrair_ia_com_citacao_e_confirma(monkeypatch):
+    """Caminho feliz: IA local extrai com citação, pausa e retoma (ADR-0006)."""
+    fake = FakeExtrator()
+    cliente.app.dependency_overrides[contexto_extracao] = lambda: (CFG_TESTE, fake)
+    monkeypatch.setattr("sidecar.app.extrair_texto_pdf_bytes", lambda _b: DOC_CONTRATO)
+    monkeypatch.setattr("sidecar.app.extrair_markdown_pdf_bytes", lambda _b: DOC_CONTRATO)
+    try:
+        resp = cliente.post(
+            "/contrato/extrair",
+            json={"pdf_base64": PDF_B64, "nome": "contrato.pdf"},
+            headers=CABECALHO,
+        )
+        assert resp.status_code == 200
+        dados = resp.json()
+        assert dados["modo"] == "ia"
+        assert dados["thread_id"]
+        assert dados["descartados"] == []
+
+        campos = {c["chave"]: c for c in dados["campos"]}
+        assert {"credor", "saldo", "taxa", "parcela", "restantes"} <= set(campos)
+        # Valor no formato do formulário + citação verbatim do documento.
+        assert campos["saldo"]["valor"] == "10000,00"
+        assert "10.000,00" in campos["saldo"]["fonte"]
+        assert campos["taxa"]["valor"] == "2,00"  # fração 0.02 → 2,00%
+
+        # interrupt→resume: a confirmação retoma o grafo pausado.
+        resp2 = cliente.post(
+            "/contrato/confirmar",
+            json={"thread_id": dados["thread_id"], "confirmacao": {"saldo": "10000,00"}},
+            headers=CABECALHO,
+        )
+        assert resp2.status_code == 200
+        assert resp2.json()["ok"] is True
+        assert fake.chamadas == 1
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_contrato_extrair_fallback_classico(monkeypatch):
+    """IA local indisponível ⇒ extração clássica por regex, sem citação."""
+    fake = FakeExtrator(erro=ValueError("sem llm local"))
+    cliente.app.dependency_overrides[contexto_extracao] = lambda: (CFG_TESTE, fake)
+    monkeypatch.setattr("sidecar.app.extrair_texto_pdf_bytes", lambda _b: DOC_CONTRATO)
+    monkeypatch.setattr("sidecar.app.extrair_markdown_pdf_bytes", lambda _b: DOC_CONTRATO)
+    try:
+        resp = cliente.post(
+            "/contrato/extrair", json={"pdf_base64": PDF_B64}, headers=CABECALHO
+        )
+        assert resp.status_code == 200
+        dados = resp.json()
+        assert dados["modo"] == "classico"
+        assert dados["thread_id"] is None
+        chaves = {c["chave"] for c in dados["campos"]}
+        # O regex acha taxa e parcelas no DOC; nenhum campo traz citação.
+        assert {"taxa", "restantes"} <= chaves
+        assert all(c["fonte"] == "" for c in dados["campos"])
+        # Diagnóstico: o motivo da queda e o alvo efetivo da LLM (ADR-0010).
+        assert "ERRO_PROVIDER:ValueError" in dados["motivos"]
+        assert dados["llm"]["endpoint_local"] is True
+        assert "1234" not in dados["llm"]["base_url"]  # CFG_TESTE usa o default
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_contrato_pdf_sem_texto(monkeypatch):
+    """PDF escaneado (sem texto) ⇒ aviso, sem consultar o modelo."""
+    monkeypatch.setattr("sidecar.app.extrair_texto_pdf_bytes", lambda _b: "   ")
+    resp = cliente.post(
+        "/contrato/extrair", json={"pdf_base64": PDF_B64}, headers=CABECALHO
+    )
+    assert resp.status_code == 200
+    dados = resp.json()
+    assert dados["modo"] == "vazio"
+    assert dados["aviso"]
+    assert dados["campos"] == []

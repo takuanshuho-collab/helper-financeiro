@@ -8,7 +8,8 @@ license = "MIT"
 dependencies = [
     "openpyxl>=3.1",      # planilha .xlsx com fórmulas e gráfico
     "python-docx>=1.1",   # relatório e cartas .docx
-    "pdfplumber>=0.11",   # extração de texto de contratos PDF
+    "pdfplumber>=0.11",   # extração de texto de contratos PDF (fallback MIT)
+    "pymupdf4llm>=0.0.17",  # PDF -> Markdown p/ a LLM de extração (ADR-0010; AGPL, uso não-comercial)
     "pydantic>=2.0",      # contratos tipados determinístico ↔ agente (v2)
     "langgraph>=1.2.7",                      # orquestração em grafo + interrupt (ADR-0006)
     "llama-index-core>=0.14.23",             # ingestão/retrieval local (ADR-0007)
@@ -59,7 +60,8 @@ check_untyped_defs = true
 no_implicit_optional = true
 # GUI tkinter tem tipagem dinâmica pesada; endurecer na Fase 3 (AppController)
 [[tool.mypy.overrides]]
-module = ["pdfplumber.*", "openpyxl.*", "docx.*", "llama_index.*"]
+module = ["pdfplumber.*", "openpyxl.*", "docx.*", "llama_index.*",
+          "pymupdf.*", "pymupdf4llm.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest

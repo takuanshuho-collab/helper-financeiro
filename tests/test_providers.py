@@ -123,15 +123,25 @@ def test_openai_compat_envia_chave_e_schema_estrito(servidor, perfil_atencao):
     assert rf["json_schema"]["strict"] is True
 
 
-def test_openai_compat_sem_chave_degrada_sem_excecao(perfil_atencao, monkeypatch):
+def test_openai_compat_remoto_sem_chave_degrada_sem_excecao(perfil_atencao, monkeypatch):
+    """Endpoint REMOTO sem chave degrada limpo (SEC-002); o determinístico sobrevive."""
     monkeypatch.delenv("HF_API_KEY", raising=False)
-    cfg = ConfigAgente(provider="openai_compat")
+    cfg = ConfigAgente(provider="openai_compat", base_url="https://api.openai.com/v1")
 
     resultado = analisar(perfil_atencao, cfg=cfg)
 
     assert resultado.modo == "degradado"
     assert resultado.guardrails_violados == ["ERRO_CONFIG:RuntimeError"]
     assert resultado.fatos.saldo_devedor_total > 0  # o determinístico sobrevive
+
+
+def test_openai_compat_local_dispensa_chave(perfil_atencao, monkeypatch):
+    """Servidor local (loopback, ex.: LM Studio) não exige chave (ADR-0010)."""
+    monkeypatch.delenv("HF_API_KEY", raising=False)
+    cfg = ConfigAgente(provider="openai_compat", base_url="http://localhost:1234/v1")
+    # Não deve levantar por falta de chave; a URL é montada normalmente.
+    prov = OpenAICompatProvider(cfg)
+    assert prov.url == "http://localhost:1234/v1/chat/completions"
 
 
 def test_schema_estrito_endurece_todos_os_objetos():

@@ -106,6 +106,34 @@ export interface SaudeOut {
   servico: string
 }
 
+// --- Extração de contrato PDF (T-901, REQ-F-014) -----------------------------
+
+export interface CampoExtraidoOut {
+  chave: string // "credor" | "tipo" | "saldo" | "taxa" | "parcela" | "restantes"
+  rotulo: string
+  valor: string // já no formato do formulário (pt-BR, taxa em %)
+  fonte: string // citação verbatim do documento ("" na extração clássica)
+  confianca: string // "90%" ou ""
+}
+
+export interface DiagLlm {
+  provider: string
+  base_url: string
+  model: string
+  endpoint_local: boolean
+}
+
+export interface ContratoExtraidoOut {
+  modo: 'ia' | 'classico' | 'vazio'
+  thread_id: string | null
+  campos: CampoExtraidoOut[]
+  descartados: string[] // ["taxa_mensal:SEM_FONTE", ...]
+  inconsistencias: string[] // ["CRUZADA_PRICE:parcela", ...]
+  motivos: string[] // por que a IA não rodou (ex.: "ERRO_PROVIDER:URLError")
+  aviso: string
+  llm: DiagLlm // alvo efetivo da LLM (para diagnóstico)
+}
+
 // --- Estado de uma chamada assíncrona (para as telas) ------------------------
 
 export type Estado<T> =

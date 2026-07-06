@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
-import type { PerfilIn } from './hf/contract'
+import type { DividaIn, PerfilIn } from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
+import Contrato from './screens/Contrato'
 import Dividas from './screens/Dividas'
 import EmConstrucao from './screens/EmConstrucao'
 import Perfil from './screens/Perfil'
@@ -58,6 +59,13 @@ export default function App() {
   const [perfil, setPerfil] = useState<PerfilIn>(PERFIL_SEED)
   const analise = useAnalise(perfil)
 
+  // Contrato PDF (T-901): a dívida confirmada entra no perfil e a navegação
+  // segue para Dívidas, onde o usuário ajusta saldo atual e parcelas restantes.
+  const adicionarDivida = (divida: DividaIn) => {
+    setPerfil((p) => ({ ...p, dividas: [...(p.dividas ?? []), divida] }))
+    setAbaAtiva(2)
+  }
+
   function tela() {
     switch (abaAtiva) {
       case 0:
@@ -66,6 +74,8 @@ export default function App() {
         return <Perfil perfil={perfil} setPerfil={setPerfil} analise={analise} />
       case 2:
         return <Dividas perfil={perfil} setPerfil={setPerfil} analise={analise} />
+      case 3:
+        return <Contrato onNovaDivida={adicionarDivida} />
       default:
         return <EmConstrucao titulo={ABAS[abaAtiva]} />
     }

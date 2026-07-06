@@ -59,8 +59,9 @@ def test_provider_cloud_degrada_se_pii_no_payload(perfil_atencao, monkeypatch):
         def analisar(self, fatos):
             raise AssertionError("payload com PII chegou ao provider cloud")
 
-    res = agente_mod.analisar(perfil_atencao,
-                              cfg=ConfigAgente(provider="openai_compat"),
+    # Endpoint REMOTO (nuvem): a checagem de PII incide (ADR-0010).
+    cfg = ConfigAgente(provider="openai_compat", base_url="https://api.openai.com/v1")
+    res = agente_mod.analisar(perfil_atencao, cfg=cfg,
                               provider=ProviderQueNaoPodeSerChamado())
     assert res.modo == "degradado"
     assert "REQ-GRD-002:PII_DETECTADA" in res.guardrails_violados

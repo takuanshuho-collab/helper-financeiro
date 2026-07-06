@@ -93,10 +93,12 @@ def verificar_pii(state: EstadoAnalise,
     """Cinto de segurança final do H2: nada com PII sai para provider cloud.
 
     A anonimização em montar_fatos() já protege por construção; esta checagem
-    varre o payload serializado que REALMENTE será enviado (REQ-GRD-002).
+    varre o payload serializado que REALMENTE será enviado (REQ-GRD-002). Só
+    incide quando o endpoint é REMOTO (não-loopback): um LLM local recebe fatos
+    na própria máquina, sem sair para a nuvem (ADR-0010).
     """
     cfg = runtime.context.cfg
-    if cfg.provider == "openai_compat" and contem_pii(
+    if not cfg.endpoint_local and contem_pii(
             _fatos_de(state).model_dump_json(), runtime.context.mapa):
         return {"motivos": ["REQ-GRD-002:PII_DETECTADA"]}
     return {}

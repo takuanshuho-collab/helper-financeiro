@@ -18,16 +18,52 @@ import re
 from .utils import parse_taxa, parse_valor
 
 
+def _texto_das_paginas(pdf: object) -> str:
+    return "\n".join(pagina.extract_text() or "" for pagina in pdf.pages)  # type: ignore[attr-defined]
+
+
 def extrair_texto_pdf(caminho: str) -> str:
     """Lê todo o texto de um PDF. Retorna string vazia se não houver texto."""
     import pdfplumber  # import local: só carrega quando realmente for usar
 
-    partes: list[str] = []
     with pdfplumber.open(caminho) as pdf:
-        for pagina in pdf.pages:
-            texto = pagina.extract_text() or ""
-            partes.append(texto)
-    return "\n".join(partes)
+        return _texto_das_paginas(pdf)
+
+
+def extrair_texto_pdf_bytes(dados: bytes) -> str:
+    """Lê o texto de um PDF em memória — sem tocar o disco.
+
+    A extração roda no sidecar local (H2): o documento bruto pode conter PII e
+    jamais é persistido em arquivo nem enviado à nuvem.
+    """
+    import io
+
+    import pdfplumber
+
+    with pdfplumber.open(io.BytesIO(dados)) as pdf:
+        return _texto_das_paginas(pdf)
+
+
+def extrair_markdown_pdf_bytes(dados: bytes) -> str:
+    """Converte um PDF em Markdown em memória (pymupdf4llm), preservando a
+    estrutura — títulos e sobretudo TABELAS (grade de taxas, cronograma de
+    parcelas). O Markdown dá muito mais sinal à LLM de extração do que o texto
+    plano (ADR-0010).
+
+    Melhor esforço: devolve "" se o pymupdf4llm não estiver disponível ou falhar
+    — o chamador cai no `extrair_texto_pdf_bytes` (pdfplumber). Tudo local, sem
+    tocar o disco (H2).
+    """
+    try:
+        import pymupdf
+        import pymupdf4llm
+    except ImportError:
+        return ""
+    try:
+        with pymupdf.open(stream=dados, filetype="pdf") as doc:
+            return pymupdf4llm.to_markdown(doc)
+    except Exception:  # noqa: BLE001 — melhor esforço; o fallback é o texto plano
+        return ""
 
 
 # Cada campo tem uma lista de padrões, do mais específico para o mais genérico.

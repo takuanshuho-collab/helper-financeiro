@@ -167,12 +167,59 @@ def test_saida_fora_do_schema_degrada_com_motivo():
     assert "REQ-LLM-002:SCHEMA" in estado["motivos"]
 
 
-def test_extracao_cloud_e_recusada():
-    """H2 por construção: documento bruto (com PII) nunca vai para a nuvem."""
-    cfg = ConfigAgente(provider="openai_compat", api_key="chave-teste", cache=False)
+def test_extracao_remota_e_recusada():
+    """H2 por endpoint: um endpoint NÃO-loopback (nuvem) é recusado (ADR-0010)."""
+    cfg = ConfigAgente(provider="openai_compat", base_url="https://api.openai.com/v1",
+                       api_key="chave-teste", cache=False)
     _, estado = iniciar_extracao(DOC_CONTRATO, cfg=cfg, extrator=None)
     assert estado.get("extracao") is None
     assert "ERRO_CONFIG:RuntimeError" in estado["motivos"]
+
+
+def test_obter_extrator_aceita_openai_compat_local():
+    """LM Studio em loopback é aceito; o dialeto segue o provider (ADR-0010)."""
+    from agent.extracao import OllamaExtrator, OpenAICompatExtrator, obter_extrator
+
+    ext = obter_extrator(ConfigAgente(provider="openai_compat",
+                                      base_url="http://localhost:1234/v1"))
+    assert isinstance(ext, OpenAICompatExtrator)
+    assert ext.url == "http://localhost:1234/v1/chat/completions"
+    # Só "local"/"ollama" falam a API nativa; o resto é OpenAI-compatible.
+    assert isinstance(obter_extrator(ConfigAgente(provider="local")), OllamaExtrator)
+    assert isinstance(obter_extrator(ConfigAgente(provider="ollama")), OllamaExtrator)
+
+
+def test_obter_extrator_robusto_a_variacao_de_provider():
+    """Espaços/variações no HF_PROVIDER não devem cair no dialeto errado (bug real)."""
+    from agent.extracao import OpenAICompatExtrator, obter_extrator
+
+    for provider in (" openai_compat ", "OpenAI_Compat", "lmstudio", "openai"):
+        ext = obter_extrator(ConfigAgente(provider=provider,
+                                          base_url="http://localhost:1234/v1"))
+        assert isinstance(ext, OpenAICompatExtrator), provider
+
+
+def test_openai_compat_extrator_usa_dialeto_v1(monkeypatch):
+    """O extrator OpenAI-compatible fala /v1 com response_format json_schema."""
+    from agent import extracao as extracao_mod
+    from agent.extracao import OpenAICompatExtrator
+
+    capturado: dict = {}
+
+    def fake_post(url, payload, headers, timeout_s):
+        capturado["url"] = url
+        capturado["payload"] = payload
+        return {"choices": [{"message": {"content": extracao_fiel().model_dump_json()}}]}
+
+    monkeypatch.setattr(extracao_mod, "_post_json", fake_post)
+    cfg = ConfigAgente(provider="openai_compat", base_url="http://127.0.0.1:1234/v1",
+                       model="modelo-local")
+    resultado = OpenAICompatExtrator(cfg).extrair(DOC_CONTRATO)
+
+    assert capturado["url"] == "http://127.0.0.1:1234/v1/chat/completions"
+    assert capturado["payload"]["response_format"]["type"] == "json_schema"
+    assert resultado.saldo_devedor is not None
+    assert resultado.saldo_devedor.valor == 10000.0
 
 
 # ------------------------------------------------------------- H5 + ingestão

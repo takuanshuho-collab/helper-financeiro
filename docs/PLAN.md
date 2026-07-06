@@ -79,12 +79,13 @@ variáveis (`capital`, `taxa`, `prazo`...), o código **verifica** e **calcula**
 | GUI | tkinter (stdlib) | offline, sem JS, vira `.exe` |
 | Planilha | openpyxl | fórmulas + gráfico |
 | Documentos | python-docx | `.docx` sem Node |
-| PDF | pdfplumber | extração de texto |
+| PDF (LLM) | pymupdf4llm → Markdown | ADR-0010: tabelas p/ a extração; AGPL (uso não-comercial) |
+| PDF (fallback/regex) | pdfplumber | extração de texto (MIT) |
 | Schemas | pydantic v2 | contratos tipados |
 | LLM (structured) | JSON Schema nativo (Ollama `format` / `response_format`) + Pydantic, via stdlib | ADR-0005: sem SDK/framework |
 | Orquestração | LangGraph (StateGraph + interrupt + InMemorySaver) | ADR-0006: fluxo rígido, pausa p/ humano |
 | Ingestão/RAG | LlamaIndex core (retriever-only) + embeddings via Ollama | ADR-0007: local, sem torch |
-| LLM local | Ollama — padrão `qwen2.5:3b` (GPU 4 GB; licença: ver ADR-0006) | LGPD / offline |
+| LLM local | Ollama (`/api/chat`) OU OpenAI-compatible local (LM Studio/llama.cpp, `/v1`) — loopback | ADR-0010: local por endpoint |
 | Testes | pytest | harness |
 
 **Não entram (denylist):** frameworks web, ORMs, libs de telemetria, cálculo

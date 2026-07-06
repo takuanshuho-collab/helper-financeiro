@@ -27,3 +27,18 @@ def test_defaults_local_first(monkeypatch):
 def test_modo_degradado_por_env(monkeypatch):
     monkeypatch.setenv("HF_MODO_DEGRADADO", "1")
     assert carregar_config().modo_degradado is True
+
+
+def test_endpoint_local_distingue_loopback_de_nuvem():
+    """A invariante do H2 é o endpoint (loopback), não o nome do provider (ADR-0010)."""
+    from agent.config import ConfigAgente
+
+    local = ("http://localhost:11434/v1", "http://127.0.0.1:1234/v1",
+             "http://127.0.0.5:8080")
+    for url in local:
+        assert ConfigAgente(base_url=url).endpoint_local is True
+
+    remoto = ("https://api.openai.com/v1", "http://10.0.0.9:1234/v1",
+              "https://meu-servidor.com/v1")
+    for url in remoto:
+        assert ConfigAgente(base_url=url).endpoint_local is False
