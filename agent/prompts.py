@@ -64,9 +64,10 @@ def montar_prompt_extracao(texto_documento: str) -> str:
     """Documento entra delimitado (DADO, nunca instrução — P5/H5), com uma lista
     INCISIVA dos alvos.
 
-    Dizer exatamente O QUE procurar (com sinônimos brasileiros) e mandar copiar a
-    LINHA INTEIRA como citação eleva bastante a extração de modelos locais
-    pequenos — em vez de deixá-los "procurar" livremente.
+    Dizer exatamente O QUE procurar (com sinônimos brasileiros) eleva bastante a
+    extração de modelos locais pequenos — em vez de deixá-los "procurar"
+    livremente. A citação é CURTA (só a frase com o valor): menos tokens de saída
+    ⇒ geração mais rápida (o gargalo em CPU) e quote-check mais fácil de casar.
     """
     return (
         "Localize no DOCUMENTO abaixo, se existirem, EXATAMENTE estes campos "
@@ -82,11 +83,12 @@ def montar_prompt_extracao(texto_documento: str) -> str:
         "'prestação mensal').\n"
         "6. parcelas_restantes — quantas parcelas faltam ('prazo', 'nº de "
         "parcelas', 'em N vezes').\n\n"
-        "Para CADA campo encontrado, copie em trecho_fonte a LINHA INTEIRA do "
-        "documento onde o valor aparece, exatamente como está escrita.\n"
-        "Exemplo — se o documento tiver a linha 'Saldo devedor atual: "
-        "R$ 3.500,00', então saldo_devedor = {\"valor\": 3500.0, "
-        "\"trecho_fonte\": \"Saldo devedor atual: R$ 3.500,00\"}.\n\n"
+        "Para CADA campo encontrado, copie em trecho_fonte um TRECHO CURTO do "
+        "documento — só a frase com o valor (no máximo ~12 palavras), exatamente "
+        "como está escrita, sem o parágrafo inteiro.\n"
+        "Exemplo — se o documento tiver 'Saldo devedor atual: R$ 3.500,00', "
+        "então saldo_devedor = {\"valor\": 3500.0, \"trecho_fonte\": "
+        "\"Saldo devedor atual: R$ 3.500,00\"}.\n\n"
         "<DOCUMENTO>\n" + texto_documento + "\n</DOCUMENTO>"
     )
 

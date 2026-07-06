@@ -36,19 +36,15 @@ DOC = (
 
 
 def _documento(cfg: ConfigAgente, pdf: str | None) -> str:
-    """Reproduz o preparo do sidecar: Markdown p/ a LLM, com truncagem/retrieval."""
+    """Reproduz o preparo do sidecar: texto plano p/ a LLM, com truncagem/retrieval."""
     if not pdf:
         return DOC
-    from core.extrator_pdf import (  # noqa: E402
-        extrair_markdown_pdf_bytes,
-        extrair_texto_pdf_bytes,
-    )
+    from core.extrator_pdf import extrair_texto_pdf_bytes  # noqa: E402
     from sidecar.app import _contexto_seguro  # noqa: E402
 
     dados = Path(pdf).read_bytes()
     plano = extrair_texto_pdf_bytes(dados)
-    markdown = extrair_markdown_pdf_bytes(dados) or plano
-    return _contexto_seguro(markdown, cfg)
+    return _contexto_seguro(plano, cfg)
 
 
 def main() -> None:

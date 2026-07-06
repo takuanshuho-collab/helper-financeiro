@@ -226,7 +226,6 @@ def test_contrato_extrair_ia_com_citacao_e_confirma(monkeypatch):
     fake = FakeExtrator()
     cliente.app.dependency_overrides[contexto_extracao] = lambda: (CFG_TESTE, fake)
     monkeypatch.setattr("sidecar.app.extrair_texto_pdf_bytes", lambda _b: DOC_CONTRATO)
-    monkeypatch.setattr("sidecar.app.extrair_markdown_pdf_bytes", lambda _b: DOC_CONTRATO)
     try:
         resp = cliente.post(
             "/contrato/extrair",
@@ -264,7 +263,6 @@ def test_contrato_extrair_fallback_classico(monkeypatch):
     fake = FakeExtrator(erro=ValueError("sem llm local"))
     cliente.app.dependency_overrides[contexto_extracao] = lambda: (CFG_TESTE, fake)
     monkeypatch.setattr("sidecar.app.extrair_texto_pdf_bytes", lambda _b: DOC_CONTRATO)
-    monkeypatch.setattr("sidecar.app.extrair_markdown_pdf_bytes", lambda _b: DOC_CONTRATO)
     try:
         resp = cliente.post(
             "/contrato/extrair", json={"pdf_base64": PDF_B64}, headers=CABECALHO
@@ -288,12 +286,11 @@ def test_contrato_extrair_fallback_classico(monkeypatch):
 def test_contexto_trunca_para_openai_compat_local():
     """LM Studio (sem embeddings): trunca o documento em vez de tentar /api/embed."""
     from agent.config import ConfigAgente
-    from agent.ingestao import LIMITE_DIRETO_CHARS
-    from sidecar.app import _contexto_seguro
+    from sidecar.app import LIMITE_EXTRACAO_LLM, _contexto_seguro
 
-    longo = "x" * (LIMITE_DIRETO_CHARS + 500)
+    longo = "x" * (LIMITE_EXTRACAO_LLM + 500)
     cfg = ConfigAgente(provider="openai_compat", base_url="http://localhost:1234/v1")
-    assert _contexto_seguro(longo, cfg) == longo[:LIMITE_DIRETO_CHARS]
+    assert _contexto_seguro(longo, cfg) == longo[:LIMITE_EXTRACAO_LLM]
 
 
 def test_contrato_pdf_sem_texto(monkeypatch):

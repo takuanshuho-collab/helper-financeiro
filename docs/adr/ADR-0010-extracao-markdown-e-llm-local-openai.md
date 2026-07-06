@@ -92,4 +92,36 @@ Apontar o sidecar via ambiente: `HF_PROVIDER=openai_compat`,
 - **Governança:** os testes que codificavam "openai_compat = nuvem" foram
   atualizados para a semântica **remoto = nuvem** (mesma intenção do H2). Sem
   alteração de requisito congelado além do refino aqui registrado.
+
+## Refinamento (2026-07-06) — texto plano à LLM + orçamento de tempo
+
+Com o LM Studio de fato conectado (`OpenAICompatExtrator`), a extração passou a
+funcionar — o modelo local recuperou credor, tipo, taxa e parcela **com
+citação**. O problema virou **velocidade**: um modelo pequeno em **CPU** (~2
+tokens/s) estourava o timeout no meio da geração. A investigação mostrou que o
+gargalo é a **geração** (10× mais lenta por token que o processamento do
+prompt), não a fidelidade das tabelas. Ajustes:
+
+1. **Texto plano, não Markdown, para a LLM.** A Decisão A alimentava a LLM com
+   o Markdown do `pymupdf4llm`; revertido para o **texto plano** do pdfplumber.
+   Motivos: (a) o Markdown adiciona tokens de marcação (`#`, `**`, `|`) que só
+   incham o prompt sem sinal proporcional em contratos curtos; (b) as citações
+   saíam com marcas de Markdown, forçando tolerância no quote-check. O
+   `extrair_markdown_pdf_bytes` **permanece no core** (testado), disponível para
+   um modelo maior/futuro, mas fora do caminho de extração padrão.
+2. **Contexto mais curto** (`LIMITE_EXTRACAO_LLM = 4000`, ante os 6000 do
+   retrieval): os dados do contrato ficam nas primeiras páginas; um prompt menor
+   acelera o processamento sem perder campos. Documento longo de verdade deve
+   usar Ollama + embeddings.
+3. **Citação curta.** O prompt agora pede um **trecho curto** (a frase com o
+   valor, ~12 palavras), não a linha inteira — menos tokens de **saída** (o
+   gargalo) e quote-check mais fácil de casar.
+4. **Timeouts folgados.** Default `HF_TIMEOUT` 60→**120 s** (CPU lenta ainda
+   pede 300+); no Electron, um `undici.Agent` com `headersTimeout`/`bodyTimeout`
+   de **15 min** substitui o padrão do fetch (~300 s), que cortava uma extração
+   lenta-mas-funcional.
+
+A **fidelidade das tabelas** (motivo original da Decisão A) fica em aberto para
+quando houver um modelo local rápido o bastante; o `pymupdf4llm` continua no
+projeto para esse cenário. A dependência AGPL permanece (mesmas condições).
 ```

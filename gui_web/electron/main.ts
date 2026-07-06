@@ -12,10 +12,21 @@ import * as path from 'node:path'
 import * as readline from 'node:readline'
 
 import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { Agent, fetch as fetchSidecar } from 'undici'
 
 let sidecar: ChildProcess | null = null
 let sidecarPort = 0
 let sidecarToken = ''
+
+// A extração por LLM local em CPU pode levar minutos. O undici (fetch do Node)
+// aborta no headersTimeout/bodyTimeout padrão (~300s), cortando uma extração
+// lenta-mas-funcional. Damos folga generosa aqui; o teto real é o HF_TIMEOUT do
+// próprio sidecar. Ver ADR-0010.
+const TIMEOUT_SIDECAR_MS = 15 * 60 * 1000
+const dispatcherSidecar = new Agent({
+  headersTimeout: TIMEOUT_SIDECAR_MS,
+  bodyTimeout: TIMEOUT_SIDECAR_MS,
+})
 
 // dist-electron/ → gui_web/ → raiz do repositório (onde o pacote `sidecar` vive).
 const repoRoot = path.resolve(__dirname, '..', '..')
@@ -57,13 +68,14 @@ function iniciarSidecar(): Promise<void> {
 
 async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown> {
   const temCorpo = payload !== undefined && payload !== null
-  const resp = await fetch(`http://127.0.0.1:${sidecarPort}${metodo}`, {
+  const resp = await fetchSidecar(`http://127.0.0.1:${sidecarPort}${metodo}`, {
     method: temCorpo ? 'POST' : 'GET',
     headers: {
       'Content-Type': 'application/json',
       'X-HF-Token': sidecarToken,
     },
     body: temCorpo ? JSON.stringify(payload) : undefined,
+    dispatcher: dispatcherSidecar,
   })
   const dados = (await resp.json()) as { detail?: string }
   if (!resp.ok) {

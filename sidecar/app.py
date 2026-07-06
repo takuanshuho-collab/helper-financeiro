@@ -15,14 +15,10 @@ from fastapi import Depends, FastAPI, HTTPException
 from agent.config import ConfigAgente, carregar_config
 from agent.exibicao import ROTULOS_EXTRACAO, campos_para_formulario
 from agent.extracao import Extrator, confirmar_extracao, iniciar_extracao
-from agent.ingestao import LIMITE_DIRETO_CHARS, preparar_contexto
+from agent.ingestao import preparar_contexto
 from core.diagnostico import resumo_diagnostico
 from core.estrategias import comparar_estrategias
-from core.extrator_pdf import (
-    extrair_markdown_pdf_bytes,
-    extrair_texto_pdf_bytes,
-    parsear_campos,
-)
+from core.extrator_pdf import extrair_texto_pdf_bytes, parsear_campos
 from core.models import (
     ComposicaoRenda,
     DespesasFixas,
@@ -162,22 +158,29 @@ def _form_para_lista(form: dict) -> list[dict]:
 # documento inteiro no prompt (lento no modelo local). Nesses casos, truncamos.
 _PROVIDERS_COM_EMBEDDINGS = {"local", "ollama"}
 
+# Teto de caracteres do documento entregue à LLM na extração. Bem abaixo do
+# `LIMITE_DIRETO_CHARS` (6000) do retrieval: modelos locais em CPU pagam o custo
+# no PROCESSAMENTO DO PROMPT (~min p/ milhares de tokens), então um contexto mais
+# curto — os dados do contrato ficam nas primeiras páginas — acelera a extração
+# sem perder os campos. Documento longo de verdade deve usar Ollama + embeddings.
+LIMITE_EXTRACAO_LLM = 4000
+
 
 def _contexto_seguro(texto: str, cfg: ConfigAgente | None) -> str:
     """Prepara o contexto p/ a extração: retrieval no Ollama; truncagem no resto.
 
-    Documento curto vai inteiro (o `preparar_contexto` já decide isso). Documento
-    longo: só o Ollama faz retrieval por embeddings; para OpenAI-compat local,
-    trunca em `LIMITE_DIRETO_CHARS` — determinístico, sem `/api/embed` e com um
-    prompt enxuto (crucial em modelos locais lentos).
+    Documento curto vai inteiro. Documento longo: só o Ollama faz retrieval por
+    embeddings; para OpenAI-compat local, trunca em `LIMITE_EXTRACAO_LLM` —
+    determinístico, sem `/api/embed` e com um prompt enxuto (crucial em modelos
+    locais lentos).
     """
     conf = cfg or carregar_config()
     if conf.provider.strip().lower() not in _PROVIDERS_COM_EMBEDDINGS:
-        return texto[:LIMITE_DIRETO_CHARS]
+        return texto[:LIMITE_EXTRACAO_LLM]
     try:
         return preparar_contexto(texto, conf)
     except Exception:  # noqa: BLE001 — sem embeddings ⇒ melhor esforço (texto direto)
-        return texto[:LIMITE_DIRETO_CHARS]
+        return texto[:LIMITE_EXTRACAO_LLM]
 
 
 def _diag_llm(cfg: ConfigAgente | None) -> dict:
@@ -213,9 +216,10 @@ def contrato_extrair(
                 "descartados": [], "inconsistencias": [], "motivos": [],
                 "aviso": AVISO_PDF_SEM_TEXTO, "llm": llm}
 
-    # Markdown (tabelas preservadas) para a LLM; texto plano para o regex.
-    markdown = extrair_markdown_pdf_bytes(dados) or texto_plano
-    contexto = _contexto_seguro(markdown, cfg)
+    # Texto plano (não Markdown) para a LLM: prompt mais enxuto e citações limpas
+    # (sem `#`/`**`), decisivo em modelos locais lentos. O mesmo texto plano
+    # alimenta o regex clássico. Ver ADR-0010 (refinamento).
+    contexto = _contexto_seguro(texto_plano, cfg)
     _tid, estado = iniciar_extracao(contexto, cfg=cfg, extrator=extrator)
     if "__interrupt__" in estado:  # o grafo pausou para a confirmação humana
         payload = estado["__interrupt__"][0].value
