@@ -11,7 +11,9 @@ from core.rubricas import (
     CAMPOS_POR_CATEGORIA,
     Rubrica,
     aplicar_somas,
+    comparar_orcamentos,
     somas_por_campo,
+    validar_mes,
     validar_rubrica,
 )
 
@@ -109,3 +111,49 @@ def test_aplicar_com_secao_ausente_no_perfil():
     # Perfil mínimo (sem a seção): a soma cria a seção — nada explode.
     novo = aplicar_somas({}, {"renda": {"renda_extra": 200.0}})
     assert novo["renda"]["renda_extra"] == 200.0
+
+
+# ------------------------------------- histórico mensal (ADR-0013, T-1201)
+def test_validar_mes():
+    validar_mes("2026-07")  # ok
+    for ruim in ("2026-13", "2026-0", "26-07", "julho", "2026-07-01"):
+        with pytest.raises(ValueError, match="Competência inválida"):
+            validar_mes(ruim)
+
+
+def test_comparar_orcamentos_variacao_por_campo():
+    antes = {"variaveis": {"mercado": 800.0}}
+    depois = {"variaveis": {"mercado": 900.0}}
+    comp = comparar_orcamentos(antes, depois)
+
+    variaveis = next(s for s in comp["secoes"] if s["categoria"] == "variaveis")
+    mercado = next(c for c in variaveis["campos"] if c["campo"] == "mercado")
+    # "Seu mercado subiu 12,5%": 800 → 900.
+    assert mercado["antes"] == 800.0
+    assert mercado["depois"] == 900.0
+    assert mercado["delta"] == 100.0
+    assert mercado["variacao_pct"] == 0.125
+    assert mercado["rotulo"] == "Mercado"
+    # A seção agrega os campos (aqui só há um).
+    assert variaveis["antes"] == 800.0
+    assert variaveis["delta"] == 100.0
+
+
+def test_comparar_orcamentos_sem_base_pct_none():
+    # Campo que nasceu neste mês: delta existe, % não (sem divisão por zero).
+    comp = comparar_orcamentos({}, {"fixas": {"saude": 250.0}})
+    fixas = next(s for s in comp["secoes"] if s["categoria"] == "fixas")
+    saude = next(c for c in fixas["campos"] if c["campo"] == "saude")
+    assert saude["delta"] == 250.0
+    assert saude["variacao_pct"] is None
+
+
+def test_comparar_orcamentos_omite_campos_zerados():
+    comp = comparar_orcamentos({"fixas": {"moradia": 1400.0}},
+                               {"fixas": {"moradia": 1400.0}})
+    fixas = next(s for s in comp["secoes"] if s["categoria"] == "fixas")
+    assert [c["campo"] for c in fixas["campos"]] == ["moradia"]
+    assert fixas["campos"][0]["delta"] == 0.0
+    # As 3 seções sempre existem (mesmo vazias), para a GUI ser estável.
+    assert [s["categoria"] for s in comp["secoes"]] == [
+        "renda", "fixas", "variaveis"]

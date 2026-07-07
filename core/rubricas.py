@@ -12,6 +12,7 @@ demais endpoints seguem recebendo o perfil simples, já consistente.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, fields
 
@@ -106,6 +107,64 @@ def somas_por_campo(rubricas: Iterable[Rubrica]) -> dict[str, dict[str, float]]:
         categoria: {campo: round(total, 2) for campo, total in secao.items()}
         for categoria, secao in somas.items()
     }
+
+
+# --- Histórico mensal (ADR-0013, REQ-F-019) --------------------------------
+
+_RE_MES = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def validar_mes(mes: str) -> None:
+    """Competência no formato 'AAAA-MM' (ex.: '2026-07'); ValueError se não."""
+    if not _RE_MES.match(mes):
+        raise ValueError(f"Competência inválida: {mes!r} (use 'AAAA-MM').")
+
+
+def _variacao(antes: float, depois: float) -> tuple[float, float | None]:
+    """Delta e variação fracionária; pct é None quando não havia base (0)."""
+    delta = round(depois - antes, 2)
+    pct = round(delta / abs(antes), 4) if antes else None
+    return delta, pct
+
+
+def comparar_orcamentos(antes: dict, depois: dict) -> dict:
+    """Compara dois perfis (dicts do contrato) campo a campo e por seção.
+
+    "Seu mercado subiu 12%": para cada campo do orçamento, o valor anterior,
+    o atual, o delta e a variação fracionária (None quando o anterior é 0 —
+    sem divisão por zero). Campos zerados nos DOIS perfis ficam de fora
+    (ruído). Funciona igual com campos detalhados ou diretos: o valor do
+    campo já é a soma em ambos os casos (invariante do ADR-0012).
+    """
+    secoes = []
+    for categoria, campos in CAMPOS_POR_CATEGORIA.items():
+        secao_antes = antes.get(categoria) or {}
+        secao_depois = depois.get(categoria) or {}
+        linhas = []
+        total_antes = total_depois = 0.0
+        for campo in campos:
+            v_antes = float(secao_antes.get(campo) or 0.0)
+            v_depois = float(secao_depois.get(campo) or 0.0)
+            total_antes += v_antes
+            total_depois += v_depois
+            if v_antes == 0.0 and v_depois == 0.0:
+                continue
+            delta, pct = _variacao(v_antes, v_depois)
+            linhas.append({
+                "campo": campo,
+                "rotulo": ROTULO_CAMPO[categoria][campo],
+                "antes": round(v_antes, 2), "depois": round(v_depois, 2),
+                "delta": delta, "variacao_pct": pct,
+            })
+        delta, pct = _variacao(total_antes, total_depois)
+        secoes.append({
+            "categoria": categoria,
+            "rotulo": ROTULO_CATEGORIA[categoria],
+            "antes": round(total_antes, 2), "depois": round(total_depois, 2),
+            "delta": delta, "variacao_pct": pct,
+            "campos": linhas,
+        })
+    return {"secoes": secoes}
 
 
 def aplicar_somas(perfil: dict, somas: dict[str, dict[str, float]]) -> dict:

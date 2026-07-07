@@ -177,6 +177,60 @@ def test_rubrica_com_mes_fica_fora_do_orcamento_vivo(tmp_path):
     repo.fechar()
 
 
+# ---------------------------------------- histórico mensal (T-1201, ADR-0013)
+def test_arquivar_mes_grava_perfil_e_copia_rubricas(tmp_path):
+    repo = Repositorio(tmp_path / "dados.db")
+    repo.criar_rubrica("fixas", "contas_casa", "Luz", 180.0)
+    perfil = {"fixas": {"contas_casa": 180.0}}
+
+    repo.arquivar_mes("2026-07", perfil)
+
+    assert repo.listar_meses() == ["2026-07"]
+    assert repo.carregar_mes("2026-07") == perfil
+    snapshot = repo.rubricas_do_mes("2026-07")
+    assert [r["nome"] for r in snapshot] == ["Luz"]
+    # As rubricas VIVAS continuam lá (o snapshot é cópia, não movimentação).
+    assert [r["nome"] for r in repo.listar_rubricas()] == ["Luz"]
+    repo.fechar()
+
+
+def test_arquivar_de_novo_substitui_o_snapshot(tmp_path):
+    repo = Repositorio(tmp_path / "dados.db")
+    repo.criar_rubrica("fixas", "contas_casa", "Luz", 180.0)
+    repo.arquivar_mes("2026-07", {"v": 1})
+
+    # O orçamento vivo muda e o mês é arquivado de novo.
+    repo.criar_rubrica("fixas", "contas_casa", "Internet", 120.0)
+    repo.arquivar_mes("2026-07", {"v": 2})
+
+    assert repo.carregar_mes("2026-07") == {"v": 2}
+    assert [r["nome"] for r in repo.rubricas_do_mes("2026-07")] == [
+        "Luz", "Internet"]
+    assert repo.listar_meses() == ["2026-07"]  # sem duplicar a competência
+    repo.fechar()
+
+
+def test_snapshot_nao_vaza_para_o_orcamento_vivo(tmp_path):
+    repo = Repositorio(tmp_path / "dados.db")
+    repo.criar_rubrica("fixas", "contas_casa", "Luz", 180.0)
+    repo.arquivar_mes("2026-06", {})
+    # Editar o vivo depois do arquivamento não toca o snapshot...
+    rid = repo.listar_rubricas()[0]["id"]
+    repo.atualizar_rubrica(rid, "Luz", 200.0)
+    assert repo.rubricas_do_mes("2026-06")[0]["valor"] == 180.0
+    # ...e o snapshot não aparece no vivo.
+    assert len(repo.listar_rubricas()) == 1
+    repo.fechar()
+
+
+def test_mes_sem_snapshot(tmp_path):
+    repo = Repositorio(tmp_path / "dados.db")
+    assert repo.listar_meses() == []
+    assert repo.carregar_mes("2026-01") is None
+    assert repo.rubricas_do_mes("2026-01") == []
+    repo.fechar()
+
+
 def test_escritas_concorrentes_nao_se_corrompem(tmp_path):
     repo = Repositorio(tmp_path / "dados.db")
 

@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.4.0 (ciclo FECHADO — `FREEZE.md` v2.4.0) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.5.0 (ciclo aberto — ADR-0013) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -180,6 +180,20 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ✅ |
 | T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ✅ |
 | T-1106 | Fechamento do ciclo: gates verdes, ata `FREEZE.md` v2.4.0 e docs sincronizados | Processo | todos | ✅ |
+
+## Milestone M12 — Histórico mensal do orçamento (v2.5, ADR-0013)
+
+> Primeira mudança pós-freeze v2.4.0, autorizada pela ADR-0013. O orçamento
+> vivo ganha a dimensão TEMPO: "Arquivar mês" grava a competência (perfil +
+> rubricas com `mes = 'AAAA-MM'`, coluna reservada no schema v1) e o core
+> compara competências campo a campo. Bônus: sugestões de nome de rubrica.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1201 | ADR-0013 + bump 2.5.0 + core `comparar_orcamentos` + snapshot no repositório (arquivar/listar/carregar competência) + testes | REQ-F-019 | — | 🟨 |
+| T-1202 | Endpoints `/historico` no sidecar (arquivar, listar, snapshot, comparar vs mês ou vs vivo) + testes de contrato | REQ-F-019 | T-1201 | ⬜ |
+| T-1203 | GUI: botão "Arquivar mês" + painel de histórico/comparação na Planilha; sugestões de rubrica via `datalist` + E2E | REQ-F-019/020 | T-1202 | ⬜ |
+| T-1204 | Fechamento do ciclo: gates, ata `FREEZE.md` v2.5.0 e docs sincronizados | Processo | todos | ⬜ |
 
 ---
 

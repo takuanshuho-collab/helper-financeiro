@@ -181,6 +181,48 @@ class Repositorio:
             )
         return cursor.rowcount > 0
 
+    # ------------------------------------------- histórico mensal (T-1201)
+    # Snapshot da competência 'AAAA-MM' (ADR-0013): o perfil vai para a
+    # chave `perfil:AAAA-MM` e as rubricas vivas são COPIADAS com o mês.
+    # Arquivar de novo a mesma competência substitui o snapshot.
+    def arquivar_mes(self, mes: str, perfil: dict) -> None:
+        agora = datetime.now(UTC).isoformat()
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO estado (chave, json, atualizado_em) VALUES (?, ?, ?) "
+                "ON CONFLICT (chave) DO UPDATE SET json = excluded.json, "
+                "atualizado_em = excluded.atualizado_em",
+                (f"perfil:{mes}", json.dumps(perfil, ensure_ascii=False), agora),
+            )
+            self._conn.execute("DELETE FROM rubrica WHERE mes = ?", (mes,))
+            self._conn.execute(
+                "INSERT INTO rubrica (categoria, campo_pai, nome, valor, ordem, mes) "
+                "SELECT categoria, campo_pai, nome, valor, ordem, ? "
+                "FROM rubrica WHERE mes IS NULL",
+                (mes,),
+            )
+
+    def listar_meses(self) -> list[str]:
+        with self._lock:
+            linhas = self._conn.execute(
+                "SELECT chave FROM estado WHERE chave LIKE 'perfil:%' "
+                "ORDER BY chave"
+            ).fetchall()
+        return [linha["chave"].removeprefix("perfil:") for linha in linhas]
+
+    def carregar_mes(self, mes: str) -> dict | None:
+        return self.carregar_estado(f"perfil:{mes}")
+
+    def rubricas_do_mes(self, mes: str) -> list[dict]:
+        with self._lock:
+            linhas = self._conn.execute(
+                "SELECT id, categoria, campo_pai, nome, valor, ordem "
+                "FROM rubrica WHERE mes = ? "
+                "ORDER BY categoria, campo_pai, ordem, id",
+                (mes,),
+            ).fetchall()
+        return [dict(linha) for linha in linhas]
+
     # -------------------------------------------------------------- ciclo
     def fechar(self) -> None:
         with self._lock:
