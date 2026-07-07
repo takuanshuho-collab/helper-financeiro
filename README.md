@@ -6,7 +6,9 @@ lê contratos de empréstimo em PDF, define estratégias de quitação e gera
 
 Desde o ciclo v2.3 (ADR-0009) a interface oficial é a **GUI web** (Electron +
 React) falando com o núcleo Python por um **sidecar local**; a janela tkinter
-clássica segue como fallback (`--tkinter`).
+clássica segue como fallback (`--tkinter`). O ciclo v2.4 (ADR-0012) trouxe o
+**orçamento detalhado por rubricas** (planilha editável dentro do app) e a
+**persistência local**: perfil, dívidas e rubricas ficam salvos entre sessões.
 
 ---
 
@@ -75,7 +77,11 @@ uv run python main.py --tkinter
 
 1. **Aba Perfil** — preencha o orçamento mensal por categoria (renda,
    despesas fixas e variáveis, reserva e FGTS); os totais, a cobertura da
-   reserva e o fluxo de caixa são calculados na hora.
+   reserva e o fluxo de caixa são calculados na hora. O botão **Detalhar
+   orçamento** abre a planilha de **rubricas** (v2.4): individualize cada
+   gasto ("Conta de luz", "Internet"...) e o campo do Perfil passa a valer a
+   soma. Tudo que você digita é **salvo automaticamente** e volta na próxima
+   abertura.
 2. **Aba Dívidas** — cadastre cada dívida (credor, tipo, saldo, taxa, parcela).
 3. **Aba Contrato PDF** *(opcional)* — selecione um contrato; os campos são
    extraídos e jogados no formulário da aba Dívidas para você **conferir**.
@@ -122,7 +128,9 @@ adicione o pacote em falta com outro `--collect-all`.
 ## 🔒 Privacidade
 
 Tudo roda **localmente**: os dados financeiros e os PDFs não saem da sua máquina.
-Nenhuma informação é enviada pela internet.
+Nenhuma informação é enviada pela internet. O estado do app (perfil, dívidas e
+rubricas — v2.4) fica num banco SQLite local em
+`%APPDATA%\HelperFinanceiro\dados.db`, no seu perfil de usuário.
 
 ---
 

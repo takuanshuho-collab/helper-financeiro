@@ -1,10 +1,11 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.3.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.4.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
-  (`npm run e2e`; pacote real com `HF_E2E_PACOTE=1`).
+  (`npm run e2e`; pacote real com `HF_E2E_PACOTE=1`). Desde a v2.4 o E2E roda
+  com **banco isolado** (`HF_DB_PATH` em tmp) — o app persiste estado.
 
 O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 `REQ-GRD-*` ou `REQ-LLM-*` é considerado pronto sem um teste verde aqui.

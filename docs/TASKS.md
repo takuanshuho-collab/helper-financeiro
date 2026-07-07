@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.4.0 (ciclo aberto) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.4.0 (ciclo FECHADO — `FREEZE.md` v2.4.0) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -179,7 +179,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1103 | Rubricas no core (roll-up campo↔rubricas, campo com rubricas = soma) + endpoints CRUD no sidecar + testes | REQ-F-017 | T-1101 | ✅ |
 | T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ✅ |
 | T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ✅ |
-| T-1106 | Fechamento do ciclo: gates verdes, ata `FREEZE.md` v2.4.0 e docs sincronizados | Processo | todos | ⬜ |
+| T-1106 | Fechamento do ciclo: gates verdes, ata `FREEZE.md` v2.4.0 e docs sincronizados | Processo | todos | ✅ |
 
 ---
 
@@ -224,7 +224,14 @@ há rubricas), rótulos pt-BR canônicos no core (`ROTULO_CATEGORIA`/
 do banco; SPEC ganhou REQ-F-017/018, `PARIDADE.md` ganhou a §7 (novidades
 v2.4 só na web; tkinter = fallback congelado do v2.3) e o HARNESS mapeou os
 REQs novos. E2E dos fluxos novos já entregue no T-1102/T-1104 (banco isolado
-+ cenários "persistência" e "planilha"). Próximo: **T-1106** (freeze v2.4.0).
+e cenários "persistência" e "planilha"). **T-1106 ✅ — CICLO v2.4 FECHADO E
+CONGELADO**: gates verdes (207 passed, cobertura 96,4%; gate-front ok; E2E
+9 passed incluindo o smoke do pacote real), binários reconstruídos
+(sidecar PyInstaller + instalador NSIS 2.4.0), docs sincronizados (INDEX,
+README, HARNESS 2.4.0) e nova ata **`FREEZE.md` v2.4.0** com SHA-256 de
+todos os artefatos e dos binários. Qualquer mudança nos artefatos
+congelados exige nova ADR + incremento de versão + nova ata. Próximo
+ciclo: abrir com nova ADR.
 
 ### Histórico do ciclo v2.3 (fechado)
 

@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0011) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0012) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
@@ -60,7 +60,17 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   empacotamento electron-builder + sidecar PyInstaller; paridade documentada
   (`PARIDADE.md`) com E2E Playwright; segurança do shell revisada
   (`SEGURANCA-SHELL.md`).
-- **Mudanças nos artefatos congelados (v2.3.0) exigem nova ADR + incremento de
+- **Ciclo v2.4 FECHADO (`FREEZE.md` v2.4.0, ADR-0012):** orçamento detalhado
+  com **rubricas** — subcampos criados pelo usuário por campo do Perfil, com
+  roll-up no `core` (campo detalhado = soma, somente-leitura com selo
+  "detalhado ▸") editados na tela **Planilha de orçamento**; rubricas também
+  na aba "Orçamento detalhado" do `.xlsx` (subtotais `=SUM`). **Persistência
+  local** em SQLite gerida pelo sidecar (`%APPDATA%\HelperFinanceiro\
+  dados.db`, `HF_DB_PATH` p/ testes): perfil + dívidas + rubricas com
+  hidratação no boot e auto-save — o app lembra o usuário entre sessões
+  (REQ-F-017/018). Só na GUI web (tkinter = fallback congelado do v2.3,
+  `PARIDADE.md` §7).
+- **Mudanças nos artefatos congelados (v2.4.0) exigem nova ADR + incremento de
   versão + nova ata.**
 
 ## Rodar
