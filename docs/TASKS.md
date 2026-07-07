@@ -174,8 +174,8 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-1101 | ADR-0012 + bump 2.4.0 + camada de persistência SQLite no sidecar (repositório, schema v1 com `esquema`/`estado`/`rubrica`, `HF_DB_PATH`) + testes | REQ-F-018 | — | 🟨 |
-| T-1102 | Persistência de perfil + dívidas fim-a-fim: `GET/PUT /estado`, hidratação no boot da GUI, auto-save com debounce | REQ-F-018 | T-1101 | ⬜ |
+| T-1101 | ADR-0012 + bump 2.4.0 + camada de persistência SQLite no sidecar (repositório, schema v1 com `esquema`/`estado`/`rubrica`, `HF_DB_PATH`) + testes | REQ-F-018 | — | ✅ |
+| T-1102 | Persistência de perfil + dívidas fim-a-fim: `GET/POST /estado`, hidratação no boot da GUI, auto-save com debounce | REQ-F-018 | T-1101 | ✅ |
 | T-1103 | Rubricas no core (roll-up campo↔rubricas, campo com rubricas = soma) + endpoints CRUD no sidecar + testes | REQ-F-017 | T-1101 | ⬜ |
 | T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ⬜ |
 | T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ⬜ |
@@ -194,7 +194,14 @@ pelo usuário, roll-up no core) + persistência local SQLite no sidecar
 (`%APPDATA%\HelperFinanceiro\dados.db`, `HF_DB_PATH` p/ testes). Decisões do
 mantenedor: SQLite (não MySQL), orçamento único vivo (schema já preparado p/
 histórico mensal), persistir TUDO (perfil + dívidas + rubricas), rubricas em
-renda/fixas/variáveis. Em andamento: **T-1101**.
+renda/fixas/variáveis. **T-1101 ✅**: `sidecar/persistencia.py` (Repositorio
+SQLite, schema v1, lock) + 13 testes. **T-1102 ✅**: `GET/POST /estado` no
+sidecar (payload validado pelo `PerfilIn` antes de persistir — a hidratação
+nunca surpreende a GUI), hidratação no boot (`hf.estadoCarregar`) e auto-save
+com debounce de 600 ms no `App.tsx` (só liga após a hidratação, para o seed
+não sobrescrever o banco); E2E com banco isolado (`HF_DB_PATH` em tmp) + teste
+novo: perfil editado sobrevive à reabertura do app (8º cenário). Próximo:
+**T-1103** (rubricas no core + CRUD).
 
 ### Histórico do ciclo v2.3 (fechado)
 **Ciclo v2.3 ABERTO (ADR-0009).** **T-701 concluída**: SPEC v2.3 com

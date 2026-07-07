@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { IconeLua, IconeSol } from './components/Icones'
+import { hf } from './hf/client'
 import type { DividaIn, PerfilIn, SecaoIaOut } from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
 import Analise from './screens/Analise'
@@ -93,6 +94,39 @@ export default function App() {
     setEscuro(novo)
   }
   const [perfil, setPerfil] = useState<PerfilIn>(PERFIL_SEED)
+  // Persistência (T-1102, REQ-F-018): o auto-save só liga DEPOIS da
+  // hidratação — senão o seed sobrescreveria o banco antes da carga chegar.
+  const [hidratado, setHidratado] = useState(false)
+
+  useEffect(() => {
+    let ativo = true
+    hf.estadoCarregar()
+      .then((estado) => {
+        if (ativo && estado.perfil) setPerfil(estado.perfil)
+      })
+      .catch(() => {
+        // sidecar sem banco/fora do Electron: segue o seed em memória
+      })
+      .finally(() => {
+        if (ativo) setHidratado(true)
+      })
+    return () => {
+      ativo = false
+    }
+  }, [])
+
+  // Auto-save com debounce: qualquer edição (Perfil, Dívidas, contrato
+  // confirmado) persiste o estado inteiro — sem botão "salvar".
+  useEffect(() => {
+    if (!hidratado) return
+    const timer = setTimeout(() => {
+      hf.estadoSalvar(perfil).catch(() => {
+        // falha de gravação não pode derrubar a edição; a próxima tenta de novo
+      })
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [perfil, hidratado])
+
   // Última análise sênior da sessão (T-902): vive aqui para sobreviver à troca
   // de aba e entrar no relatório .docx — paridade com a GUI tkinter.
   const [secaoIa, setSecaoIa] = useState<SecaoIaOut | null>(null)

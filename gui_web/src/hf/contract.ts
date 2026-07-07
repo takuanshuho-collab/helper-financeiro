@@ -106,6 +106,13 @@ export interface SaudeOut {
   servico: string
 }
 
+// --- Estado persistido (T-1102, REQ-F-018) ------------------------------------
+
+export interface EstadoOut {
+  /** Perfil salvo na sessão anterior; null na primeira execução. */
+  perfil: PerfilIn | null
+}
+
 // --- Tela Análise (T-902, REQ-F-015) ------------------------------------------
 
 export interface OportunidadeOut {

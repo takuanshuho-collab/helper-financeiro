@@ -7,6 +7,7 @@
  *
  * Os testes são seriais e compartilham a mesma janela — a ordem importa.
  */
+import * as os from 'node:os'
 import * as path from 'node:path'
 
 import {
@@ -19,6 +20,12 @@ import {
 
 const RAIZ_GUI = path.resolve(__dirname, '..')
 
+// Banco isolado por RODADA (T-1102): o app agora persiste o estado em SQLite;
+// sem isolar, uma rodada herdaria o perfil editado pela anterior (ou pior, o
+// banco real do usuário). O mesmo arquivo vale para os relaunches do teste de
+// tema/persistência — é exatamente o que queremos provar.
+const DB_E2E = path.join(os.tmpdir(), `hf-e2e-${Date.now()}.db`)
+
 test.describe.configure({ mode: 'serial' })
 
 let app: ElectronApplication
@@ -28,7 +35,7 @@ async function abrirApp(): Promise<[ElectronApplication, Page]> {
   const instancia = await electron.launch({
     args: ['.'],
     cwd: RAIZ_GUI,
-    env: { ...process.env, HF_MODO_DEGRADADO: '1' },
+    env: { ...process.env, HF_MODO_DEGRADADO: '1', HF_DB_PATH: DB_E2E },
   })
   const janela = await instancia.firstWindow()
   // O hero só aparece quando o sidecar respondeu o primeiro /diagnostico.
@@ -183,4 +190,27 @@ test('tema: toggle persiste em hf_dark e reidrata ao reabrir', async () => {
     if (v === null) localStorage.removeItem('hf_dark')
     else localStorage.setItem('hf_dark', v)
   }, anterior)
+})
+
+test('persistência: o perfil editado sobrevive à reabertura do app', async () => {
+  // Edita a renda para um valor-sentinela e espera o recálculo do core.
+  await aba('Perfil').click()
+  await preencher('Salário/benefício líquido', '7777')
+  await expect(
+    win
+      .locator('.secao', { hasText: 'Renda líquida mensal' })
+      .locator('.secao-total'),
+  ).toContainText('7.777,00', { timeout: 5_000 })
+  // Dá tempo do auto-save (debounce de 600 ms) chegar ao SQLite.
+  await win.waitForTimeout(1_500)
+
+  // Reabre o app inteiro: a hidratação (GET /estado) restaura o que foi salvo.
+  await app.close()
+  ;[app, win] = await abrirApp()
+  await aba('Perfil').click()
+  await expect(campo('Salário/benefício líquido')).toHaveValue('7.777,00')
+
+  // Volta ao seed para a próxima rodada não depender desta.
+  await preencher('Salário/benefício líquido', '5000')
+  await win.waitForTimeout(1_500)
 })

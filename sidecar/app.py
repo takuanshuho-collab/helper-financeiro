@@ -11,6 +11,7 @@ import base64
 import binascii
 import re
 import threading
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -41,6 +42,7 @@ from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta, montar_carta
 from outputs.relatorio import gerar_relatorio
 
+from .persistencia import Repositorio
 from .schemas import (
     AnaliseIaIn,
     AnaliseIn,
@@ -129,6 +131,45 @@ def diagnostico(perfil_in: PerfilIn) -> dict:
     resposta["despesas_variaveis"] = perfil.despesas_variaveis
     resposta["meses_reserva"] = perfil.meses_reserva
     return resposta
+
+
+# ------------------------------------------------ estado persistido (T-1102)
+# O perfil completo (orçamento + dívidas) é salvo como documento único: o
+# auto-save da GUI manda o estado inteiro com debounce, e a hidratação no boot
+# devolve exatamente o que foi salvo (REQ-F-018, ADR-0012).
+CHAVE_PERFIL = "perfil"
+
+_REPO: Repositorio | None = None
+
+
+def repositorio() -> Repositorio:
+    """Dependência do banco local (sobrescrita nos testes com um tmp_path).
+
+    Criado sob demanda na primeira chamada — assim os testes que sobrescrevem
+    a dependência nunca tocam o banco real do usuário.
+    """
+    global _REPO
+    if _REPO is None:
+        _REPO = Repositorio()
+    return _REPO
+
+
+@app.get("/estado", dependencies=[Depends(exigir_token)])
+def estado_carregar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Estado salvo do usuário; `perfil` é None na primeira execução."""
+    return {"perfil": repo.carregar_estado(CHAVE_PERFIL)}
+
+
+@app.post("/estado", dependencies=[Depends(exigir_token)])
+def estado_salvar(perfil_in: PerfilIn,
+                  repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Salva o perfil completo (auto-save da GUI).
+
+    O payload passa pela validação do `PerfilIn` antes de ir ao banco — o que
+    está persistido sempre volta a hidratar a GUI sem surpresa de schema.
+    """
+    repo.salvar_estado(CHAVE_PERFIL, perfil_in.model_dump())
+    return {"ok": True}
 
 
 @app.post("/estrategias", dependencies=[Depends(exigir_token)])

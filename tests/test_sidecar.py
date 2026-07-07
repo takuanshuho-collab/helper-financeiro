@@ -9,12 +9,14 @@ import base64
 import os
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from agent.config import ConfigAgente
 from agent.provider import FakeProvider
 from contracts import AnaliseAgente, FatosFinanceiros
-from sidecar.app import app, contexto_analise, contexto_extracao
+from sidecar.app import app, contexto_analise, contexto_extracao, repositorio
+from sidecar.persistencia import Repositorio
 from sidecar.security import VAR_TOKEN
 from tests.test_extracao import CFG_TESTE, DOC_CONTRATO, FakeExtrator
 
@@ -602,3 +604,66 @@ def test_contrato_pdf_sem_texto(monkeypatch):
     assert dados["modo"] == "vazio"
     assert dados["aviso"]
     assert dados["campos"] == []
+
+
+# --- Estado persistido (T-1102, REQ-F-018 / ADR-0012) -------------------------
+
+
+@pytest.fixture()
+def repo_tmp(tmp_path):
+    """Banco isolado por teste — a dependência real nunca toca o do usuário."""
+    repo = Repositorio(tmp_path / "dados.db")
+    app.dependency_overrides[repositorio] = lambda: repo
+    yield repo
+    del app.dependency_overrides[repositorio]
+    repo.fechar()
+
+
+def test_estado_sem_token_401(repo_tmp):
+    assert cliente.get("/estado").status_code == 401
+    assert cliente.post("/estado", json={}).status_code == 401
+
+
+def test_estado_primeira_execucao_sem_perfil(repo_tmp):
+    resposta = cliente.get("/estado", headers=CABECALHO)
+    assert resposta.status_code == 200
+    assert resposta.json()["perfil"] is None
+
+
+def test_estado_roundtrip_salvar_e_hidratar(repo_tmp):
+    payload = {
+        "renda": {"salario_liquido": 4200.0},
+        "fixas": {"contas_casa": 480.5},
+        "reserva_emergencia": 1000.0,
+        "dividas": [
+            {"credor": "Banco São João", "tipo": "Cartão de crédito",
+             "saldo_devedor": 12000.0, "taxa_mensal": 0.11,
+             "parcela": 700.0, "parcelas_restantes": 10}
+        ],
+    }
+    assert cliente.post("/estado", json=payload,
+                        headers=CABECALHO).json() == {"ok": True}
+
+    perfil = cliente.get("/estado", headers=CABECALHO).json()["perfil"]
+    assert perfil["renda"]["salario_liquido"] == 4200.0
+    assert perfil["reserva_emergencia"] == 1000.0
+    assert perfil["dividas"][0]["credor"] == "Banco São João"
+    # O payload é NORMALIZADO pelo PerfilIn antes de persistir: campos omitidos
+    # voltam com os defaults do schema — a hidratação nunca surpreende a GUI.
+    assert perfil["fixas"]["moradia"] == 0.0
+    assert perfil["variaveis"]["mercado"] == 0.0
+
+
+def test_estado_salvar_de_novo_sobrescreve(repo_tmp):
+    cliente.post("/estado", json={"reserva_emergencia": 1.0}, headers=CABECALHO)
+    cliente.post("/estado", json={"reserva_emergencia": 2.0}, headers=CABECALHO)
+    perfil = cliente.get("/estado", headers=CABECALHO).json()["perfil"]
+    assert perfil["reserva_emergencia"] == 2.0
+
+
+def test_estado_payload_invalido_422(repo_tmp):
+    # Dívida sem `credor`/`tipo` não passa da validação — e não vai ao banco.
+    payload = {"dividas": [{"saldo_devedor": 100.0}]}
+    resposta = cliente.post("/estado", json=payload, headers=CABECALHO)
+    assert resposta.status_code == 422
+    assert cliente.get("/estado", headers=CABECALHO).json()["perfil"] is None

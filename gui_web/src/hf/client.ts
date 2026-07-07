@@ -11,6 +11,7 @@ import type {
   CartaPreviaOut,
   ContratoExtraidoOut,
   DiagnosticoOut,
+  EstadoOut,
   EstrategiasOut,
   ExportadoOut,
   IaJobOut,
@@ -49,6 +50,11 @@ async function chamar<T>(metodo: string, payload?: unknown): Promise<T> {
 
 export const hf = {
   saude: (): Promise<SaudeOut> => chamar('/health'),
+  /** Estado salvo da sessão anterior (hidratação no boot, REQ-F-018). */
+  estadoCarregar: (): Promise<EstadoOut> => chamar('/estado'),
+  /** Auto-save do perfil completo (o sidecar valida e persiste no SQLite). */
+  estadoSalvar: (perfil: PerfilIn): Promise<{ ok: boolean }> =>
+    chamar('/estado', perfil),
   diagnostico: (perfil: PerfilIn): Promise<DiagnosticoOut> =>
     chamar('/diagnostico', perfil),
   estrategias: (perfil: PerfilIn, extra = 0): Promise<EstrategiasOut> =>
