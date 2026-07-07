@@ -160,7 +160,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-1001 | Build `electron-builder` + sidecar PyInstaller (`extraResource`); startup/health + shutdown do sidecar | — | M9 | ✅ |
-| T-1002 | Telemetria LangSmith **local/self-hosted** (não sai da máquina) + auto-updater assinado/HTTPS, opt-in via env | REQ-SEC-004 | T-1001 | ⬜ |
+| T-1002 | Telemetria LangSmith **local/self-hosted** (não sai da máquina) + auto-updater assinado/HTTPS, opt-in via env | REQ-SEC-004 | T-1001 | ✅ |
 | T-1003 | Revisão de segurança do shell web (CSP, sem código remoto, loopback+token, sem PII) → doc | SEC | T-1001 | ⬜ |
 | T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ⬜ |
 | T-1005 | Ata de freeze v2.3.0 (SHA-256 dos artefatos + binário) e docs sincronizados | Processo | todos | ⬜ |
@@ -228,6 +228,14 @@ dist` → instalador NSIS ~172 MB; `dist:dir` p/ o smoke). `main.ts` escolhe o
 exe congelado (`process.resourcesPath`) quando `app.isPackaged`, com
 `windowsHide` e espera do `/health` antes de abrir a janela; shutdown já
 matava o processo. Smoke automatizado: `e2e/empacotado.spec.ts`
-(HF_E2E_PACOTE=1) valida o pacote real de ponta a ponta. **Próximo: T-1002**
-(telemetria local opt-in + auto-updater) e T-1003/1004/1005. Nova ata
-`FREEZE.md` v2.3.0 no fechamento.
+(HF_E2E_PACOTE=1) valida o pacote real de ponta a ponta. **T-1002 ✅** —
+telemetria: `agent/telemetria.py` (`configurar_telemetria`, chamada na
+partida do sidecar) só liga o tracing com `HF_TELEMETRIA=1` **e**
+`LANGSMITH_ENDPOINT` em loopback; nos demais casos FORÇA
+`LANGSMITH_TRACING/LANGCHAIN_TRACING_V2=false` (um `=true` perdido no
+ambiente não vaza traces à nuvem — REQ-SEC-004/H2; `tests/test_telemetria.py`).
+Auto-updater (`electron-updater`): só no app empacotado com
+`HF_AUTO_UPDATE=1` + `HF_UPDATE_URL` **HTTPS** (provider generic); no Windows
+o pacote baixado precisa de assinatura compatível com o app instalado —
+produção exige code signing. **Próximo: T-1003** (revisão de segurança do
+shell → doc), T-1004, T-1005. Nova ata `FREEZE.md` v2.3.0 no fechamento.

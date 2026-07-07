@@ -12,6 +12,7 @@ import * as path from 'node:path'
 import * as readline from 'node:readline'
 
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { Agent, fetch as fetchSidecar } from 'undici'
 
 let sidecar: ChildProcess | null = null
@@ -163,6 +164,29 @@ function criarJanela(): void {
   }
 }
 
+/**
+ * Auto-updater OPT-IN (T-1002, REQ-SEC-004): desligado por padrão; só roda
+ * no app empacotado, com HF_AUTO_UPDATE=1 e feed HTTPS (HF_UPDATE_URL, que
+ * sobrepõe o placeholder do app-update.yml). No Windows o electron-updater
+ * só aplica pacote com assinatura compatível com a do app instalado — a
+ * distribuição de produção deve ser assinada (code signing).
+ */
+function configurarAutoUpdate(): void {
+  if (!app.isPackaged || process.env.HF_AUTO_UPDATE !== '1') return
+  const feed = process.env.HF_UPDATE_URL ?? ''
+  if (!feed.startsWith('https://')) {
+    console.warn(
+      'HF_AUTO_UPDATE=1 ignorado: defina HF_UPDATE_URL com o feed HTTPS.',
+    )
+    return
+  }
+  autoUpdater.setFeedURL({ provider: 'generic', url: feed })
+  autoUpdater.on('error', (err) =>
+    console.warn('Auto-update indisponível:', err.message),
+  )
+  void autoUpdater.checkForUpdatesAndNotify()
+}
+
 function encerrarSidecar(): void {
   if (sidecar && !sidecar.killed) sidecar.kill()
   sidecar = null
@@ -200,6 +224,7 @@ void app.whenReady().then(async () => {
     console.error('Falha ao iniciar o sidecar:', err)
   }
   criarJanela()
+  configurarAutoUpdate()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) criarJanela()

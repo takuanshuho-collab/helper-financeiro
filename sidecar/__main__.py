@@ -17,6 +17,8 @@ import sys
 
 import uvicorn
 
+from agent.telemetria import configurar_telemetria
+
 from .app import app
 from .security import VAR_TOKEN
 
@@ -29,6 +31,10 @@ def _porta_efemera() -> int:
 
 
 def main() -> None:
+    # Antes de qualquer import do grafo processar env: tracing só liga com
+    # opt-in + endpoint loopback; senão é forçado a "false" (REQ-SEC-004).
+    configurar_telemetria()
+
     port = _porta_efemera()
     token = secrets.token_urlsafe(32)
     os.environ[VAR_TOKEN] = token
