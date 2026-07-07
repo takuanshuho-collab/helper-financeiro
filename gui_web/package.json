@@ -12,7 +12,9 @@
     "build": "npm run build:renderer && npm run build:electron",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
-    "e2e": "npm run build && playwright test"
+    "e2e": "npm run build && playwright test",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --dir"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
@@ -28,6 +30,7 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.3.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
@@ -35,5 +38,32 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.62.1",
     "vite": "^6.0.7"
+  },
+  "build": {
+    "appId": "dev.helperfinanceiro.app",
+    "productName": "Helper Financeiro",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/sidecar-hf",
+        "to": "sidecar-hf"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

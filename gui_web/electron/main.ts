@@ -43,10 +43,24 @@ function pythonDoProjeto(): string {
   return candidatos.find((c) => fs.existsSync(c)) ?? 'python'
 }
 
+// Comando do sidecar: no app EMPACOTADO é o exe congelado pelo PyInstaller
+// (extraResources do electron-builder, T-1001); em desenvolvimento, o Python
+// do projeto rodando o pacote.
+function comandoSidecar(): { comando: string; args: string[]; cwd: string } {
+  if (app.isPackaged) {
+    const pasta = path.join(process.resourcesPath, 'sidecar-hf')
+    const exe = process.platform === 'win32' ? 'sidecar-hf.exe' : 'sidecar-hf'
+    return { comando: path.join(pasta, exe), args: [], cwd: pasta }
+  }
+  return { comando: pythonDoProjeto(), args: ['-m', 'sidecar'], cwd: repoRoot }
+}
+
 function iniciarSidecar(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const python = pythonDoProjeto()
-    sidecar = spawn(python, ['-m', 'sidecar'], { cwd: repoRoot })
+    const { comando, args, cwd } = comandoSidecar()
+    // windowsHide: o exe congelado é console (handshake via stdout) — sem a
+    // flag, o Windows abriria uma janela de terminal junto com o app.
+    sidecar = spawn(comando, args, { cwd, windowsHide: true })
     sidecar.on('error', reject)
     // Ecoa os logs do sidecar (Python/uvicorn logam em stderr) no terminal do
     // Electron — assim erros de extração/provider ficam visíveis no `npm start`.
@@ -64,6 +78,26 @@ function iniciarSidecar(): Promise<void> {
       }
     })
   })
+}
+
+// Prontidão (T-1001): o handshake diz a porta, mas o uvicorn ainda está
+// subindo — só liberamos a janela quando o /health responder.
+async function aguardarSaude(timeoutMs = 15_000): Promise<void> {
+  const fim = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      const r = await fetchSidecar(`http://127.0.0.1:${sidecarPort}/health`, {
+        dispatcher: dispatcherSidecar,
+      })
+      if (r.ok) return
+    } catch {
+      // porta ainda não abriu — tenta de novo
+    }
+    if (Date.now() > fim) {
+      throw new Error('o sidecar não respondeu ao /health a tempo')
+    }
+    await new Promise((r) => setTimeout(r, 200))
+  }
 }
 
 async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown> {
@@ -161,6 +195,7 @@ void app.whenReady().then(async () => {
 
   try {
     await iniciarSidecar()
+    await aguardarSaude()
   } catch (err) {
     console.error('Falha ao iniciar o sidecar:', err)
   }

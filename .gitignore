@@ -16,6 +16,8 @@ htmlcov/
 build/
 dist/
 *.spec
+!SidecarHF.spec
+gui_web/release/
 
 # IDE / SO
 .vscode/

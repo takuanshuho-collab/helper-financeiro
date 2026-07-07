@@ -29,6 +29,11 @@ dev = [
     "hypothesis>=6.100",
     "httpx>=0.28.1",
 ]
+# Empacotamento (T-1001): congela o sidecar p/ o electron-builder embarcar.
+# Rodar: uv run --group build pyinstaller SidecarHF.spec --noconfirm
+build = [
+    "pyinstaller>=6.0",
+]
 
 # ---------------------------------------------------------------- ruff
 [tool.ruff]

@@ -159,7 +159,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-1001 | Build `electron-builder` + sidecar PyInstaller (`extraResource`); startup/health + shutdown do sidecar | — | M9 | ⬜ |
+| T-1001 | Build `electron-builder` + sidecar PyInstaller (`extraResource`); startup/health + shutdown do sidecar | — | M9 | ✅ |
 | T-1002 | Telemetria LangSmith **local/self-hosted** (não sai da máquina) + auto-updater assinado/HTTPS, opt-in via env | REQ-SEC-004 | T-1001 | ⬜ |
 | T-1003 | Revisão de segurança do shell web (CSP, sem código remoto, loopback+token, sem PII) → doc | SEC | T-1001 | ⬜ |
 | T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ⬜ |
@@ -220,6 +220,14 @@ Playwright** (`gui_web/e2e/app.spec.ts`, `npm run e2e`) rodando o Electron +
 sidecar REAIS, offline (`HF_MODO_DEGRADADO=1`): 6 cenários — visão geral,
 perfil→recálculo, CRUD de dívidas, análise (portabilidade + job da IA
 degradando com P8), carta (prévia viva) e tema persistido com reabertura do
-app. Portão local; o gate-front do CI segue sem Electron (T-706). **Próximo:
-M10** (T-1001 packaging electron-builder + PyInstaller). Nova ata `FREEZE.md`
-v2.3.0 no fechamento.
+app. Portão local; o gate-front do CI segue sem Electron (T-706). **M10 em
+andamento: T-1001 ✅** — sidecar congelado com PyInstaller (`SidecarHF.spec`,
+onedir ~149 MB, console p/ o handshake; `uv run --group build pyinstaller
+SidecarHF.spec --noconfirm`) e app empacotado com electron-builder (`npm run
+dist` → instalador NSIS ~172 MB; `dist:dir` p/ o smoke). `main.ts` escolhe o
+exe congelado (`process.resourcesPath`) quando `app.isPackaged`, com
+`windowsHide` e espera do `/health` antes de abrir a janela; shutdown já
+matava o processo. Smoke automatizado: `e2e/empacotado.spec.ts`
+(HF_E2E_PACOTE=1) valida o pacote real de ponta a ponta. **Próximo: T-1002**
+(telemetria local opt-in + auto-updater) e T-1003/1004/1005. Nova ata
+`FREEZE.md` v2.3.0 no fechamento.
