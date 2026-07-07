@@ -162,7 +162,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1001 | Build `electron-builder` + sidecar PyInstaller (`extraResource`); startup/health + shutdown do sidecar | — | M9 | ✅ |
 | T-1002 | Telemetria LangSmith **local/self-hosted** (não sai da máquina) + auto-updater assinado/HTTPS, opt-in via env | REQ-SEC-004 | T-1001 | ✅ |
 | T-1003 | Revisão de segurança do shell web (CSP, sem código remoto, loopback+token, sem PII) → doc | SEC | T-1001 | ✅ |
-| T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ⬜ |
+| T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ✅ |
 | T-1005 | Ata de freeze v2.3.0 (SHA-256 dos artefatos + binário) e docs sincronizados | Processo | todos | ⬜ |
 
 ---
@@ -243,5 +243,8 @@ achados CORRIGIDOS: meta CSP no `index.html` (o header não vale em `file://`
 ⇒ o pacote rodava sem CSP), token em tempo constante
 (`secrets.compare_digest`), DevTools desabilitado no pacote e permissões web
 negadas por padrão; riscos residuais documentados (code signing pendente).
-**Próximo: T-1004** (troca do entrypoint), T-1005 (ata de freeze). Nova ata
-`FREEZE.md` v2.3.0 no fechamento.
+**T-1004 ✅** — `python main.py` agora sobe a **GUI web** (`npm start` em
+`gui_web/`); a tkinter fica como **fallback** (`--tkinter`, ou automático
+quando npm/node_modules faltam ou no exe congelado antigo). README
+atualizado (árvore com sidecar/gui_web, instruções e instalador). **Próximo:
+T-1005** — ata de freeze v2.3.0 (SHA-256 dos artefatos) + docs sincronizados.

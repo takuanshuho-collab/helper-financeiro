@@ -1,8 +1,12 @@
 # 💰 Helper Financeiro
 
-Programa de desktop (tkinter) que analisa a situação financeira do usuário,
+Programa de desktop que analisa a situação financeira do usuário,
 lê contratos de empréstimo em PDF, define estratégias de quitação e gera
 **planilha (.xlsx)**, **relatório (.docx)** e **cartas de proposta ao credor (.docx)**.
+
+Desde o ciclo v2.3 (ADR-0009) a interface oficial é a **GUI web** (Electron +
+React) falando com o núcleo Python por um **sidecar local**; a janela tkinter
+clássica segue como fallback (`--tkinter`).
 
 ---
 
@@ -15,7 +19,7 @@ embala para viagem. Trocar o salão não muda a receita.
 
 ```
 helper_financeiro/
-├── main.py                 # ponto de entrada: abre a janela
+├── main.py                 # ponto de entrada: GUI web (fallback --tkinter)
 ├── pyproject.toml          # dependências + config de ruff/mypy/pytest/coverage
 ├── core/                   # CÉREBRO — Python puro, sem interface
 │   ├── models.py           # Divida, PerfilFinanceiro (as "fichas")
@@ -28,8 +32,10 @@ helper_financeiro/
 │   ├── planilha.py         # .xlsx com fórmulas e gráfico
 │   ├── relatorio.py        # .docx de análise
 │   └── proposta.py         # .docx da carta de negociação
+├── sidecar/                # FRONTEIRA — FastAPI em loopback + token (ADR-0009)
+├── gui_web/                # SALÃO oficial — Electron + React/TS (6 telas)
 └── gui/
-    └── app.py              # SALÃO — janela tkinter com 5 abas
+    └── app.py              # SALÃO clássico (tkinter) — fallback
 ```
 
 Por que essa separação importa para você: se um dia quiser trocar a janela por
@@ -43,17 +49,24 @@ O projeto usa [uv](https://docs.astral.sh/uv/) para gerenciar ambiente e
 dependências (declaradas em `pyproject.toml`, travadas em `uv.lock`):
 
 ```bash
-# 1. instalar dependências (cria .venv automaticamente)
+# 1. instalar dependências Python (cria .venv automaticamente)
 uv sync
 
-# 2. rodar
-uv run python main.py
+# 2. instalar o front (uma vez)
+cd gui_web && npm install && cd ..
+
+# 3. rodar a GUI web (oficial)
+uv run python main.py            # equivale a `npm start` em gui_web/
+
+# alternativa: a janela tkinter clássica (fallback)
+uv run python main.py --tkinter
 ```
 
-> Sem uv? `pip install openpyxl python-docx pdfplumber pydantic` e
-> `python main.py` também funcionam.
+> Instalador para usuário final (sem Python/Node): `cd gui_web && npm run dist`
+> gera o `Helper Financeiro Setup <versão>.exe` (T-1001; requer o sidecar
+> congelado: `uv run --group build pyinstaller SidecarHF.spec --noconfirm`).
 
-> No Linux, se der erro de `tkinter`, instale: `sudo apt install python3-tk`.
+> No Linux, se o fallback der erro de `tkinter`, instale: `sudo apt install python3-tk`.
 > No Windows não é necessário — já vem com o Python.
 
 ---
