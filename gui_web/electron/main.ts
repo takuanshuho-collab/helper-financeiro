@@ -11,7 +11,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as readline from 'node:readline'
 
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
 import { Agent, fetch as fetchSidecar } from 'undici'
 
 let sidecar: ChildProcess | null = null
@@ -136,6 +136,25 @@ void app.whenReady().then(async () => {
   aplicarCsp()
   ipcMain.handle('hf:invoke', (_evento, metodo: string, payload: unknown) =>
     chamarSidecar(metodo, payload),
+  )
+  // Exportações (T-902): o renderer pede o diálogo nativo e recebe só o
+  // caminho; o arquivo em si é escrito pelo sidecar (núcleo Python).
+  ipcMain.handle(
+    'hf:dialogo-salvar',
+    async (
+      _evento,
+      opcoes: { sugestao: string; filtroNome: string; extensoes: string[] },
+    ) => {
+      const win = BrowserWindow.getFocusedWindow()
+      const escolha = {
+        defaultPath: opcoes.sugestao,
+        filters: [{ name: opcoes.filtroNome, extensions: opcoes.extensoes }],
+      }
+      const r = win
+        ? await dialog.showSaveDialog(win, escolha)
+        : await dialog.showSaveDialog(escolha)
+      return r.canceled || !r.filePath ? null : r.filePath
+    },
   )
 
   try {

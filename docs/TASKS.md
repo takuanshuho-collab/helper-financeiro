@@ -150,7 +150,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume); PDF→Markdown + LLM local OpenAI-compat (ADR-0010) | REQ-F-014, GRD-005 | M8 | ✅ |
-| T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx; teste de anonimização da fronteira cloud (H2/SEC-003) | REQ-F-015 | M8 | ⬜ |
+| T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx; teste de anonimização da fronteira cloud (H2/SEC-003) | REQ-F-015 | M8 | ✅ |
 | T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ⬜ |
 | T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ⬜ |
 | T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ⬜ |
@@ -193,7 +193,13 @@ No caminho, a **ADR-0010**: extração PDF→**Markdown** (`pymupdf4llm`, fallba
 `pdfplumber`) para dar mais sinal à LLM, e suporte a **LLM local
 OpenAI-compatible** (LM Studio/llama.cpp) — a invariante H2 passou a ser **por
 endpoint (loopback)**, não pelo nome do provider. Extração assistida validada
-end-to-end com o LM Studio (`scripts/diag_llm.py`). **Próximo: T-902** (Análise:
-job async + IA sênior + exportações + teste de anonimização H2/SEC-003), depois
-T-903 (Carta), T-904 (modo escuro), T-905 (paridade + E2E). Nova ata
+end-to-end com o LM Studio (`scripts/diag_llm.py`). **T-902 ✅** — tela
+**Análise**: pacote determinístico no sidecar (`/analise`: estratégias com
+extra, oportunidades de portabilidade com taxa-alvo e recomendações — tudo do
+`core`), **análise sênior como job assíncrono** (`/analise/ia` + poll; fatos
+anonimizados CREDOR_n, desanonimização só na fronteira de exibição) e
+exportações `.xlsx`/`.docx` (`/exportar/*`; o Electron abre o diálogo nativo e
+o sidecar escreve o arquivo). Teste de anonimização da fronteira cloud
+(H2/SEC-003) com provider espião em `tests/test_sidecar.py`. **Próximo: T-903**
+(Carta ao credor), depois T-904 (modo escuro), T-905 (paridade + E2E). Nova ata
 `FREEZE.md` v2.3.0 no fechamento (M10).

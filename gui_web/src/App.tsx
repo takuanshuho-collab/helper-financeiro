@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
-import type { DividaIn, PerfilIn } from './hf/contract'
+import type { DividaIn, PerfilIn, SecaoIaOut } from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
+import Analise from './screens/Analise'
 import Contrato from './screens/Contrato'
 import Dividas from './screens/Dividas'
 import EmConstrucao from './screens/EmConstrucao'
@@ -57,6 +58,9 @@ const PERFIL_SEED: PerfilIn = {
 export default function App() {
   const [abaAtiva, setAbaAtiva] = useState(0)
   const [perfil, setPerfil] = useState<PerfilIn>(PERFIL_SEED)
+  // Última análise sênior da sessão (T-902): vive aqui para sobreviver à troca
+  // de aba e entrar no relatório .docx — paridade com a GUI tkinter.
+  const [secaoIa, setSecaoIa] = useState<SecaoIaOut | null>(null)
   const analise = useAnalise(perfil)
 
   // Contrato PDF (T-901): a dívida confirmada entra no perfil e a navegação
@@ -76,6 +80,15 @@ export default function App() {
         return <Dividas perfil={perfil} setPerfil={setPerfil} analise={analise} />
       case 3:
         return <Contrato onNovaDivida={adicionarDivida} />
+      case 4:
+        return (
+          <Analise
+            perfil={perfil}
+            analise={analise}
+            secaoIa={secaoIa}
+            setSecaoIa={setSecaoIa}
+          />
+        )
       default:
         return <EmConstrucao titulo={ABAS[abaAtiva]} />
     }

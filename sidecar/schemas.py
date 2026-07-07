@@ -67,6 +67,41 @@ class EstrategiasIn(BaseModel):
     extra: float = 0.0
 
 
+class AnaliseIn(BaseModel):
+    """Perfil + parâmetros da tela Análise (REQ-F-015).
+
+    `extra` alimenta a simulação de quitação; `taxa_alvo` (fração mensal,
+    0.018 = 1,8% a.m.) filtra as oportunidades de portabilidade.
+    """
+
+    perfil: PerfilIn
+    extra: float = 0.0
+    taxa_alvo: float = 0.018
+
+
+class AnaliseIaIn(BaseModel):
+    """Disparo do job assíncrono da análise sênior (IA, sob guardrails)."""
+
+    perfil: PerfilIn
+    extra: float = 0.0
+
+
+class ExportarPlanilhaIn(BaseModel):
+    """Exportação .xlsx: o caminho vem do diálogo de salvar do Electron."""
+
+    perfil: PerfilIn
+    caminho: str
+    extra: float = 0.0
+    taxa_alvo: float = 0.018
+
+
+class ExportarRelatorioIn(ExportarPlanilhaIn):
+    """Exportação .docx; `secao_ia` é a última análise sênior (opcional)."""
+
+    nome_usuario: str = ""
+    secao_ia: dict[str, Any] | None = None
+
+
 class ContratoIn(BaseModel):
     """PDF de contrato (base64) para extração LOCAL dos campos (REQ-F-014).
 

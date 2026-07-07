@@ -7,10 +7,14 @@ incluindo os casos de borda (sem dívidas, reserva sem despesas, ordenação).
 """
 import base64
 import os
+import time
 
 from fastapi.testclient import TestClient
 
-from sidecar.app import app, contexto_extracao
+from agent.config import ConfigAgente
+from agent.provider import FakeProvider
+from contracts import AnaliseAgente, FatosFinanceiros
+from sidecar.app import app, contexto_analise, contexto_extracao
 from sidecar.security import VAR_TOKEN
 from tests.test_extracao import CFG_TESTE, DOC_CONTRATO, FakeExtrator
 
@@ -323,6 +327,195 @@ def test_contexto_trunca_para_openai_compat_local():
     longo = "x" * (LIMITE_EXTRACAO_LLM + 500)
     cfg = ConfigAgente(provider="openai_compat", base_url="http://localhost:1234/v1")
     assert _contexto_seguro(longo, cfg) == longo[:LIMITE_EXTRACAO_LLM]
+
+
+# --- Tela Análise: pacote determinístico (T-902, REQ-F-015) -------------------
+
+PERFIL_ANALISE = {
+    "renda": {"salario_liquido": 6000.0},
+    "fixas": {"moradia": 1500.0},
+    "dividas": [
+        {
+            "credor": "Cartão Banco João da Silva",
+            "tipo": "Cartão de crédito",
+            "saldo_devedor": 4000.0,
+            "taxa_mensal": 0.12,
+            "parcela": 800.0,
+            "parcelas_restantes": 10,
+        },
+        {
+            "credor": "Consignado Maria Pereira",
+            "tipo": "Consignado",
+            "saldo_devedor": 6000.0,
+            "taxa_mensal": 0.015,
+            "parcela": 350.0,
+            "parcelas_restantes": 20,
+        },
+    ],
+}
+
+
+def test_analise_sem_token_401():
+    resposta = cliente.post("/analise", json={"perfil": {}})
+    assert resposta.status_code == 401
+
+
+def test_analise_pacote_deterministico():
+    payload = {"perfil": PERFIL_ANALISE, "extra": 300.0, "taxa_alvo": 0.018}
+    resposta = cliente.post("/analise", json=payload, headers=CABECALHO)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+
+    # Estratégias recalculadas com o extra; avalanche nunca paga mais juros.
+    ava = dados["estrategias"]["avalanche"]
+    bola = dados["estrategias"]["bola_de_neve"]
+    assert ava["quitavel"] and bola["quitavel"]
+    assert dados["economia_avalanche"] == round(
+        bola["juros_pagos"] - ava["juros_pagos"], 2)
+    assert dados["economia_avalanche"] >= 0
+
+    # Portabilidade: só o cartão (12% a.m.) supera a taxa-alvo de 1,8% a.m.
+    ops = dados["oportunidades"]
+    assert [o["credor"] for o in ops] == ["Cartão Banco João da Silva"]
+    assert ops[0]["taxa_mensal"] == 0.12
+    assert ops[0]["parcelas_restantes"] == 10
+    assert ops[0]["economia_mensal"] > 0
+    assert dados["economia_total_portabilidade"] == ops[0]["economia_total"]
+
+    assert dados["recomendacoes"]  # regras do core sempre orientam algo
+
+
+def test_analise_taxa_alvo_alta_sem_oportunidades():
+    payload = {"perfil": PERFIL_ANALISE, "taxa_alvo": 0.20}
+    resposta = cliente.post("/analise", json=payload, headers=CABECALHO)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert dados["oportunidades"] == []
+    assert dados["economia_total_portabilidade"] == 0.0
+
+
+# --- Análise sênior: job assíncrono + fronteira cloud (H2/SEC-003) -------------
+
+
+class ProviderEspiao:
+    """Grava o payload que REALMENTE chegaria ao LLM (a fronteira cloud)."""
+
+    def __init__(self, erro: Exception | None = None):
+        self.payloads: list[str] = []
+        self._fake = FakeProvider()
+        self._erro = erro
+
+    def analisar(self, fatos: FatosFinanceiros) -> AnaliseAgente:
+        self.payloads.append(fatos.model_dump_json())
+        if self._erro:
+            raise self._erro
+        return self._fake.analisar(fatos)
+
+
+def _esperar_job(job_id: str, timeout_s: float = 5.0) -> dict:
+    """Faz poll até o job sair de `rodando` (o teste roda com FakeProvider)."""
+    fim = time.monotonic() + timeout_s
+    while time.monotonic() < fim:
+        resp = cliente.get(f"/analise/ia/{job_id}", headers=CABECALHO)
+        assert resp.status_code == 200
+        dados = resp.json()
+        if dados["status"] != "rodando":
+            return dados
+        time.sleep(0.05)
+    raise AssertionError("job da IA não terminou no tempo do teste")
+
+
+def test_analise_ia_job_completo_e_anonimizacao_da_fronteira():
+    """H2/SEC-003: nomes reais NUNCA cruzam a fronteira do provider; a
+    desanonimização acontece só na seção devolvida à tela (exibição local)."""
+    espiao = ProviderEspiao()
+    cfg = ConfigAgente(provider="fake", cache=False)
+    cliente.app.dependency_overrides[contexto_analise] = lambda: (cfg, espiao)
+    try:
+        resp = cliente.post("/analise/ia",
+                            json={"perfil": PERFIL_ANALISE, "extra": 300.0},
+                            headers=CABECALHO)
+        assert resp.status_code == 200
+        dados = _esperar_job(resp.json()["job_id"])
+
+        # O payload enviado ao LLM só tem tokens — nenhum credor real, nenhum CPF.
+        assert len(espiao.payloads) == 1
+        payload_llm = espiao.payloads[0]
+        assert "CREDOR_1" in payload_llm and "CREDOR_2" in payload_llm
+        assert "João" not in payload_llm
+        assert "Maria" not in payload_llm
+
+        # A seção exibida ao usuário volta com os nomes reais restaurados.
+        assert dados["status"] == "pronto"
+        secao = dados["secao"]
+        assert secao["modo"] == "completo"
+        texto_secao = str(secao)
+        assert "Cartão Banco João da Silva" in texto_secao
+        assert "CREDOR_1" not in texto_secao
+        assert secao["aviso_legal"]
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_analise_ia_provider_falho_degrada_sem_500():
+    """P8: falha do LLM degrada para o determinístico — o job nunca vira 500."""
+    espiao = ProviderEspiao(erro=ValueError("llm fora do ar"))
+    cfg = ConfigAgente(provider="fake", cache=False)
+    cliente.app.dependency_overrides[contexto_analise] = lambda: (cfg, espiao)
+    try:
+        resp = cliente.post("/analise/ia", json={"perfil": PERFIL_ANALISE},
+                            headers=CABECALHO)
+        dados = _esperar_job(resp.json()["job_id"])
+        assert dados["status"] == "pronto"
+        assert dados["secao"]["modo"] == "degradado"
+        assert dados["secao"]["motivos"]  # diz por que degradou
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_analise_ia_job_desconhecido_404():
+    resp = cliente.get("/analise/ia/nao-existe", headers=CABECALHO)
+    assert resp.status_code == 404
+
+
+# --- Exportações .xlsx/.docx (T-902) ------------------------------------------
+
+
+def test_exportar_planilha_e_relatorio(tmp_path):
+    xlsx = tmp_path / "diagnostico.xlsx"
+    resp = cliente.post(
+        "/exportar/planilha",
+        json={"perfil": PERFIL_ANALISE, "caminho": str(xlsx),
+              "extra": 300.0, "taxa_alvo": 0.018},
+        headers=CABECALHO,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["caminho"] == str(xlsx)
+    assert xlsx.stat().st_size > 0
+
+    docx = tmp_path / "relatorio.docx"
+    secao_ia = {"modo": "completo", "sumario": "Resumo de teste.",
+                "diagnostico": "Diagnóstico de teste.", "confianca": 0.8,
+                "aviso_legal": "Conteúdo assistido por IA."}
+    resp = cliente.post(
+        "/exportar/relatorio",
+        json={"perfil": PERFIL_ANALISE, "caminho": str(docx),
+              "nome_usuario": "Fulano", "secao_ia": secao_ia},
+        headers=CABECALHO,
+    )
+    assert resp.status_code == 200
+    assert docx.stat().st_size > 0
+
+
+def test_exportar_caminho_invalido_400():
+    resp = cliente.post(
+        "/exportar/planilha",
+        json={"perfil": PERFIL_ANALISE,
+              "caminho": "Z:/pasta/que/nao/existe/x.xlsx"},
+        headers=CABECALHO,
+    )
+    assert resp.status_code == 400
+    assert "salvar" in resp.json()["detail"]
 
 
 def test_contrato_pdf_sem_texto(monkeypatch):

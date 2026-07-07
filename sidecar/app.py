@@ -10,15 +10,24 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+import threading
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
 
+from agent.agente import analisar
 from agent.config import ConfigAgente, carregar_config
-from agent.exibicao import ROTULOS_EXTRACAO, campos_para_formulario
+from agent.exibicao import ROTULOS_EXTRACAO, campos_para_formulario, preparar_exibicao
 from agent.extracao import Extrator, confirmar_extracao, iniciar_extracao
 from agent.ingestao import preparar_contexto
+from agent.provider import LLMProvider
+from contracts import SecaoIA
 from core.diagnostico import resumo_diagnostico
-from core.estrategias import comparar_estrategias
+from core.estrategias import (
+    comparar_estrategias,
+    gerar_recomendacoes,
+    oportunidades_portabilidade,
+)
 from core.extrator_pdf import extrair_texto_pdf_bytes, parsear_campos
 from core.models import (
     ComposicaoRenda,
@@ -27,8 +36,21 @@ from core.models import (
     Divida,
     PerfilFinanceiro,
 )
+from guardrails.pii import anonimizar_credores
+from outputs.planilha import gerar_planilha
+from outputs.relatorio import gerar_relatorio
 
-from .schemas import ConfirmarContratoIn, ContratoIn, DividaIn, EstrategiasIn, PerfilIn
+from .schemas import (
+    AnaliseIaIn,
+    AnaliseIn,
+    ConfirmarContratoIn,
+    ContratoIn,
+    DividaIn,
+    EstrategiasIn,
+    ExportarPlanilhaIn,
+    ExportarRelatorioIn,
+    PerfilIn,
+)
 from .security import exigir_token
 
 app = FastAPI(title="Helper Financeiro — sidecar", version="2.3.0")
@@ -111,6 +133,133 @@ def estrategias(entrada: EstrategiasIn) -> dict:
     """Compara avalanche vs. bola de neve para o pagamento extra informado."""
     perfil = _para_perfil(entrada.perfil)
     return comparar_estrategias(perfil, entrada.extra)
+
+
+# ------------------------------------------------------------ análise (T-902)
+@app.post("/analise", dependencies=[Depends(exigir_token)])
+def analise(entrada: AnaliseIn) -> dict:
+    """Pacote determinístico da tela Análise (REQ-F-015).
+
+    Estratégias recalculadas com o pagamento extra, oportunidades de
+    portabilidade acima da taxa-alvo e recomendações — tudo do `core`. A
+    diferença de juros entre os métodos é agregada aqui (apresentação); os
+    números vêm prontos das simulações.
+    """
+    perfil = _para_perfil(entrada.perfil)
+    comp = comparar_estrategias(perfil, entrada.extra)
+    ava, bola = comp["avalanche"], comp["bola_de_neve"]
+    economia = (round(bola["juros_pagos"] - ava["juros_pagos"], 2)
+                if ava["quitavel"] and bola["quitavel"] else None)
+    oportunidades = oportunidades_portabilidade(perfil, entrada.taxa_alvo)
+    return {
+        "estrategias": comp,
+        "economia_avalanche": economia,
+        "oportunidades": oportunidades,
+        "economia_total_portabilidade": round(
+            sum(o["economia_total"] for o in oportunidades), 2),
+        "recomendacoes": gerar_recomendacoes(perfil, resumo_diagnostico(perfil)),
+    }
+
+
+# ----------------------------------------------- análise sênior (IA, job async)
+def contexto_analise() -> tuple[ConfigAgente | None, LLMProvider | None]:
+    """Dependência do job da IA sênior (sobrescrita nos testes).
+
+    Em produção devolve (None, None): `analisar` usa a config real (env HF_*)
+    e o provider correspondente. Os testes injetam um provider determinístico.
+    """
+    return None, None
+
+
+# Jobs em memória: a chamada ao LLM local leva de segundos a minutos, então a
+# tela dispara o job e faz poll — o sidecar continua respondendo às demais
+# rotas. O resultado é descartado na primeira leitura de estado final.
+_JOBS_IA: dict[str, dict] = {}
+_JOBS_IA_LOCK = threading.Lock()
+
+
+def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
+                  cfg: ConfigAgente | None, provider: LLMProvider | None) -> None:
+    try:
+        resultado = analisar(perfil, extra_mensal=extra, cfg=cfg, provider=provider)
+        # O mapa é reconstruível: os tokens CREDOR_n seguem a ordem das dívidas.
+        # A desanonimização acontece SÓ aqui, na fronteira da exibição local
+        # (REQ-SEC-003) — o que foi ao LLM só tinha tokens.
+        _, mapa = anonimizar_credores([d.credor for d in perfil.dividas])
+        secao = preparar_exibicao(resultado, mapa)
+        estado: dict[str, object] = {"status": "pronto",
+                                     "secao": secao.model_dump(), "erro": ""}
+    except Exception as e:  # noqa: BLE001 — o erro vira status consultável no poll
+        estado = {"status": "erro", "secao": None,
+                  "erro": f"{type(e).__name__}: {e}"}
+    with _JOBS_IA_LOCK:
+        _JOBS_IA[job_id] = estado
+
+
+@app.post("/analise/ia", dependencies=[Depends(exigir_token)])
+def analise_ia_iniciar(
+    entrada: AnaliseIaIn,
+    ctx: tuple[ConfigAgente | None, LLMProvider | None] = Depends(contexto_analise),
+) -> dict:
+    """Dispara a análise sênior (IA, sob guardrails) e devolve o id do job.
+
+    Os fatos vão ANONIMIZADOS ao LLM (tokens CREDOR_n, REQ-GRD-002/H2); toda
+    falha degrada para o diagnóstico determinístico (P8) — nunca 500.
+    """
+    cfg, provider = ctx
+    perfil = _para_perfil(entrada.perfil)
+    job_id = uuid4().hex
+    with _JOBS_IA_LOCK:
+        _JOBS_IA[job_id] = {"status": "rodando", "secao": None, "erro": ""}
+    threading.Thread(
+        target=_rodar_job_ia, args=(job_id, perfil, entrada.extra, cfg, provider),
+        daemon=True,
+    ).start()
+    return {"job_id": job_id}
+
+
+@app.get("/analise/ia/{job_id}", dependencies=[Depends(exigir_token)])
+def analise_ia_status(job_id: str) -> dict:
+    """Estado do job: rodando | pronto (com a seção) | erro. 404 se desconhecido."""
+    with _JOBS_IA_LOCK:
+        job = _JOBS_IA.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job desconhecido.")
+        if job["status"] != "rodando":
+            del _JOBS_IA[job_id]  # leitura final: libera a memória do job
+    return {"job_id": job_id, **job}
+
+
+# ------------------------------------------------------- exportações (T-902)
+@app.post("/exportar/planilha", dependencies=[Depends(exigir_token)])
+def exportar_planilha(entrada: ExportarPlanilhaIn) -> dict:
+    """Gera o .xlsx no caminho escolhido pelo usuário (diálogo do Electron)."""
+    perfil = _para_perfil(entrada.perfil)
+    try:
+        caminho = gerar_planilha(perfil, entrada.caminho,
+                                 extra_mensal=entrada.extra,
+                                 taxa_alvo_mensal=entrada.taxa_alvo)
+    except OSError as e:
+        raise HTTPException(status_code=400,
+                            detail=f"Não foi possível salvar a planilha: {e}") from e
+    return {"caminho": caminho}
+
+
+@app.post("/exportar/relatorio", dependencies=[Depends(exigir_token)])
+def exportar_relatorio(entrada: ExportarRelatorioIn) -> dict:
+    """Gera o .docx; inclui a última análise sênior quando a tela a enviar."""
+    perfil = _para_perfil(entrada.perfil)
+    secao = SecaoIA(**entrada.secao_ia) if entrada.secao_ia else None
+    try:
+        caminho = gerar_relatorio(perfil, entrada.caminho,
+                                  extra_mensal=entrada.extra,
+                                  taxa_alvo_mensal=entrada.taxa_alvo,
+                                  nome_usuario=entrada.nome_usuario,
+                                  secao_ia=secao)
+    except OSError as e:
+        raise HTTPException(status_code=400,
+                            detail=f"Não foi possível salvar o relatório: {e}") from e
+    return {"caminho": caminho}
 
 
 # ------------------------------------------------------------ contrato PDF (T-901)

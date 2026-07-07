@@ -106,6 +106,63 @@ export interface SaudeOut {
   servico: string
 }
 
+// --- Tela Análise (T-902, REQ-F-015) ------------------------------------------
+
+export interface OportunidadeOut {
+  credor: string
+  tipo: string
+  taxa_mensal: number
+  parcelas_restantes: number
+  parcela_atual: number
+  parcela_nova: number
+  economia_mensal: number
+  economia_total: number
+  vale_a_pena: boolean
+}
+
+export interface AnaliseOut {
+  estrategias: EstrategiasOut
+  economia_avalanche: number | null // juros bola de neve − avalanche (se ambas quitam)
+  oportunidades: OportunidadeOut[]
+  economia_total_portabilidade: number
+  recomendacoes: string[]
+}
+
+export interface PassoRoteiroOut {
+  credor: string
+  abordagem: string
+  argumentos: string[]
+  concessoes: string[]
+}
+
+/** Seção da análise sênior, já com nomes reais (desanonimizada no sidecar). */
+export interface SecaoIaOut {
+  modo: 'completo' | 'degradado'
+  motivos: string[]
+  sumario: string
+  diagnostico: string
+  prioridades: string[]
+  roteiro: PassoRoteiroOut[]
+  alertas: string[]
+  confianca: number
+  aviso_legal: string
+}
+
+export interface IaJobOut {
+  job_id: string
+}
+
+export interface IaStatusOut {
+  job_id: string
+  status: 'rodando' | 'pronto' | 'erro'
+  secao: SecaoIaOut | null
+  erro: string
+}
+
+export interface ExportadoOut {
+  caminho: string
+}
+
 // --- Extração de contrato PDF (T-901, REQ-F-014) -----------------------------
 
 export interface CampoExtraidoOut {

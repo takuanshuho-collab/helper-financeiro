@@ -6,11 +6,16 @@
  * / fora do Electron" de um erro devolvido pelo backend.
  */
 import type {
+  AnaliseOut,
   ContratoExtraidoOut,
   DiagnosticoOut,
   EstrategiasOut,
+  ExportadoOut,
+  IaJobOut,
+  IaStatusOut,
   PerfilIn,
   SaudeOut,
+  SecaoIaOut,
 } from './contract'
 
 export class HfErro extends Error {
@@ -56,4 +61,37 @@ export const hf = {
     confirmacao: Record<string, string>,
   ): Promise<{ ok: boolean }> =>
     chamar('/contrato/confirmar', { thread_id: threadId, confirmacao }),
+  analise: (perfil: PerfilIn, extra = 0, taxaAlvo = 0.018): Promise<AnaliseOut> =>
+    chamar('/analise', { perfil, extra, taxa_alvo: taxaAlvo }),
+  analiseIaIniciar: (perfil: PerfilIn, extra = 0): Promise<IaJobOut> =>
+    chamar('/analise/ia', { perfil, extra }),
+  analiseIaStatus: (jobId: string): Promise<IaStatusOut> =>
+    chamar(`/analise/ia/${jobId}`),
+  exportarPlanilha: (
+    perfil: PerfilIn,
+    caminho: string,
+    extra = 0,
+    taxaAlvo = 0.018,
+  ): Promise<ExportadoOut> =>
+    chamar('/exportar/planilha', { perfil, caminho, extra, taxa_alvo: taxaAlvo }),
+  exportarRelatorio: (
+    perfil: PerfilIn,
+    caminho: string,
+    extra = 0,
+    taxaAlvo = 0.018,
+    secaoIa: SecaoIaOut | null = null,
+  ): Promise<ExportadoOut> =>
+    chamar('/exportar/relatorio', {
+      perfil,
+      caminho,
+      extra,
+      taxa_alvo: taxaAlvo,
+      secao_ia: secaoIa,
+    }),
+  /** Diálogo nativo de salvar (Electron). Devolve o caminho ou null. */
+  dialogoSalvar: (opcoes: {
+    sugestao: string
+    filtroNome: string
+    extensoes: string[]
+  }): Promise<string | null> => ponte().dialogoSalvar(opcoes),
 }

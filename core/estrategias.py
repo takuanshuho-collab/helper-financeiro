@@ -98,7 +98,13 @@ def oportunidades_portabilidade(perfil: PerfilFinanceiro,
                 d.saldo_devedor, d.taxa_mensal, taxa_alvo_mensal, d.parcelas_restantes
             )
             if sim["vale_a_pena"]:
-                oportunidades.append({"credor": d.credor, "tipo": d.tipo, **sim})
+                oportunidades.append({
+                    "credor": d.credor,
+                    "tipo": d.tipo,
+                    "taxa_mensal": d.taxa_mensal,
+                    "parcelas_restantes": d.parcelas_restantes,
+                    **sim,
+                })
     # Ordena pela maior economia total.
     return sorted(oportunidades, key=lambda x: x["economia_total"], reverse=True)
 
