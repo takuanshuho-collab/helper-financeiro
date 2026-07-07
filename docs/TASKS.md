@@ -151,7 +151,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 |----|------|-----|---------|--------|
 | T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume); PDF→Markdown + LLM local OpenAI-compat (ADR-0010) | REQ-F-014, GRD-005 | M8 | ✅ |
 | T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx; teste de anonimização da fronteira cloud (H2/SEC-003) | REQ-F-015 | M8 | ✅ |
-| T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ⬜ |
+| T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ✅ |
 | T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ⬜ |
 | T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ⬜ |
 
@@ -204,6 +204,11 @@ o sidecar escreve o arquivo). Teste de anonimização da fronteira cloud
 IA sênior degradava sempre com `NUMEROS_FABRICADOS` no modelo local 3B — a
 **ADR-0011** corrige: recuperação única com **feedback dos números órfãos** +
 nó `sanear` (redação determinística das frases órfãs, H1 preservado); validado
-4/4 com o ministral-3b real. **Próximo: T-903**
-(Carta ao credor), depois T-904 (modo escuro), T-905 (paridade + E2E). Nova ata
-`FREEZE.md` v2.3.0 no fechamento (M10).
+4/4 com o ministral-3b real. **T-903 ✅** — tela **Carta ao credor**:
+`outputs/proposta.py` refatorada com `montar_carta()` (fonte única do texto,
+data em pt-BR sem depender de locale); sidecar `/carta/previa`
+(pré-visualização ao vivo = exatamente o texto do `.docx`) e `/exportar/carta`;
+tela com cards de tipo (quitação/portabilidade/redução), campos contextuais
+por tipo e assinatura (nome/CPF ficam locais). **Próximo: T-904** (modo escuro
+persistido), depois T-905 (paridade + E2E). Nova ata `FREEZE.md` v2.3.0 no
+fechamento (M10).

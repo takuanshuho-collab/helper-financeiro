@@ -478,6 +478,79 @@ def test_analise_ia_job_desconhecido_404():
     assert resp.status_code == 404
 
 
+# --- Carta ao credor (T-903, REQ-F-016) ---------------------------------------
+
+DIVIDA_CARTA = {
+    "credor": "Banco Alfa",
+    "tipo": "Cartão de crédito",
+    "saldo_devedor": 4500.0,
+    "taxa_mensal": 0.11,
+    "parcela": 700.0,
+    "parcelas_restantes": 9,
+}
+
+
+def test_carta_sem_token_401():
+    resposta = cliente.post("/carta/previa", json={"divida": DIVIDA_CARTA})
+    assert resposta.status_code == 401
+
+
+def test_carta_previa_quitacao_cita_valor_proposto():
+    resposta = cliente.post(
+        "/carta/previa",
+        json={"divida": DIVIDA_CARTA, "tipo": "quitacao",
+              "valor_proposto": 3000.0, "nome_usuario": "Fulana de Tal",
+              "contrato": "000123-4"},
+        headers=CABECALHO,
+    )
+    assert resposta.status_code == 200
+    carta = resposta.json()
+    assert carta["titulo"] == "Proposta de quitação à vista"
+    assert carta["destinatario"] == "Banco Alfa"
+    assert "Contrato nº 000123-4" in carta["referencia"]
+    assert carta["assinatura"] == "Fulana de Tal"
+    texto = " ".join(carta["paragrafos"])
+    assert "R$ 4.500,00" in texto      # saldo da dívida
+    assert "R$ 3.000,00" in texto      # valor proposto à vista
+
+
+def test_carta_previa_portabilidade_cita_banco_e_taxa():
+    resposta = cliente.post(
+        "/carta/previa",
+        json={"divida": DIVIDA_CARTA, "tipo": "portabilidade",
+              "banco_concorrente": "Banco Beta",
+              "taxa_concorrente_mensal": 0.018},
+        headers=CABECALHO,
+    )
+    assert resposta.status_code == 200
+    texto = " ".join(resposta.json()["paragrafos"])
+    assert "Banco Beta" in texto
+    assert "1,8" in texto              # taxa formatada em % a.m.
+
+
+def test_carta_previa_tipo_desconhecido_cai_em_quitacao():
+    resposta = cliente.post(
+        "/carta/previa",
+        json={"divida": DIVIDA_CARTA, "tipo": "inexistente"},
+        headers=CABECALHO,
+    )
+    assert resposta.status_code == 200
+    assert resposta.json()["tipo"] == "quitacao"
+
+
+def test_exportar_carta_docx(tmp_path):
+    docx = tmp_path / "proposta.docx"
+    resposta = cliente.post(
+        "/exportar/carta",
+        json={"divida": DIVIDA_CARTA, "tipo": "reducao",
+              "caminho": str(docx), "nome_usuario": "Fulana"},
+        headers=CABECALHO,
+    )
+    assert resposta.status_code == 200
+    assert resposta.json()["caminho"] == str(docx)
+    assert docx.stat().st_size > 0
+
+
 # --- Exportações .xlsx/.docx (T-902) ------------------------------------------
 
 

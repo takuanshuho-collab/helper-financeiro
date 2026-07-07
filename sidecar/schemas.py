@@ -102,6 +102,30 @@ class ExportarRelatorioIn(ExportarPlanilhaIn):
     secao_ia: dict[str, Any] | None = None
 
 
+class CartaIn(BaseModel):
+    """Carta ao credor (REQ-F-016): dívida + tipo + campos contextuais.
+
+    `valor_proposto` só vale para quitação; `banco_concorrente`/`taxa_
+    concorrente_mensal` (fração, 0.018 = 1,8% a.m.) só para portabilidade.
+    Nome/CPF ficam na loopback e no arquivo local — nunca vão à nuvem (H2).
+    """
+
+    divida: DividaIn
+    tipo: str = "quitacao"  # "quitacao" | "portabilidade" | "reducao"
+    valor_proposto: float | None = None
+    banco_concorrente: str = ""
+    taxa_concorrente_mensal: float | None = None
+    nome_usuario: str = ""
+    cpf: str = ""
+    contrato: str = ""
+
+
+class ExportarCartaIn(CartaIn):
+    """Exportação da carta .docx no caminho escolhido no diálogo do Electron."""
+
+    caminho: str
+
+
 class ContratoIn(BaseModel):
     """PDF de contrato (base64) para extração LOCAL dos campos (REQ-F-014).
 

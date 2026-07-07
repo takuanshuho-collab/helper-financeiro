@@ -75,15 +75,59 @@ _MODELOS = {
     "reducao": ("Solicitação de renegociação de taxa e parcelas", _corpo_reducao),
 }
 
+# `strftime("%B")` depende do locale do processo (viria "July" no locale C);
+# a carta é um documento pt-BR, então o mês é resolvido aqui.
+_MESES_PT = ("janeiro", "fevereiro", "março", "abril", "maio", "junho",
+             "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+
+_PEDIDO_RESPOSTA = (
+    "Solicito que a resposta seja formalizada por escrito, com o valor "
+    "atualizado e as condições propostas, para minha análise."
+)
+
+
+def _data_pt(d: date) -> str:
+    return f"{d.day} de {_MESES_PT[d.month - 1]} de {d.year}"
+
+
+def montar_carta(divida: Divida, tipo: str = "quitacao",
+                 dados: dict | None = None, nome_usuario: str = "",
+                 cpf: str = "", contrato: str = "") -> dict:
+    """Estrutura textual da carta — fonte única do conteúdo (REQ-F-016).
+
+    Consumida pelo `.docx` (abaixo) e pela pré-visualização ao vivo da GUI web
+    (sidecar `/carta/previa`): a casca só renderiza, nunca redige.
+    """
+    dados = dados or {}
+    if tipo not in _MODELOS:
+        tipo = "quitacao"
+    titulo, montar_corpo = _MODELOS[tipo]
+
+    partes = ([f"Contrato nº {contrato}"] if contrato else [])
+    partes.append(f"Modalidade: {divida.tipo}")
+
+    paragrafos = [b.replace("\n", " ")
+                  for b in montar_corpo(divida, dados).split("\n\n")]
+    paragrafos.append(_PEDIDO_RESPOSTA)
+
+    return {
+        "tipo": tipo,
+        "titulo": titulo,
+        "data": _data_pt(date.today()),
+        "destinatario": divida.credor,
+        "referencia": "Ref.: " + " | ".join(partes),
+        "paragrafos": paragrafos,
+        "assinatura": nome_usuario,
+        "cpf": cpf,
+    }
+
 
 def gerar_proposta(divida: Divida, caminho_saida: str, tipo: str = "quitacao",
                    dados: dict | None = None, nome_usuario: str = "",
                    cpf: str = "", contrato: str = "") -> str:
     """Monta a carta de proposta e salva em .docx."""
-    dados = dados or {}
-    if tipo not in _MODELOS:
-        tipo = "quitacao"
-    titulo, montar_corpo = _MODELOS[tipo]
+    carta = montar_carta(divida, tipo=tipo, dados=dados,
+                         nome_usuario=nome_usuario, cpf=cpf, contrato=contrato)
 
     doc = Document()
     style = doc.styles["Normal"]
@@ -93,44 +137,36 @@ def gerar_proposta(divida: Divida, caminho_saida: str, tipo: str = "quitacao",
     # Data
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p.add_run(date.today().strftime("%d de %B de %Y")).font.size = Pt(10)
+    p.add_run(carta["data"]).font.size = Pt(10)
 
     # Destinatário
     dest = doc.add_paragraph()
-    dest.add_run(f"À {divida.credor}\n").bold = True
+    dest.add_run(f"À {carta['destinatario']}\n").bold = True
     dest.add_run("Setor de Renegociação / Atendimento ao Cliente")
 
     # Título
-    t = doc.add_heading(titulo, level=1)
+    t = doc.add_heading(carta["titulo"], level=1)
     for run in t.runs:
         run.font.color.rgb = AZUL
 
     # Referência do contrato
     ref = doc.add_paragraph()
-    partes = []
-    if contrato:
-        partes.append(f"Contrato nº {contrato}")
-    partes.append(f"Modalidade: {divida.tipo}")
-    ref.add_run("Ref.: " + " | ".join(partes)).bold = True
+    ref.add_run(carta["referencia"]).bold = True
 
     doc.add_paragraph("Prezados,")
 
-    # Corpo (pode ter parágrafos separados por \n\n)
-    for bloco in montar_corpo(divida, dados).split("\n\n"):
-        doc.add_paragraph(bloco.replace("\n", " "))
+    for bloco in carta["paragrafos"]:
+        doc.add_paragraph(bloco)
 
-    doc.add_paragraph(
-        "Solicito que a resposta seja formalizada por escrito, com o valor "
-        "atualizado e as condições propostas, para minha análise."
-    )
     doc.add_paragraph("Atenciosamente,")
 
     # Assinatura
     doc.add_paragraph()
     ass = doc.add_paragraph()
-    ass.add_run((nome_usuario or "________________________________") + "\n").bold = True
-    if cpf:
-        ass.add_run(f"CPF: {cpf}")
+    ass.add_run((carta["assinatura"] or "________________________________")
+                + "\n").bold = True
+    if carta["cpf"]:
+        ass.add_run(f"CPF: {carta['cpf']}")
 
     doc.save(caminho_saida)
     return caminho_saida

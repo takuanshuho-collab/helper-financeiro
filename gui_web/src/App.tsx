@@ -3,9 +3,9 @@ import { useState } from 'react'
 import type { DividaIn, PerfilIn, SecaoIaOut } from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
 import Analise from './screens/Analise'
+import Carta from './screens/Carta'
 import Contrato from './screens/Contrato'
 import Dividas from './screens/Dividas'
-import EmConstrucao from './screens/EmConstrucao'
 import Perfil from './screens/Perfil'
 import VisaoGeral from './screens/VisaoGeral'
 
@@ -90,7 +90,7 @@ export default function App() {
           />
         )
       default:
-        return <EmConstrucao titulo={ABAS[abaAtiva]} />
+        return <Carta perfil={perfil} />
     }
   }
 

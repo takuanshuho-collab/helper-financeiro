@@ -1410,3 +1410,142 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========================== Tela Carta ao credor (T-903) ========================== */
+
+.carta-cols {
+  grid-template-columns: 0.9fr 1.1fr;
+  align-items: start;
+}
+
+.propcards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+.propcard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  border: 1px solid var(--border-input);
+  background: var(--input-bg);
+  border-radius: var(--r-tile);
+  padding: 11px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.propcard:hover {
+  border-color: var(--focus);
+}
+
+.propcard.on {
+  border-color: var(--accent);
+  background: var(--nav-on-bg);
+}
+
+.propcard-nome {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.propcard.on .propcard-nome {
+  color: var(--nav-on-text);
+}
+
+.propcard-desc {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.hintbox {
+  font-size: 12px;
+  color: var(--text-soft);
+  background: var(--input-bg);
+  border: 1px dashed var(--border-input);
+  border-radius: var(--r-tile);
+  padding: 10px 12px;
+  line-height: 1.5;
+  margin: 6px 0;
+}
+
+.campo-texto {
+  text-align: left;
+}
+
+/* Pré-visualização da carta */
+.letter {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-soft);
+}
+
+.letter p {
+  margin: 0 0 12px;
+}
+
+.letter-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--divisor);
+}
+
+.letter-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-2);
+}
+
+.letter-titulo {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.2px;
+  margin-top: 2px;
+}
+
+.letter-data {
+  font-size: 11px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.letter-ref {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.letter-ass {
+  margin-top: 26px;
+  border-top: 1px solid var(--border-input);
+  width: 240px;
+  padding-top: 7px;
+  color: var(--text);
+}
+
+.letter-nota {
+  font-size: 11px;
+  color: var(--muted-2);
+  font-weight: 600;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divisor);
+}
+
+@media (max-width: 900px) {
+  .carta-cols {
+    grid-template-columns: 1fr;
+  }
+}

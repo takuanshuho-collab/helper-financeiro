@@ -163,6 +163,33 @@ export interface ExportadoOut {
   caminho: string
 }
 
+// --- Carta ao credor (T-903, REQ-F-016) ---------------------------------------
+
+export type TipoProposta = 'quitacao' | 'portabilidade' | 'reducao'
+
+export interface CartaCamposIn {
+  divida: DividaIn
+  tipo: TipoProposta
+  valor_proposto?: number | null
+  banco_concorrente?: string
+  taxa_concorrente_mensal?: number | null
+  nome_usuario?: string
+  cpf?: string
+  contrato?: string
+}
+
+/** Estrutura textual da carta, redigida inteira no core (fonte única). */
+export interface CartaPreviaOut {
+  tipo: TipoProposta
+  titulo: string
+  data: string
+  destinatario: string
+  referencia: string
+  paragrafos: string[]
+  assinatura: string
+  cpf: string
+}
+
 // --- Extração de contrato PDF (T-901, REQ-F-014) -----------------------------
 
 export interface CampoExtraidoOut {

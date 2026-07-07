@@ -7,6 +7,8 @@
  */
 import type {
   AnaliseOut,
+  CartaCamposIn,
+  CartaPreviaOut,
   ContratoExtraidoOut,
   DiagnosticoOut,
   EstrategiasOut,
@@ -88,6 +90,12 @@ export const hf = {
       taxa_alvo: taxaAlvo,
       secao_ia: secaoIa,
     }),
+  cartaPrevia: (campos: CartaCamposIn): Promise<CartaPreviaOut> =>
+    chamar('/carta/previa', campos),
+  exportarCarta: (
+    campos: CartaCamposIn,
+    caminho: string,
+  ): Promise<ExportadoOut> => chamar('/exportar/carta', { ...campos, caminho }),
   /** Diálogo nativo de salvar (Electron). Devolve o caminho ou null. */
   dialogoSalvar: (opcoes: {
     sugestao: string

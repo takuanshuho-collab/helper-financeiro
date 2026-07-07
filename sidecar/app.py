@@ -38,15 +38,18 @@ from core.models import (
 )
 from guardrails.pii import anonimizar_credores
 from outputs.planilha import gerar_planilha
+from outputs.proposta import gerar_proposta, montar_carta
 from outputs.relatorio import gerar_relatorio
 
 from .schemas import (
     AnaliseIaIn,
     AnaliseIn,
+    CartaIn,
     ConfirmarContratoIn,
     ContratoIn,
     DividaIn,
     EstrategiasIn,
+    ExportarCartaIn,
     ExportarPlanilhaIn,
     ExportarRelatorioIn,
     PerfilIn,
@@ -259,6 +262,43 @@ def exportar_relatorio(entrada: ExportarRelatorioIn) -> dict:
     except OSError as e:
         raise HTTPException(status_code=400,
                             detail=f"Não foi possível salvar o relatório: {e}") from e
+    return {"caminho": caminho}
+
+
+# ---------------------------------------------------- carta ao credor (T-903)
+def _dados_carta(entrada: CartaIn) -> dict:
+    """Campos contextuais no formato que `outputs.proposta` espera."""
+    return {
+        "valor_proposto": entrada.valor_proposto or None,
+        "banco_concorrente": entrada.banco_concorrente.strip() or None,
+        "taxa_concorrente_mensal": entrada.taxa_concorrente_mensal or None,
+    }
+
+
+@app.post("/carta/previa", dependencies=[Depends(exigir_token)])
+def carta_previa(entrada: CartaIn) -> dict:
+    """Pré-visualização ao vivo da carta (REQ-F-016).
+
+    O texto vem inteiro do `core`/`outputs` (fonte única): a tela só renderiza
+    a mesma estrutura que o `.docx` usa — nada é redigido no front.
+    """
+    return montar_carta(_para_divida(entrada.divida), tipo=entrada.tipo,
+                        dados=_dados_carta(entrada),
+                        nome_usuario=entrada.nome_usuario,
+                        cpf=entrada.cpf, contrato=entrada.contrato)
+
+
+@app.post("/exportar/carta", dependencies=[Depends(exigir_token)])
+def exportar_carta(entrada: ExportarCartaIn) -> dict:
+    """Gera a carta .docx no caminho escolhido pelo usuário."""
+    try:
+        caminho = gerar_proposta(_para_divida(entrada.divida), entrada.caminho,
+                                 tipo=entrada.tipo, dados=_dados_carta(entrada),
+                                 nome_usuario=entrada.nome_usuario,
+                                 cpf=entrada.cpf, contrato=entrada.contrato)
+    except OSError as e:
+        raise HTTPException(status_code=400,
+                            detail=f"Não foi possível salvar a carta: {e}") from e
     return {"caminho": caminho}
 
 
