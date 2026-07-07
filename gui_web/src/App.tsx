@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
+import { IconeLua, IconeSol } from './components/Icones'
 import type { DividaIn, PerfilIn, SecaoIaOut } from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
 import Analise from './screens/Analise'
@@ -55,8 +56,42 @@ const PERFIL_SEED: PerfilIn = {
   ],
 }
 
+// Tema (T-904, REQ-F-010): `hf_dark` no localStorage guarda a escolha do
+// usuário ('1' escuro, '0' claro); sem escolha salva, o app segue o SO
+// (@media prefers-color-scheme no CSS — nenhum data-theme é aplicado).
+const CHAVE_TEMA = 'hf_dark'
+
+function escolhaSalva(): boolean | null {
+  const salvo = localStorage.getItem(CHAVE_TEMA)
+  return salvo === null ? null : salvo === '1'
+}
+
+function temaDoSo(): boolean {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
 export default function App() {
   const [abaAtiva, setAbaAtiva] = useState(0)
+  const [escuro, setEscuro] = useState<boolean | null>(escolhaSalva)
+
+  // Reidratação + aplicação: com escolha salva, o data-theme força o tema;
+  // sem escolha, o atributo sai e o CSS volta a seguir o SO.
+  useEffect(() => {
+    const raiz = document.documentElement
+    if (escuro === null) {
+      delete raiz.dataset.theme
+    } else {
+      raiz.dataset.theme = escuro ? 'dark' : 'light'
+    }
+  }, [escuro])
+
+  const escuroEfetivo = escuro ?? temaDoSo()
+
+  function alternarTema() {
+    const novo = !escuroEfetivo
+    localStorage.setItem(CHAVE_TEMA, novo ? '1' : '0')
+    setEscuro(novo)
+  }
   const [perfil, setPerfil] = useState<PerfilIn>(PERFIL_SEED)
   // Última análise sênior da sessão (T-902): vive aqui para sobreviver à troca
   // de aba e entrar no relatório .docx — paridade com a GUI tkinter.
@@ -115,6 +150,14 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <button
+          className="btn-tema"
+          onClick={alternarTema}
+          title={escuroEfetivo ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
+          aria-label={escuroEfetivo ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
+        >
+          {escuroEfetivo ? <IconeSol /> : <IconeLua />}
+        </button>
       </header>
 
       <main className="conteudo">{tela()}</main>

@@ -105,11 +105,15 @@
   --border-input: #332c48;
   --divisor: #2a2540;
   --input-bg: #191622;
+  --trilha: #2a2540;
   --nav-on-bg: #2c2547;
   --nav-on-text: #c3b8fb;
   --nav-hover-bg: #241f36;
   --sh-card: 0 10px 26px -20px rgba(0, 0, 0, 0.55);
   --sh-hover: 0 8px 20px -14px rgba(0, 0, 0, 0.6);
+  --tint-green: #16281f;
+  --tint-orange: #2b2013;
+  --tint-red: #2a181a;
   color-scheme: dark;
 }
 
@@ -1548,4 +1552,27 @@ body {
   .carta-cols {
     grid-template-columns: 1fr;
   }
+}
+
+/* ========================== Toggle de tema (T-904) ========================== */
+
+.btn-tema {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-input);
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--r-chip);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-tema:hover {
+  background: var(--nav-hover-bg);
+  color: var(--primary);
+  border-color: var(--focus);
 }

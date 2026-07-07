@@ -11,7 +11,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as readline from 'node:readline'
 
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session } from 'electron'
 import { Agent, fetch as fetchSidecar } from 'undici'
 
 let sidecar: ChildProcess | null = null
@@ -104,7 +104,9 @@ function criarJanela(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
-    backgroundColor: '#f4f1ea',
+    // Cor de fundo ANTES do primeiro paint (evita flash branco no escuro).
+    // Segue o SO; a escolha persistida (hf_dark) é do renderer (T-904).
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#15131e' : '#f4f1ea',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

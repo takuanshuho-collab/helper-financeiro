@@ -152,7 +152,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-901 | Tela **Contrato PDF**: drop-zone + extração local com citação + confirmação (`interrupt`→resume); PDF→Markdown + LLM local OpenAI-compat (ADR-0010) | REQ-F-014, GRD-005 | M8 | ✅ |
 | T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx; teste de anonimização da fronteira cloud (H2/SEC-003) | REQ-F-015 | M8 | ✅ |
 | T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ✅ |
-| T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ⬜ |
+| T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ✅ |
 | T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ⬜ |
 
 ## Milestone M10 — Empacotamento & freeze v2.3.0
@@ -209,6 +209,10 @@ nó `sanear` (redação determinística das frases órfãs, H1 preservado); vali
 data em pt-BR sem depender de locale); sidecar `/carta/previa`
 (pré-visualização ao vivo = exatamente o texto do `.docx`) e `/exportar/carta`;
 tela com cards de tipo (quitação/portabilidade/redução), campos contextuais
-por tipo e assinatura (nome/CPF ficam locais). **Próximo: T-904** (modo escuro
-persistido), depois T-905 (paridade + E2E). Nova ata `FREEZE.md` v2.3.0 no
+por tipo e assinatura (nome/CPF ficam locais). **T-904 ✅** — toggle de tema na
+topbar: `hf_dark` no `localStorage` ('1'/'0'; sem escolha salva segue o SO via
+`prefers-color-scheme`), reidratação ao abrir, `data-theme` no `<html>`;
+completados os tokens faltantes do escuro forçado (`--trilha`, tints) e o
+fundo inicial da janela Electron segue o `nativeTheme` (sem flash branco).
+**Próximo: T-905** (paridade + E2E Playwright). Nova ata `FREEZE.md` v2.3.0 no
 fechamento (M10).
