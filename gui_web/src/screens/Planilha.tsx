@@ -1,15 +1,23 @@
-import { useState, type FocusEvent, type KeyboardEvent } from 'react'
+import {
+  useEffect,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+} from 'react'
 
 import { hf } from '../hf/client'
 import type {
   Categoria,
+  HistoricoComparadoOut,
   PerfilIn,
   RubricaMutOut,
   RubricaOut,
+  VariacaoSecaoOut,
 } from '../hf/contract'
-import { brl, numBR, parseBR } from '../lib/format'
+import { brl, numBR, parseBR, pctBR } from '../lib/format'
 import {
   SECOES_ORCAMENTO,
+  SUGESTOES_RUBRICA,
   rubricasDoCampo,
   type CampoOrcamento,
 } from '../lib/orcamento'
@@ -80,7 +88,176 @@ export default function Planilha({
           </section>
         ))}
       </div>
+
+      <Historico aoErro={setErro} />
     </>
+  )
+}
+
+/** Competência corrente no formato 'AAAA-MM' (apenas texto de data). */
+function mesAtual(): string {
+  return new Date().toISOString().slice(0, 7)
+}
+
+/**
+ * Histórico mensal (T-1203, REQ-F-019): arquivar a competência e comparar
+ * meses. Toda a aritmética (deltas e %) vem pronta do core via
+ * `/historico/comparar` — aqui só se formata.
+ */
+function Historico({ aoErro }: { aoErro: (m: string) => void }) {
+  const [meses, setMeses] = useState<string[]>([])
+  const [mes, setMes] = useState(mesAtual)
+  const [mesA, setMesA] = useState('')
+  const [mesB, setMesB] = useState('') // '' = orçamento vivo
+  const [comp, setComp] = useState<HistoricoComparadoOut | null>(null)
+
+  useEffect(() => {
+    hf.historicoListar()
+      .then((h) => setMeses(h.meses))
+      .catch(() => {}) // fora do Electron/primeiro uso: seção fica vazia
+  }, [])
+
+  const comparar = (a: string, b: string) => {
+    if (!a) {
+      setComp(null)
+      return
+    }
+    hf.historicoComparar(a, b || null)
+      .then(setComp)
+      .catch((e: Error) => aoErro(e.message))
+  }
+
+  const arquivar = () =>
+    hf.historicoArquivar(mes)
+      .then((r) => {
+        setMeses(r.meses)
+        setMesA(r.mes)
+        comparar(r.mes, mesB)
+      })
+      .catch((e: Error) => aoErro(e.message))
+
+  return (
+    <section className="secao hist">
+      <div className="secao-topo">
+        <span className="secao-titulo">
+          <span className="secao-ponto" style={{ background: 'var(--accent)' }} />
+          Histórico mensal
+        </span>
+      </div>
+
+      <div className="hist-acoes">
+        <input
+          className="hist-mes"
+          type="month"
+          value={mes}
+          onChange={(ev) => setMes(ev.target.value)}
+          aria-label="Competência a arquivar"
+        />
+        <button className="btn-add" onClick={arquivar}>
+          Arquivar {mes}
+        </button>
+      </div>
+      <div className="plan-dica">
+        Arquive quando fechar os lançamentos do mês — rearquivar a mesma
+        competência substitui o registro anterior.
+      </div>
+
+      {meses.length > 0 && (
+        <div className="hist-comp">
+          Comparar{' '}
+          <select
+            className="hist-sel"
+            value={mesA}
+            onChange={(ev) => {
+              setMesA(ev.target.value)
+              comparar(ev.target.value, mesB)
+            }}
+            aria-label="Competência base"
+          >
+            <option value="">— escolha o mês —</option>
+            {meses.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>{' '}
+          com{' '}
+          <select
+            className="hist-sel"
+            value={mesB}
+            onChange={(ev) => {
+              setMesB(ev.target.value)
+              comparar(mesA, ev.target.value)
+            }}
+            aria-label="Competência de comparação"
+          >
+            <option value="">Orçamento atual</option>
+            {meses.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {comp &&
+        comp.comparacao.secoes
+          .filter((s) => s.campos.length > 0)
+          .map((s) => <SecaoComparada key={s.categoria} secao={s} />)}
+    </section>
+  )
+}
+
+function SecaoComparada({ secao }: { secao: VariacaoSecaoOut }) {
+  return (
+    <div className="hist-secao">
+      <div className="hist-secao-topo">
+        <span className="hist-secao-nome">{secao.rotulo}</span>
+        <Delta
+          categoria={secao.categoria}
+          delta={secao.delta}
+          pct={secao.variacao_pct}
+        />
+      </div>
+      {secao.campos.map((c) => (
+        <div className="hist-linha" key={c.campo}>
+          <span className="hist-rotulo">{c.rotulo}</span>
+          <span className="hist-vals">
+            {brl(c.antes)} → {brl(c.depois)}
+          </span>
+          <Delta categoria={secao.categoria} delta={c.delta} pct={c.variacao_pct} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Delta colorido pela semântica da seção: renda subir é bom (verde);
+ * despesa subir é ruim (vermelho). Zero fica neutro.
+ */
+function Delta({
+  categoria,
+  delta,
+  pct,
+}: {
+  categoria: Categoria
+  delta: number
+  pct: number | null
+}) {
+  if (delta === 0) {
+    return <span className="hist-delta zero">sem variação</span>
+  }
+  const bom = categoria === 'renda' ? delta > 0 : delta < 0
+  const sinal = delta > 0 ? '+' : ''
+  const pctTexto = pct === null ? '' : ` (${pct > 0 ? '+' : ''}${pctBR(pct)}%)`
+  return (
+    <span className={bom ? 'hist-delta bom' : 'hist-delta ruim'}>
+      {sinal}
+      {brl(delta)}
+      {pctTexto}
+    </span>
   )
 }
 
@@ -139,8 +316,19 @@ function Grupo({
 
       {aberto && (
         <div className="plan-linhas">
+          {/* Sugestões de nome (REQ-F-020): autocompletar nativo, local. */}
+          <datalist id={`sug-${categoria}-${campo.campo}`}>
+            {(SUGESTOES_RUBRICA[campo.campo] ?? []).map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
           {rubricas.map((r) => (
-            <Linha key={r.id} rubrica={r} mutar={mutar} />
+            <Linha
+              key={r.id}
+              rubrica={r}
+              mutar={mutar}
+              sugestoesId={`sug-${categoria}-${campo.campo}`}
+            />
           ))}
           {!detalhado && (
             <div className="plan-dica">
@@ -163,9 +351,11 @@ function Grupo({
 function Linha({
   rubrica,
   mutar,
+  sugestoesId,
 }: {
   rubrica: RubricaOut
   mutar: (p: Promise<RubricaMutOut>) => void
+  sugestoesId: string
 }) {
   // Rascunho por foco: fora de edição a linha exibe o SERVIDOR (valor já
   // formatado e somado no core); ao focar, tira-se um snapshot editável. A
@@ -203,6 +393,7 @@ function Linha({
     <div className="plan-linha" onFocus={aoFocar} onBlur={aoSairDaLinha}>
       <input
         className="plan-nome"
+        list={sugestoesId}
         value={nome}
         onChange={(ev) =>
           setRascunho((r) => ({ ...(r ?? doServidor()), nome: ev.target.value }))

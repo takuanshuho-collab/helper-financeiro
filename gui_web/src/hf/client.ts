@@ -7,6 +7,7 @@
  */
 import type {
   AnaliseOut,
+  ArquivadoOut,
   CartaCamposIn,
   CartaPreviaOut,
   ContratoExtraidoOut,
@@ -14,6 +15,8 @@ import type {
   EstadoOut,
   EstrategiasOut,
   ExportadoOut,
+  HistoricoComparadoOut,
+  HistoricoOut,
   IaJobOut,
   IaStatusOut,
   PerfilIn,
@@ -67,6 +70,15 @@ export const hf = {
   ): Promise<RubricaMutOut> => chamar(`/rubricas/${id}`, { nome, valor }),
   rubricaRemover: (id: number): Promise<RubricaMutOut> =>
     chamar(`/rubricas/${id}/remover`, {}),
+  /** Histórico mensal (T-1203): arquivar competência e comparar meses. */
+  historicoListar: (): Promise<HistoricoOut> => chamar('/historico'),
+  historicoArquivar: (mes: string): Promise<ArquivadoOut> =>
+    chamar('/historico/arquivar', { mes }),
+  historicoComparar: (
+    mesA: string,
+    mesB: string | null = null,
+  ): Promise<HistoricoComparadoOut> =>
+    chamar('/historico/comparar', { mes_a: mesA, mes_b: mesB }),
   diagnostico: (perfil: PerfilIn): Promise<DiagnosticoOut> =>
     chamar('/diagnostico', perfil),
   estrategias: (perfil: PerfilIn, extra = 0): Promise<EstrategiasOut> =>

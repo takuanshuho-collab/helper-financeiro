@@ -190,9 +190,9 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-1201 | ADR-0013 + bump 2.5.0 + core `comparar_orcamentos` + snapshot no repositório (arquivar/listar/carregar competência) + testes | REQ-F-019 | — | 🟨 |
-| T-1202 | Endpoints `/historico` no sidecar (arquivar, listar, snapshot, comparar vs mês ou vs vivo) + testes de contrato | REQ-F-019 | T-1201 | ⬜ |
-| T-1203 | GUI: botão "Arquivar mês" + painel de histórico/comparação na Planilha; sugestões de rubrica via `datalist` + E2E | REQ-F-019/020 | T-1202 | ⬜ |
+| T-1201 | ADR-0013 + bump 2.5.0 + core `comparar_orcamentos` + snapshot no repositório (arquivar/listar/carregar competência) + testes | REQ-F-019 | — | ✅ |
+| T-1202 | Endpoints `/historico` no sidecar (arquivar, listar, snapshot, comparar vs mês ou vs vivo) + testes de contrato | REQ-F-019 | T-1201 | ✅ |
+| T-1203 | GUI: botão "Arquivar mês" + painel de histórico/comparação na Planilha; sugestões de rubrica via `datalist` + E2E | REQ-F-019/020 | T-1202 | ✅ |
 | T-1204 | Fechamento do ciclo: gates, ata `FREEZE.md` v2.5.0 e docs sincronizados | Processo | todos | ⬜ |
 
 ---

@@ -142,6 +142,49 @@ export interface RubricaMutOut {
   perfil: PerfilIn
 }
 
+// --- Histórico mensal (T-1203, REQ-F-019 / ADR-0013) ---------------------------
+
+export interface VariacaoCampoOut {
+  campo: string
+  rotulo: string
+  antes: number
+  depois: number
+  delta: number
+  /** Fração (0.125 = +12,5%); null quando não havia base no mês anterior. */
+  variacao_pct: number | null
+}
+
+export interface VariacaoSecaoOut {
+  categoria: Categoria
+  rotulo: string
+  antes: number
+  depois: number
+  delta: number
+  variacao_pct: number | null
+  campos: VariacaoCampoOut[]
+}
+
+export interface ComparacaoOut {
+  secoes: VariacaoSecaoOut[]
+}
+
+export interface HistoricoOut {
+  meses: string[]
+}
+
+export interface ArquivadoOut {
+  ok: boolean
+  mes: string
+  meses: string[]
+}
+
+export interface HistoricoComparadoOut {
+  mes_a: string
+  /** null = comparação contra o orçamento vivo. */
+  mes_b: string | null
+  comparacao: ComparacaoOut
+}
+
 // --- Tela Análise (T-902, REQ-F-015) ------------------------------------------
 
 export interface OportunidadeOut {

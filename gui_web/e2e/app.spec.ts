@@ -266,3 +266,48 @@ test('planilha: rubricas detalham o campo e o roll-up vem do core', async () => 
   await preencher('Contas da casa', '500')
   await win.waitForTimeout(1_500)
 })
+
+test('histórico: arquivar competência e comparar com o orçamento vivo', async () => {
+  // Mercado está no seed (800) e o auto-save já persistiu o perfil.
+  await aba('Perfil').click()
+  await win.locator('.btn-add', { hasText: 'Detalhar orçamento' }).click()
+
+  // Arquiva a competência corrente (o input já vem com o mês de hoje).
+  await win.locator('.hist .btn-add', { hasText: 'Arquivar' }).click()
+  await expect(win.locator('.hist-comp')).toBeVisible({ timeout: 5_000 })
+
+  // O mercado sobe no orçamento vivo (espera o auto-save chegar ao banco).
+  await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
+  await preencher('Mercado', '900')
+  await win.waitForTimeout(1_500)
+
+  // Compara o mês arquivado com o orçamento atual: +R$ 100 (+12,5%).
+  await win.locator('.btn-add', { hasText: 'Detalhar orçamento' }).click()
+  await win.locator('.hist-sel').first().selectOption({ index: 1 })
+  const secao = win.locator('.hist-secao', { hasText: 'Despesas variáveis' })
+  const linha = secao.locator('.hist-linha', { hasText: 'Mercado' })
+  await expect(linha).toContainText('R$ 800,00 → R$ 900,00', {
+    timeout: 5_000,
+  })
+  await expect(linha.locator('.hist-delta')).toContainText('12,5')
+  // Despesa que sobe é sinalizada como ruim (vermelho semântico).
+  await expect(linha.locator('.hist-delta')).toHaveClass(/ruim/)
+})
+
+test('planilha: sugestões de nome de rubrica via datalist', async () => {
+  // Continuamos na planilha (teste anterior). Abre um grupo sem rubricas.
+  const grupo = win.locator('.plan-grupo', { hasText: 'Contas da casa' })
+  await grupo.locator('.plan-grupo-topo').click()
+  expect(
+    await win.locator('#sug-fixas-contas_casa option').count(),
+  ).toBeGreaterThan(3)
+
+  // A linha criada aponta para o datalist do campo.
+  await grupo.locator('.plan-add').click()
+  const nome = grupo.locator('.plan-linha .plan-nome').first()
+  await expect(nome).toHaveAttribute('list', 'sug-fixas-contas_casa')
+
+  // Limpeza: remove a rubrica de teste.
+  await grupo.locator('.btn-remover').first().click()
+  await expect(grupo.locator('.plan-linha')).toHaveCount(0)
+})

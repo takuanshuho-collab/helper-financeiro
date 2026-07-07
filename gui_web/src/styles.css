@@ -1768,3 +1768,103 @@ body {
   border-color: var(--focus);
   background: var(--nav-hover-bg);
 }
+
+/* ---- Histórico mensal (T-1203, REQ-F-019) --------------------------------- */
+
+.hist {
+  grid-column: 1 / -1;
+}
+
+.plan-grid .hist {
+  margin-top: 0;
+}
+
+.hist-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 2px;
+}
+
+.hist-mes,
+.hist-sel {
+  background: var(--input-bg);
+  border: 1px solid var(--border-input);
+  border-radius: var(--r-chip);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+.hist-mes:focus,
+.hist-sel:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(106, 91, 240, 0.15);
+}
+
+.hist-comp {
+  margin: 10px 0 4px;
+  font-size: 13px;
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hist-secao {
+  border-top: 1px solid var(--divisor);
+  padding: 8px 0;
+}
+
+.hist-secao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 6px;
+}
+
+.hist-secao-nome {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.hist-linha {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0 3px 14px;
+  font-size: 13px;
+}
+
+.hist-rotulo {
+  flex: 1 1 auto;
+  color: var(--text-soft);
+}
+
+.hist-vals {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.hist-delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hist-delta.bom {
+  color: var(--green);
+}
+
+.hist-delta.ruim {
+  color: var(--red);
+}
+
+.hist-delta.zero {
+  color: var(--muted);
+  font-weight: 500;
+}

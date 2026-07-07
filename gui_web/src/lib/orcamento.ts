@@ -58,6 +58,31 @@ export const SECOES_ORCAMENTO: SecaoOrcamento[] = [
   },
 ]
 
+/**
+ * Sugestões de nome de rubrica por campo (T-1203, REQ-F-020 / ADR-0013):
+ * conveniência de digitação pura, ligada ao input via <datalist> nativo —
+ * sem número, sem rede, sem LLM.
+ */
+export const SUGESTOES_RUBRICA: Record<string, string[]> = {
+  salario_liquido: ['Salário', '13º proporcional', 'Benefício INSS'],
+  renda_extra: ['Freelance', 'Bico', 'Vendas online', 'Hora extra'],
+  outras_rendas: ['Aluguel recebido', 'Pensão', 'Auxílio'],
+  moradia: ['Aluguel', 'Condomínio', 'IPTU', 'Prestação da casa'],
+  contas_casa: ['Conta de luz', 'Conta de água', 'Internet', 'Gás',
+    'Telefone/celular'],
+  transporte: ['Combustível', 'Transporte público', 'Uber/99',
+    'Seguro do carro', 'Estacionamento', 'Manutenção do carro'],
+  saude: ['Plano de saúde', 'Remédios contínuos', 'Consultas', 'Dentista'],
+  educacao: ['Escola', 'Faculdade', 'Curso', 'Material escolar'],
+  assinaturas: ['Streaming', 'Academia', 'Aplicativos', 'Clube/associação'],
+  outras_fixas: ['Seguro de vida', 'Mesada', 'Empregada/diarista'],
+  mercado: ['Supermercado', 'Feira', 'Padaria', 'Açougue'],
+  lazer: ['Restaurante', 'Delivery', 'Cinema', 'Passeios', 'Bar'],
+  vestuario: ['Roupas', 'Calçados', 'Cabeleireiro', 'Cuidados pessoais'],
+  imprevistos: ['Conserto', 'Presente', 'Farmácia eventual', 'Multa'],
+  outras_variaveis: ['Doações', 'Pets', 'Jogos'],
+}
+
 /** Rubricas de um campo específico, na ordem do banco. */
 export function rubricasDoCampo(
   rubricas: RubricaOut[],
