@@ -37,7 +37,14 @@ from core.models import (
     Divida,
     PerfilFinanceiro,
 )
-from core.rubricas import Rubrica, aplicar_somas, somas_por_campo, validar_rubrica
+from core.rubricas import (
+    Rubrica,
+    aplicar_somas,
+    comparar_orcamentos,
+    somas_por_campo,
+    validar_mes,
+    validar_rubrica,
+)
 from guardrails.pii import anonimizar_credores
 from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta, montar_carta
@@ -47,7 +54,9 @@ from .persistencia import Repositorio
 from .schemas import (
     AnaliseIaIn,
     AnaliseIn,
+    ArquivarMesIn,
     CartaIn,
+    CompararMesesIn,
     ConfirmarContratoIn,
     ContratoIn,
     DividaIn,
@@ -205,6 +214,71 @@ def estado_salvar(perfil_in: PerfilIn,
     repo.salvar_estado(CHAVE_PERFIL,
                        _com_roll_up(perfil_in.model_dump(), repo))
     return {"ok": True}
+
+
+# ---------------------------------------------------- histórico mensal (T-1202)
+def _mes_valido_ou_422(mes: str) -> None:
+    try:
+        validar_mes(mes)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+def _perfil_vivo(repo: Repositorio) -> dict:
+    return repo.carregar_estado(CHAVE_PERFIL) or PerfilIn().model_dump()
+
+
+@app.post("/historico/arquivar", dependencies=[Depends(exigir_token)])
+def historico_arquivar(entrada: ArquivarMesIn,
+                       repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Arquiva a competência: snapshot do perfil vivo + cópia das rubricas.
+
+    Rearquivar a mesma competência substitui o snapshot (ADR-0013).
+    """
+    _mes_valido_ou_422(entrada.mes)
+    repo.arquivar_mes(entrada.mes, _perfil_vivo(repo))
+    return {"ok": True, "mes": entrada.mes, "meses": repo.listar_meses()}
+
+
+@app.get("/historico", dependencies=[Depends(exigir_token)])
+def historico_listar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    return {"meses": repo.listar_meses()}
+
+
+@app.get("/historico/{mes}", dependencies=[Depends(exigir_token)])
+def historico_snapshot(mes: str,
+                       repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Snapshot completo da competência (perfil + rubricas arquivadas)."""
+    _mes_valido_ou_422(mes)
+    perfil = repo.carregar_mes(mes)
+    if perfil is None:
+        raise HTTPException(status_code=404, detail="Competência sem snapshot.")
+    return {"mes": mes, "perfil": perfil, "rubricas": repo.rubricas_do_mes(mes)}
+
+
+@app.post("/historico/comparar", dependencies=[Depends(exigir_token)])
+def historico_comparar(entrada: CompararMesesIn,
+                       repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Variação campo a campo entre `mes_a` e `mes_b` (None = orçamento vivo).
+
+    A aritmética inteira vem de `core.rubricas.comparar_orcamentos`
+    (REQ-NF-005) — aqui só se resolve de onde vêm os dois perfis.
+    """
+    _mes_valido_ou_422(entrada.mes_a)
+    antes = repo.carregar_mes(entrada.mes_a)
+    if antes is None:
+        raise HTTPException(status_code=404, detail="Competência sem snapshot.")
+    if entrada.mes_b is None:
+        depois = _perfil_vivo(repo)
+    else:
+        _mes_valido_ou_422(entrada.mes_b)
+        snapshot = repo.carregar_mes(entrada.mes_b)
+        if snapshot is None:
+            raise HTTPException(status_code=404,
+                                detail="Competência sem snapshot.")
+        depois = snapshot
+    return {"mes_a": entrada.mes_a, "mes_b": entrada.mes_b,
+            "comparacao": comparar_orcamentos(antes, depois)}
 
 
 # ---------------------------------------------------------- rubricas (T-1103)

@@ -784,3 +784,76 @@ def test_estado_devolve_as_rubricas_para_a_hidratacao(repo_tmp):
     _criar_rubrica("Luz", 180.0)
     dados = cliente.get("/estado", headers=CABECALHO).json()
     assert [r["nome"] for r in dados["rubricas"]] == ["Luz"]
+
+
+# --- Histórico mensal (T-1202, REQ-F-019 / ADR-0013) --------------------------
+
+
+def test_historico_arquivar_e_listar(repo_tmp):
+    cliente.post("/estado", json={"variaveis": {"mercado": 800.0}},
+                 headers=CABECALHO)
+    _criar_rubrica("Luz", 180.0)
+
+    resp = cliente.post("/historico/arquivar", json={"mes": "2026-06"},
+                        headers=CABECALHO)
+    assert resp.status_code == 200
+    assert resp.json()["meses"] == ["2026-06"]
+    assert cliente.get("/historico", headers=CABECALHO).json()["meses"] == [
+        "2026-06"]
+
+    snap = cliente.get("/historico/2026-06", headers=CABECALHO).json()
+    # O snapshot leva o perfil INTEIRO (campos diretos + detalhados) e as
+    # rubricas da competência.
+    assert snap["perfil"]["variaveis"]["mercado"] == 800.0
+    assert snap["perfil"]["fixas"]["contas_casa"] == 180.0  # roll-up do vivo
+    assert [r["nome"] for r in snap["rubricas"]] == ["Luz"]
+
+
+def test_historico_comparar_contra_o_vivo(repo_tmp):
+    cliente.post("/estado", json={"variaveis": {"mercado": 800.0}},
+                 headers=CABECALHO)
+    cliente.post("/historico/arquivar", json={"mes": "2026-06"},
+                 headers=CABECALHO)
+    # O mês virou e o mercado subiu.
+    cliente.post("/estado", json={"variaveis": {"mercado": 900.0}},
+                 headers=CABECALHO)
+
+    resp = cliente.post("/historico/comparar",
+                        json={"mes_a": "2026-06", "mes_b": None},
+                        headers=CABECALHO)
+    assert resp.status_code == 200
+    comp = resp.json()["comparacao"]
+    variaveis = next(s for s in comp["secoes"] if s["categoria"] == "variaveis")
+    mercado = next(c for c in variaveis["campos"] if c["campo"] == "mercado")
+    assert mercado["delta"] == 100.0
+    assert mercado["variacao_pct"] == 0.125  # "seu mercado subiu 12,5%"
+
+
+def test_historico_comparar_entre_dois_meses(repo_tmp):
+    cliente.post("/estado", json={"fixas": {"moradia": 1400.0}},
+                 headers=CABECALHO)
+    cliente.post("/historico/arquivar", json={"mes": "2026-05"},
+                 headers=CABECALHO)
+    cliente.post("/estado", json={"fixas": {"moradia": 1500.0}},
+                 headers=CABECALHO)
+    cliente.post("/historico/arquivar", json={"mes": "2026-06"},
+                 headers=CABECALHO)
+
+    resp = cliente.post("/historico/comparar",
+                        json={"mes_a": "2026-05", "mes_b": "2026-06"},
+                        headers=CABECALHO)
+    fixas = next(s for s in resp.json()["comparacao"]["secoes"]
+                 if s["categoria"] == "fixas")
+    assert fixas["delta"] == 100.0
+
+
+def test_historico_mes_invalido_422_e_sem_snapshot_404(repo_tmp):
+    assert cliente.post("/historico/arquivar", json={"mes": "julho"},
+                        headers=CABECALHO).status_code == 422
+    assert cliente.get("/historico/2026-13",
+                       headers=CABECALHO).status_code == 422
+    assert cliente.get("/historico/2026-01",
+                       headers=CABECALHO).status_code == 404
+    assert cliente.post("/historico/comparar",
+                        json={"mes_a": "2026-01"},
+                        headers=CABECALHO).status_code == 404

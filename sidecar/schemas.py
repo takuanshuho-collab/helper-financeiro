@@ -82,6 +82,19 @@ class RubricaEditIn(BaseModel):
     ordem: int | None = None
 
 
+class ArquivarMesIn(BaseModel):
+    """Arquiva a competência 'AAAA-MM' (snapshot do orçamento vivo, T-1202)."""
+
+    mes: str
+
+
+class CompararMesesIn(BaseModel):
+    """Comparação entre competências; `mes_b` None = contra o orçamento vivo."""
+
+    mes_a: str
+    mes_b: str | None = None
+
+
 class EstrategiasIn(BaseModel):
     """Perfil + pagamento extra mensal para simular a quitação."""
 
