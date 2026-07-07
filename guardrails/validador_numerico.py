@@ -59,9 +59,12 @@ def _numeros_permitidos(fatos: FatosFinanceiros) -> set[float]:
     def add(v):
         if v is None:
             return
-        permitidos.add(round(float(v), 4))
+        # O token numérico do texto nunca carrega sinal ("R$ -2.200,00" rende
+        # "2.200,00"), então um fato negativo deve valer pelo módulo.
+        valor = abs(float(v))
+        permitidos.add(round(valor, 4))
         # percentuais aparecem como "39" em vez de "0.39"
-        permitidos.add(round(float(v) * 100, 4))
+        permitidos.add(round(valor * 100, 4))
 
     add(fatos.comprometimento_renda)
     add(fatos.fluxo_caixa)
@@ -105,6 +108,57 @@ def coletar_textos(analise: AnaliseAgente) -> list[str]:
         textos += passo.argumentos + passo.concessoes_possiveis
     textos += analise.alertas_risco
     return textos
+
+
+# Fim de frase: pontuação seguida de espaço (ou fim). Mantém "R$ 1.234,56" e
+# "1,8" intactos porque exige o espaço após o ponto/exclamação/interrogação.
+_RE_FIM_FRASE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _frase_fundamentada(frase: str, permitidos: set[float]) -> bool:
+    for token in _RE_NUMERO.findall(frase):
+        interps = _interpretacoes(token)
+        if not interps:
+            continue
+        primario = interps[0]
+        if primario <= 3 and primario == int(primario):
+            continue
+        if not any(_bate(v, permitidos) for v in interps):
+            return False
+    return True
+
+
+def remover_frases_orfas(fatos: FatosFinanceiros,
+                         analise: AnaliseAgente) -> AnaliseAgente:
+    """Redação determinística (último recurso antes de degradar, ADR-0011).
+
+    Modelos locais pequenos fabricam números sobretudo em EXEMPLOS acessórios
+    ("ex.: R$ 200/mês") — descartar a análise inteira por causa deles joga fora
+    conteúdo fundamentado. Esta função remove as FRASES que contêm números
+    órfãos e preserva o resto; o H1 segue valendo: nenhum número fabricado
+    chega ao usuário. O chamador decide se o que sobrou ainda sustenta a
+    análise (revalidação + campos essenciais não vazios).
+    """
+    permitidos = _numeros_permitidos(fatos)
+    limpa = analise.model_copy(deep=True)
+
+    def texto(t: str) -> str:
+        frases = _RE_FIM_FRASE.split(t)
+        return " ".join(f for f in frases
+                        if _frase_fundamentada(f, permitidos)).strip()
+
+    def lista(itens: list[str]) -> list[str]:
+        return [x for x in (texto(i) for i in itens) if x]
+
+    limpa.sumario_executivo = texto(limpa.sumario_executivo)
+    limpa.diagnostico_interpretado = texto(limpa.diagnostico_interpretado)
+    for p in limpa.prioridades:
+        p.justificativa = texto(p.justificativa)
+    for passo in limpa.roteiro_negociacao:
+        passo.argumentos = lista(passo.argumentos)
+        passo.concessoes_possiveis = lista(passo.concessoes_possiveis)
+    limpa.alertas_risco = lista(limpa.alertas_risco)
+    return limpa
 
 
 def validar(fatos: FatosFinanceiros, analise: AnaliseAgente) -> list[float]:

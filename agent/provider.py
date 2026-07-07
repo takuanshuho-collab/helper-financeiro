@@ -107,11 +107,21 @@ def _post_json(url: str, payload: dict[str, Any],
     return dados
 
 
-def _mensagens(fatos: FatosFinanceiros) -> list[dict[str, str]]:
-    return [
+def _mensagens(fatos: FatosFinanceiros,
+               correcao: str | None = None) -> list[dict[str, str]]:
+    """Mensagens do chat; `correcao` é o feedback do guardrail no retry único.
+
+    Modelos locais pequenos fabricam números mesmo com o prompt endurecido
+    (caso real: "ex.: R$ 200/mês"). Nomear os números órfãos na recuperação
+    (REQ-LLM-002) é muito mais eficaz do que uma nova amostra às cegas.
+    """
+    msgs = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": montar_prompt_usuario(fatos)},
     ]
+    if correcao:
+        msgs.append({"role": "user", "content": correcao})
+    return msgs
 
 
 def schema_estrito() -> dict[str, Any]:
@@ -155,15 +165,20 @@ class OllamaProvider:
             log.warning("Provider 'local' apontando para host remoto (%s) — "
                         "verifique o REQ-LLM-004 (sem tráfego externo).", raiz)
 
-    def analisar(self, fatos: FatosFinanceiros) -> AnaliseAgente:
+    def analisar(self, fatos: FatosFinanceiros,
+                 correcao: str | None = None) -> AnaliseAgente:
         resposta = _post_json(self.url, {
             "model": self.cfg.model,
-            "messages": _mensagens(fatos),
+            "messages": _mensagens(fatos, correcao),
             "stream": False,
             "format": AnaliseAgente.model_json_schema(),
             "options": {"temperature": TEMPERATURA, "num_ctx": NUM_CTX},
         }, headers={}, timeout_s=self.cfg.timeout_s)
         return AnaliseAgente.model_validate_json(resposta["message"]["content"])
+
+    def analisar_com_correcao(self, fatos: FatosFinanceiros,
+                              correcao: str) -> AnaliseAgente:
+        return self.analisar(fatos, correcao)
 
 
 class OpenAICompatProvider:
@@ -182,12 +197,13 @@ class OpenAICompatProvider:
         self.cfg = cfg
         self.url = cfg.base_url.rstrip("/") + "/chat/completions"
 
-    def analisar(self, fatos: FatosFinanceiros) -> AnaliseAgente:
+    def analisar(self, fatos: FatosFinanceiros,
+                 correcao: str | None = None) -> AnaliseAgente:
         headers = ({"Authorization": f"Bearer {self.cfg.api_key}"}
                    if self.cfg.api_key else {})
         resposta = _post_json(self.url, {
             "model": self.cfg.model,
-            "messages": _mensagens(fatos),
+            "messages": _mensagens(fatos, correcao),
             "temperature": TEMPERATURA,
             "response_format": {
                 "type": "json_schema",
@@ -197,6 +213,10 @@ class OpenAICompatProvider:
         }, headers=headers, timeout_s=self.cfg.timeout_s)
         conteudo = resposta["choices"][0]["message"]["content"]
         return AnaliseAgente.model_validate_json(conteudo)
+
+    def analisar_com_correcao(self, fatos: FatosFinanceiros,
+                              correcao: str) -> AnaliseAgente:
+        return self.analisar(fatos, correcao)
 
 
 def obter_provider(cfg: ConfigAgente) -> LLMProvider:

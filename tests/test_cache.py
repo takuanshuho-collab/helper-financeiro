@@ -78,7 +78,9 @@ def test_analise_reprovada_nao_entra_no_cache(perfil_atencao):
     r2 = analisar(perfil_atencao, cfg=cfg, provider=provider)
 
     assert r1.modo == r2.modo == "degradado"
-    assert provider.chamadas == 2          # nenhuma reprovada ficou "grudada"
+    # 2 chamadas POR análise (retry com feedback, ADR-0011) e nada no cache:
+    # a segunda análise foi de novo ao LLM em vez de reaproveitar a reprovada.
+    assert provider.chamadas == 4
     assert len(cache_global) == 0
 
 

@@ -200,6 +200,10 @@ extra, oportunidades de portabilidade com taxa-alvo e recomendações — tudo d
 anonimizados CREDOR_n, desanonimização só na fronteira de exibição) e
 exportações `.xlsx`/`.docx` (`/exportar/*`; o Electron abre o diálogo nativo e
 o sidecar escreve o arquivo). Teste de anonimização da fronteira cloud
-(H2/SEC-003) com provider espião em `tests/test_sidecar.py`. **Próximo: T-903**
+(H2/SEC-003) com provider espião em `tests/test_sidecar.py`. No teste manual, a
+IA sênior degradava sempre com `NUMEROS_FABRICADOS` no modelo local 3B — a
+**ADR-0011** corrige: recuperação única com **feedback dos números órfãos** +
+nó `sanear` (redação determinística das frases órfãs, H1 preservado); validado
+4/4 com o ministral-3b real. **Próximo: T-903**
 (Carta ao credor), depois T-904 (modo escuro), T-905 (paridade + E2E). Nova ata
 `FREEZE.md` v2.3.0 no fechamento (M10).

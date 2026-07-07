@@ -9,6 +9,13 @@ de falha converge para `degradar`, que preserva o determinístico (P8).
                           ↘ (hit) ─────────────────────────────↗        ↓
                                                         aprovar | degradar
 
+A recuperação única do REQ-LLM-002 cobre falha de chamada/schema E reprovação
+de guardrail: `validar_guardrails` devolve para `chamar_llm` (com o feedback
+dos números órfãos) enquanto houver orçamento — teto global de MAX_TENTATIVAS
+chamadas ao LLM por análise. Esgotado o retry só com NUMEROS_FABRICADOS, o nó
+`sanear` (ADR-0011) remove deterministicamente as frases com números órfãos e
+revalida; se o que sobra continua fundamentado, aprova — senão, degrada.
+
 O que fica FORA do estado (e portanto fora de qualquer checkpoint): o mapa de
 anonimização (REQ-SEC-003: só memória), a config e o provider — todos viajam
 no `Runtime.context`, que o LangGraph não serializa.
@@ -30,6 +37,7 @@ from pydantic import ValidationError
 from contracts import AnaliseAgente, FatosFinanceiros, ResultadoAnalise
 from guardrails.conteudo import AVISO_LEGAL, detectar_conteudo_indevido, garantir_aviso
 from guardrails.pii import MapaAnonimizacao, contem_pii
+from guardrails.validador_numerico import remover_frases_orfas
 from guardrails.validador_numerico import validar as validar_numeros
 
 from .cache import cache_global
@@ -73,6 +81,10 @@ class EstadoAnalise(TypedDict):
     veio_do_cache: NotRequired[bool]
     tentativas: NotRequired[int]
     modo: NotRequired[str]
+    # Feedback do guardrail para a recuperação única (ex.: números órfãos).
+    correcao: NotRequired[str | None]
+    # A redação determinística (sanear) roda no máximo uma vez.
+    saneado: NotRequired[bool]
 
 
 def _fatos_de(state: EstadoAnalise) -> FatosFinanceiros:
@@ -130,8 +142,15 @@ def chamar_llm(state: EstadoAnalise,
                     "tentativas": MAX_TENTATIVAS}
 
     tentativas = state.get("tentativas", 0) + 1
+    correcao = state.get("correcao")
     try:
-        candidata = ctx.provider.analisar(_fatos_de(state))
+        # No retry pós-guardrail, providers que suportam recebem o feedback
+        # com os números órfãos — muito mais eficaz que reamostrar às cegas.
+        if correcao and hasattr(ctx.provider, "analisar_com_correcao"):
+            candidata = ctx.provider.analisar_com_correcao(
+                _fatos_de(state), correcao)
+        else:
+            candidata = ctx.provider.analisar(_fatos_de(state))
     except ValidationError:
         return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
     except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
@@ -140,7 +159,7 @@ def chamar_llm(state: EstadoAnalise,
     if not isinstance(candidata, AnaliseAgente):
         return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
     return {"analise": candidata.model_dump(), "motivos": [],
-            "tentativas": tentativas}
+            "correcao": None, "tentativas": tentativas}
 
 
 def validar_guardrails(state: EstadoAnalise,
@@ -150,11 +169,19 @@ def validar_guardrails(state: EstadoAnalise,
     assert analise_dump is not None  # rota garante: só chega aqui com análise
     analise = AnaliseAgente.model_validate(analise_dump)
     violacoes: list[str] = []
-    if validar_numeros(_fatos_de(state), analise):
+    correcao = None
+    if orfaos := validar_numeros(_fatos_de(state), analise):
         violacoes.append("REQ-GRD-001:NUMEROS_FABRICADOS")
+        unicos = ", ".join(f"{o:g}" for o in dict.fromkeys(orfaos))
+        correcao = (
+            "ATENÇÃO: sua análise citou números que NÃO existem nos FATOS: "
+            f"{unicos}. Refaça a análise citando SOMENTE números copiados "
+            "literalmente dos FATOS; onde citaria qualquer outro número "
+            "(exemplos, faixas, estimativas), escreva a ideia SEM número."
+        )
     if detectar_conteudo_indevido(analise):
         violacoes.append("REQ-GRD-004:CONTEUDO_INDEVIDO")
-    return {"motivos": violacoes}
+    return {"motivos": violacoes, "correcao": correcao}
 
 
 def aprovar(state: EstadoAnalise,
@@ -169,6 +196,26 @@ def aprovar(state: EstadoAnalise,
         chave = cache_global.chave(cfg.provider, cfg.model, _fatos_de(state))
         cache_global.guardar(chave, analise)
     return {"analise": analise.model_dump(), "modo": "completo"}
+
+
+def sanear(state: EstadoAnalise,
+           runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+    """Último recurso antes de degradar (ADR-0011): redação determinística.
+
+    Remove as FRASES com números órfãos e revalida. Se o que sobra continua
+    limpo e com sumário/diagnóstico não vazios, a análise segue para aprovação;
+    caso contrário, mantém os motivos e degrada. Só roda para NUMEROS_FABRICADOS
+    (conteúdo indevido nunca é 'consertado' por corte de frase).
+    """
+    analise_dump = state.get("analise")
+    assert analise_dump is not None
+    fatos = _fatos_de(state)
+    limpa = remover_frases_orfas(fatos, AnaliseAgente.model_validate(analise_dump))
+    if (limpa.sumario_executivo and limpa.diagnostico_interpretado
+            and not validar_numeros(fatos, limpa)):
+        log.info("Análise saneada: frases com números órfãos removidas.")
+        return {"analise": limpa.model_dump(), "motivos": [], "saneado": True}
+    return {"saneado": True}  # não sobrou análise fundamentada ⇒ degradar
 
 
 def degradar(state: EstadoAnalise,
@@ -196,7 +243,25 @@ def _rota_pos_llm(state: EstadoAnalise) -> Literal["validar_guardrails", "chamar
     return "chamar_llm"  # REQ-LLM-002: exatamente 1 recuperação
 
 
-def _rota_pos_guardrails(state: EstadoAnalise) -> Literal["aprovar", "degradar"]:
+def _rota_pos_guardrails(
+    state: EstadoAnalise,
+) -> Literal["aprovar", "chamar_llm", "sanear", "degradar"]:
+    motivos = state.get("motivos") or []
+    if not motivos:
+        return "aprovar"
+    # Guardrail reprovou (ex.: número fabricado): a recuperação única do
+    # REQ-LLM-002 também vale aqui — o retry leva o feedback com os órfãos.
+    # O teto continua MAX_TENTATIVAS chamadas ao LLM (P8).
+    if state.get("tentativas", 0) < MAX_TENTATIVAS:
+        return "chamar_llm"
+    # Esgotou o retry SÓ com números fabricados: redação determinística
+    # (ADR-0011) antes de jogar a análise fora. Conteúdo indevido não passa.
+    if motivos == ["REQ-GRD-001:NUMEROS_FABRICADOS"] and not state.get("saneado"):
+        return "sanear"
+    return "degradar"
+
+
+def _rota_pos_sanear(state: EstadoAnalise) -> Literal["aprovar", "degradar"]:
     return "degradar" if state.get("motivos") else "aprovar"
 
 
@@ -210,6 +275,7 @@ def _construir() -> GrafoAnalise:
     g.add_node("consultar_cache", consultar_cache)
     g.add_node("chamar_llm", chamar_llm)
     g.add_node("validar_guardrails", validar_guardrails)
+    g.add_node("sanear", sanear)
     g.add_node("aprovar", aprovar)
     g.add_node("degradar", degradar)
 
@@ -218,6 +284,7 @@ def _construir() -> GrafoAnalise:
     g.add_conditional_edges("consultar_cache", _rota_pos_cache)
     g.add_conditional_edges("chamar_llm", _rota_pos_llm)
     g.add_conditional_edges("validar_guardrails", _rota_pos_guardrails)
+    g.add_conditional_edges("sanear", _rota_pos_sanear)
     g.add_edge("aprovar", END)
     g.add_edge("degradar", END)
     # InMemorySaver: estado por thread_id só na memória do processo. Persistir
