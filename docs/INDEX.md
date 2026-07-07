@@ -12,9 +12,11 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0010) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0011) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
-| 10 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
+| 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
+| 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
+| 12 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
 ## Fluxo Spec-Driven
 ```
@@ -46,17 +48,19 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   contextual, edição por duplo clique/Enter/Delete e lista zebrada. Ata
   ampliada para congelar todo o código de primeira parte + o harness (104
   testes offline, cobertura 95,4%) e o `.exe` rebuild (93,8 MB).
-- **Ciclo v2.3 ABERTO (ADR-0009):** redesign hi-fi "Clareza" migrando a GUI de
-  `tkinter` para **Electron + React/TypeScript**, com o núcleo Python
-  preservado como **sidecar** (FONTE DA VERDADE — sem cálculo em TS). Migração
-  **paralela/incremental** (`gui_web/` ao lado de `gui/`; troca de entrypoint só
-  na paridade das 6 telas). DEC-2 refinada para "offline por padrão,
-  conectividade opt-in". Milestones M7..M10; nova ata `FREEZE.md` v2.3.0 no
-  fechamento. **ADR-0010** (durante o T-901): extração PDF→**Markdown**
-  (`pymupdf4llm`, fallback `pdfplumber`) e suporte a **LLM local
-  OpenAI-compatible** (LM Studio/llama.cpp) — a invariante H2 passa a ser **por
-  endpoint (loopback)**, não pelo nome do provider.
-- **Mudanças nos artefatos congelados (v2.2.0) exigem nova ADR + incremento de
+- **Ciclo v2.3 FECHADO (`FREEZE.md` v2.3.0, ADR-0009):** GUI oficial migrada
+  para **Electron + React/TypeScript** (`gui_web/`, 6 telas do redesign
+  "Clareza"), núcleo Python como **sidecar** FastAPI em loopback+token (FONTE
+  DA VERDADE — sem cálculo em TS, REQ-NF-005); tkinter mantida como fallback
+  (`--tkinter`). **ADR-0010**: extração PDF assistida por LLM local
+  OpenAI-compatible (LM Studio) — H2 por **endpoint (loopback)** + fusão
+  determinística clássico+IA. **ADR-0011**: recuperação com feedback dos
+  números órfãos + redação determinística (`sanear`) na análise sênior.
+  Telemetria LangSmith só local e opt-in; auto-update HTTPS opt-in;
+  empacotamento electron-builder + sidecar PyInstaller; paridade documentada
+  (`PARIDADE.md`) com E2E Playwright; segurança do shell revisada
+  (`SEGURANCA-SHELL.md`).
+- **Mudanças nos artefatos congelados (v2.3.0) exigem nova ADR + incremento de
   versão + nova ata.**
 
 ## Rodar
@@ -64,5 +68,6 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
 uv sync --group dev
 uv run pytest -q               # harness offline
 uv run pytest -m ollama        # integração real (skip sem Ollama+modelo)
-uv run python demo_agente.py   # pipeline da IA com FakeProvider
+uv run python main.py          # GUI web (fallback: --tkinter)
+cd gui_web && npm run e2e      # E2E Playwright (Electron + sidecar reais)
 ```

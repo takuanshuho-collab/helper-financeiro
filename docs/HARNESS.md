@@ -1,7 +1,10 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.0.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.3.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
+- **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
+  Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
+  (`npm run e2e`; pacote real com `HF_E2E_PACOTE=1`).
 
 O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 `REQ-GRD-*` ou `REQ-LLM-*` é considerado pronto sem um teste verde aqui.
@@ -54,6 +57,14 @@ O validador é uma **rede de segurança heurística**, não uma prova formal:
 Esses limites são aceitos enquanto o custo for degradar em excesso; revisar
 se a taxa de degradação em produção (M2+) incomodar.
 
+**Atualização v2.3 (ADR-0011):** a taxa de degradação com modelos locais 3B
+incomodou de fato. Antes de degradar, o grafo agora (1) reusa a recuperação
+única do REQ-LLM-002 levando ao provider o feedback com os números órfãos e
+(2) aplica **redação determinística** (`sanear`): remove as frases com números
+órfãos e revalida — o H1 continua valendo por construção (nenhum número
+fabricado chega ao usuário). Fatos negativos citados sem sinal ("R$ -2.200"
+→ token "2.200") deixaram de ser falso positivo.
+
 ## 4. Rubrica LLM-as-judge (opcional, 0–5)
 - Fidelidade aos fatos (peso 2) · Clareza (1) · Acionabilidade do roteiro (1) ·
   Ausência de aconselhamento indevido (1). Nota < 4 ⇒ revisar prompt.
@@ -97,3 +108,9 @@ ruff → mypy → pytest com piso de cobertura de **90%** (catraca: só sobe).
 | T-301..T-305 (exibição: desanonimização na fronteira, painel/estado degradado, payload→formulário) | `tests/test_exibicao.py` |
 | T-301 (seção "Análise do Agente (IA)" no `.docx`; degradado ⇒ seção omitida) | `tests/test_outputs.py` |
 | REQ-LLM-004 (integração real, não bloqueante) | `tests/test_ollama_real.py` (`-m ollama`; inclui extração real) |
+| REQ-NF-005 / REQ-SEC-004 (contrato do sidecar: token, validação, roundtrip, análise, exports, carta) | `tests/test_sidecar.py` |
+| H2/SEC-003 (anonimização na fronteira cloud, provider espião — T-902) | `tests/test_sidecar.py::test_analise_ia_job_completo_e_anonimizacao_da_fronteira` |
+| REQ-SEC-004 (telemetria local opt-in, tracing forçado off — T-1002) | `tests/test_telemetria.py` |
+| ADR-0011 (retry com feedback + redação determinística) | `tests/test_recuperacao.py`, `tests/test_grounding.py` |
+| REQ-F-010..016 (6 telas, paridade tkinter↔web — T-905) | `gui_web/e2e/app.spec.ts` (+ `docs/PARIDADE.md`) |
+| T-1001 (pacote real: Electron + sidecar congelado) | `gui_web/e2e/empacotado.spec.ts` (`HF_E2E_PACOTE=1`) |

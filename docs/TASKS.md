@@ -163,7 +163,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1002 | Telemetria LangSmith **local/self-hosted** (não sai da máquina) + auto-updater assinado/HTTPS, opt-in via env | REQ-SEC-004 | T-1001 | ✅ |
 | T-1003 | Revisão de segurança do shell web (CSP, sem código remoto, loopback+token, sem PII) → doc | SEC | T-1001 | ✅ |
 | T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ✅ |
-| T-1005 | Ata de freeze v2.3.0 (SHA-256 dos artefatos + binário) e docs sincronizados | Processo | todos | ⬜ |
+| T-1005 | Ata de freeze v2.3.0 (SHA-256 dos artefatos + binário) e docs sincronizados | Processo | todos | ✅ |
 
 ---
 
@@ -246,5 +246,12 @@ negadas por padrão; riscos residuais documentados (code signing pendente).
 **T-1004 ✅** — `python main.py` agora sobe a **GUI web** (`npm start` em
 `gui_web/`); a tkinter fica como **fallback** (`--tkinter`, ou automático
 quando npm/node_modules faltam ou no exe congelado antigo). README
-atualizado (árvore com sidecar/gui_web, instruções e instalador). **Próximo:
-T-1005** — ata de freeze v2.3.0 (SHA-256 dos artefatos) + docs sincronizados.
+atualizado (árvore com sidecar/gui_web, instruções e instalador). **T-1005 ✅
+— CICLO v2.3 FECHADO E CONGELADO**: docs sincronizados (INDEX com
+SEGURANCA-SHELL/PARIDADE e estado v2.3; HARNESS 2.3.0 com gate-front, E2E
+local, nota do ADR-0011 e mapa REQ→teste ampliado; README no T-1004; versão
+do pyproject → 2.3.0) e nova ata **`FREEZE.md` v2.3.0** com SHA-256 de todos
+os artefatos de primeira parte (agora incluindo `sidecar/` e `gui_web/`) e
+dos binários (instalador NSIS + sidecar congelado). Qualquer mudança nos
+artefatos congelados exige nova ADR + incremento de versão + nova ata.
+Próximo ciclo: abrir com nova ADR.
