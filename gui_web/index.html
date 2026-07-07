@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- CSP tambem como meta (T-1003): no app empacotado a pagina carrega via
+         file:// e o header injetado pelo main nao se aplica — a meta vale
+         nos dois modos. Manter em sincronia com aplicarCsp() (electron/main.ts). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'"
+    />
     <title>Helper Financeiro</title>
   </head>
   <body>

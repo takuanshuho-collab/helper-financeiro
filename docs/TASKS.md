@@ -161,7 +161,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 |----|------|-----|---------|--------|
 | T-1001 | Build `electron-builder` + sidecar PyInstaller (`extraResource`); startup/health + shutdown do sidecar | — | M9 | ✅ |
 | T-1002 | Telemetria LangSmith **local/self-hosted** (não sai da máquina) + auto-updater assinado/HTTPS, opt-in via env | REQ-SEC-004 | T-1001 | ✅ |
-| T-1003 | Revisão de segurança do shell web (CSP, sem código remoto, loopback+token, sem PII) → doc | SEC | T-1001 | ⬜ |
+| T-1003 | Revisão de segurança do shell web (CSP, sem código remoto, loopback+token, sem PII) → doc | SEC | T-1001 | ✅ |
 | T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ⬜ |
 | T-1005 | Ata de freeze v2.3.0 (SHA-256 dos artefatos + binário) e docs sincronizados | Processo | todos | ⬜ |
 
@@ -237,5 +237,11 @@ ambiente não vaza traces à nuvem — REQ-SEC-004/H2; `tests/test_telemetria.py
 Auto-updater (`electron-updater`): só no app empacotado com
 `HF_AUTO_UPDATE=1` + `HF_UPDATE_URL` **HTTPS** (provider generic); no Windows
 o pacote baixado precisa de assinatura compatível com o app instalado —
-produção exige code signing. **Próximo: T-1003** (revisão de segurança do
-shell → doc), T-1004, T-1005. Nova ata `FREEZE.md` v2.3.0 no fechamento.
+produção exige code signing. **T-1003 ✅** — revisão de segurança do shell em
+**docs/SEGURANCA-SHELL.md** (controles verificados código em mãos) com 4
+achados CORRIGIDOS: meta CSP no `index.html` (o header não vale em `file://`
+⇒ o pacote rodava sem CSP), token em tempo constante
+(`secrets.compare_digest`), DevTools desabilitado no pacote e permissões web
+negadas por padrão; riscos residuais documentados (code signing pendente).
+**Próximo: T-1004** (troca do entrypoint), T-1005 (ata de freeze). Nova ata
+`FREEZE.md` v2.3.0 no fechamento.

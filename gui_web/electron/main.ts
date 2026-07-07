@@ -120,6 +120,13 @@ async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown>
 }
 
 function aplicarCsp(): void {
+  // Permissões web (câmera/microfone/geolocalização...): negadas por padrão —
+  // o app é 100% local e não usa nenhuma (T-1003).
+  session.defaultSession.setPermissionRequestHandler((_wc, _permissao, cb) =>
+    cb(false),
+  )
+  // CSP por header cobre o modo dev (HF_DEV_URL/http); o app empacotado
+  // (file://) é coberto pela META equivalente no index.html.
   session.defaultSession.webRequest.onHeadersReceived((detalhes, cb) => {
     cb({
       responseHeaders: {
@@ -147,6 +154,9 @@ function criarJanela(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // DevTools só em desenvolvimento (T-1003): no pacote, Ctrl+Shift+I
+      // não abre inspeção de um app que exibe dados financeiros pessoais.
+      devTools: !app.isPackaged,
     },
   })
 
