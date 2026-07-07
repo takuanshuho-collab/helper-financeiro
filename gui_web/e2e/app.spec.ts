@@ -214,3 +214,55 @@ test('persistência: o perfil editado sobrevive à reabertura do app', async () 
   await preencher('Salário/benefício líquido', '5000')
   await win.waitForTimeout(1_500)
 })
+
+test('planilha: rubricas detalham o campo e o roll-up vem do core', async () => {
+  await aba('Perfil').click()
+  await win.locator('.btn-add', { hasText: 'Detalhar orçamento' }).click()
+  await expect(win.locator('.titulo')).toHaveText('Planilha de orçamento')
+
+  // Abre o grupo "Contas da casa" e cria a primeira rubrica (Luz, 180).
+  const grupo = win.locator('.plan-grupo', { hasText: 'Contas da casa' })
+  await grupo.locator('.plan-grupo-topo').click()
+  await grupo.locator('.plan-add').click()
+  const linha1 = grupo.locator('.plan-linha').first()
+  await linha1.locator('.plan-nome').click()
+  await linha1.locator('.plan-nome').press('Control+a')
+  await linha1.locator('.plan-nome').pressSequentially('Conta de luz')
+  await linha1.locator('.campo-num').click()
+  await linha1.locator('.campo-num').pressSequentially('180')
+  await win.locator('.titulo').click() // foco sai da linha ⇒ grava no sidecar
+  await expect(grupo.locator('.plan-grupo-total')).toContainText('180,00', {
+    timeout: 5_000,
+  })
+
+  // Segunda rubrica (Internet, 120): o subtotal do grupo vem do core (300).
+  await grupo.locator('.plan-add').click()
+  const linha2 = grupo.locator('.plan-linha').nth(1)
+  await linha2.locator('.campo-num').click()
+  await linha2.locator('.campo-num').pressSequentially('120')
+  await win.locator('.titulo').click()
+  await expect(grupo.locator('.plan-grupo-total')).toContainText('300,00', {
+    timeout: 5_000,
+  })
+
+  // De volta ao Perfil: o campo virou somente-leitura com o selo e a soma,
+  // e a seção recalculou no core (1.400 + 300 + 300 = 2.000).
+  await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
+  const detalhado = win.locator('.campo-detalhado', { hasText: 'Contas da casa' })
+  await expect(detalhado).toContainText('detalhado')
+  await expect(detalhado).toContainText('300,00')
+  await expect(
+    win.locator('.secao', { hasText: 'Despesas fixas' }).locator('.secao-total'),
+  ).toContainText('2.000,00', { timeout: 5_000 })
+
+  // Limpeza: sem rubricas o campo conserva a última soma e volta a ser
+  // editável (ADR-0012); restaura o seed (500) para as rodadas seguintes.
+  await detalhado.click()
+  const grupo2 = win.locator('.plan-grupo', { hasText: 'Contas da casa' })
+  await grupo2.locator('.btn-remover').first().click()
+  await grupo2.locator('.btn-remover').first().click()
+  await expect(grupo2.locator('.plan-linha')).toHaveCount(0)
+  await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
+  await preencher('Contas da casa', '500')
+  await win.waitForTimeout(1_500)
+})

@@ -177,7 +177,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1101 | ADR-0012 + bump 2.4.0 + camada de persistência SQLite no sidecar (repositório, schema v1 com `esquema`/`estado`/`rubrica`, `HF_DB_PATH`) + testes | REQ-F-018 | — | ✅ |
 | T-1102 | Persistência de perfil + dívidas fim-a-fim: `GET/POST /estado`, hidratação no boot da GUI, auto-save com debounce | REQ-F-018 | T-1101 | ✅ |
 | T-1103 | Rubricas no core (roll-up campo↔rubricas, campo com rubricas = soma) + endpoints CRUD no sidecar + testes | REQ-F-017 | T-1101 | ✅ |
-| T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ⬜ |
+| T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ✅ |
 | T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ⬜ |
 | T-1106 | Fechamento do ciclo: gates verdes, ata `FREEZE.md` v2.4.0 e docs sincronizados | Processo | todos | ⬜ |
 
@@ -208,7 +208,15 @@ a ponte do Electron só faz GET/POST). O roll-up é aplicado NA ESCRITA: toda
 mutação de rubrica recalcula e persiste o perfil (campo detalhado = soma) e
 devolve `rubricas` + `perfil` juntos; `POST /estado` reimpõe a soma (front
 fora de sincronia não grava total divergente); remover a última rubrica
-conserva a última soma no campo. Próximo: **T-1104** (tela planilha).
+conserva a última soma no campo. **T-1104 ✅**: tela **Planilha de orçamento**
+(`screens/Planilha.tsx` — sub-tela da aba Perfil, grupos expansíveis por
+campo, linha = nome+valor com rascunho por foco e gravação quando o foco sai
+da linha, subtotais do sidecar/core), `lib/orcamento.ts` (fonte única dos
+rótulos pt-BR, espelha `CAMPOS_POR_CATEGORIA`), aba Perfil refatorada para
+derivar as seções do mesmo módulo — campo detalhado vira somente-leitura com
+selo "detalhado ▸" que abre a planilha; botão "Detalhar orçamento" no topo.
+E2E: 9º cenário (rubricas → roll-up do core → selo no Perfil → remoção
+conserva a soma), 8 passed. Próximo: **T-1105** (xlsx/paridade).
 
 ### Histórico do ciclo v2.3 (fechado)
 

@@ -1576,3 +1576,195 @@ body {
   color: var(--primary);
   border-color: var(--focus);
 }
+
+/* ---- Planilha de orçamento (T-1104, REQ-F-017) --------------------------- */
+
+.titulo-linha {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.titulo-linha .btn-add {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+/* Campo do Perfil detalhado em rubricas: somente-leitura, leva à planilha. */
+.campo-detalhado {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.campo-detalhado .campo-input {
+  background: var(--trilha);
+  border-style: dashed;
+}
+
+.campo-detalhado:hover .campo-input {
+  border-color: var(--focus);
+}
+
+.campo-num-fixo {
+  display: inline-block;
+  text-align: right;
+  width: 100%;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.selo-det {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--nav-on-bg);
+  color: var(--nav-on-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.plan-erro {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-tile);
+  background: var(--tint-red);
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.plan-grupo {
+  border-top: 1px solid var(--divisor);
+}
+
+.plan-grupo:first-of-type {
+  border-top: 0;
+}
+
+.plan-grupo-topo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.plan-seta {
+  color: var(--muted);
+  font-size: 12px;
+  transition: transform 0.15s;
+}
+
+.plan-seta.aberta {
+  transform: rotate(90deg);
+}
+
+.plan-grupo-nome {
+  flex: 1 1 auto;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.plan-chip {
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--nav-on-bg);
+  color: var(--nav-on-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.plan-grupo-total {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.plan-linhas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 0 10px 20px;
+}
+
+.plan-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-nome {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 2px;
+  outline: none;
+}
+
+.plan-nome:focus {
+  border-bottom-color: var(--focus);
+}
+
+.plan-valor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-input);
+  border-radius: var(--r-chip);
+  padding: 4px 10px;
+  width: 132px;
+}
+
+.plan-valor:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(106, 91, 240, 0.15);
+}
+
+.plan-dica {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 0 4px;
+}
+
+.plan-add {
+  align-self: flex-start;
+  border: 1px dashed var(--border-input);
+  background: transparent;
+  color: var(--primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  border-radius: var(--r-chip);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.plan-add:hover {
+  border-color: var(--focus);
+  background: var(--nav-hover-bg);
+}

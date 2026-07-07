@@ -111,6 +111,35 @@ export interface SaudeOut {
 export interface EstadoOut {
   /** Perfil salvo na sessão anterior; null na primeira execução. */
   perfil: PerfilIn | null
+  /** Rubricas do orçamento vivo (T-1103): a planilha e os selos "detalhado". */
+  rubricas: RubricaOut[]
+}
+
+// --- Rubricas do orçamento (T-1103/T-1104, REQ-F-017) --------------------------
+
+export type Categoria = 'renda' | 'fixas' | 'variaveis'
+
+export interface RubricaOut {
+  id: number
+  categoria: Categoria
+  campo_pai: string
+  nome: string
+  valor: number
+  ordem: number
+}
+
+export interface RubricaNovaIn {
+  categoria: Categoria
+  campo_pai: string
+  nome: string
+  valor?: number
+  ordem?: number
+}
+
+/** Toda mutação devolve a lista + o perfil já com o roll-up do core. */
+export interface RubricaMutOut {
+  rubricas: RubricaOut[]
+  perfil: PerfilIn
 }
 
 // --- Tela Análise (T-902, REQ-F-015) ------------------------------------------

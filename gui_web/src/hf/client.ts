@@ -17,6 +17,8 @@ import type {
   IaJobOut,
   IaStatusOut,
   PerfilIn,
+  RubricaMutOut,
+  RubricaNovaIn,
   SaudeOut,
   SecaoIaOut,
 } from './contract'
@@ -55,6 +57,16 @@ export const hf = {
   /** Auto-save do perfil completo (o sidecar valida e persiste no SQLite). */
   estadoSalvar: (perfil: PerfilIn): Promise<{ ok: boolean }> =>
     chamar('/estado', perfil),
+  /** Rubricas (T-1104): toda mutação volta com o perfil recalculado no core. */
+  rubricaCriar: (rubrica: RubricaNovaIn): Promise<RubricaMutOut> =>
+    chamar('/rubricas', rubrica),
+  rubricaEditar: (
+    id: number,
+    nome: string,
+    valor: number,
+  ): Promise<RubricaMutOut> => chamar(`/rubricas/${id}`, { nome, valor }),
+  rubricaRemover: (id: number): Promise<RubricaMutOut> =>
+    chamar(`/rubricas/${id}/remover`, {}),
   diagnostico: (perfil: PerfilIn): Promise<DiagnosticoOut> =>
     chamar('/diagnostico', perfil),
   estrategias: (perfil: PerfilIn, extra = 0): Promise<EstrategiasOut> =>

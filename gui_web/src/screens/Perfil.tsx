@@ -1,9 +1,16 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import CampoMoeda from '../components/CampoMoeda'
-import type { PerfilIn } from '../hf/contract'
+import type {
+  Categoria,
+  PerfilIn,
+  RubricaMutOut,
+  RubricaOut,
+} from '../hf/contract'
 import type { Analise } from '../hf/useAnalise'
-import { brl, pct0 } from '../lib/format'
+import { brl, numBR, pct0 } from '../lib/format'
+import { SECOES_ORCAMENTO, campoDetalhado } from '../lib/orcamento'
+import Planilha from './Planilha'
 
 type AtualizarPerfil = (transform: (p: PerfilIn) => PerfilIn) => void
 
@@ -11,32 +18,57 @@ export default function Perfil({
   perfil,
   setPerfil,
   analise,
+  rubricas,
+  aoMutarRubricas,
 }: {
   perfil: PerfilIn
   setPerfil: AtualizarPerfil
   analise: Analise
+  rubricas: RubricaOut[]
+  aoMutarRubricas: (r: RubricaMutOut) => void
 }) {
   const d = analise.diagnostico
+  // Planilha de orçamento (T-1104): sub-tela aberta pelo botão ou pelos selos
+  // "detalhado ▸" — volta ao Perfil sem perder o estado das outras abas.
+  const [planilha, setPlanilha] = useState(false)
 
-  const setRenda = (campo: keyof NonNullable<PerfilIn['renda']>, v: number) =>
-    setPerfil((p) => ({ ...p, renda: { ...p.renda, [campo]: v } }))
-  const setFixas = (campo: keyof NonNullable<PerfilIn['fixas']>, v: number) =>
-    setPerfil((p) => ({ ...p, fixas: { ...p.fixas, [campo]: v } }))
-  const setVar = (campo: keyof NonNullable<PerfilIn['variaveis']>, v: number) =>
-    setPerfil((p) => ({ ...p, variaveis: { ...p.variaveis, [campo]: v } }))
+  const setCampo = (categoria: Categoria, campo: string, v: number) =>
+    setPerfil((p) => ({
+      ...p,
+      [categoria]: { ...(p[categoria] ?? {}), [campo]: v },
+    }))
 
   const renda = d?.renda_liquida ?? 0
   const fixas = d?.despesas_fixas ?? 0
   const variaveis = d?.despesas_variaveis ?? 0
   const parcelas = d?.total_parcelas ?? 0
   const sobra = d?.fluxo_caixa ?? 0
+  const totais: Record<Categoria, number> = { renda, fixas, variaveis }
+
+  if (planilha) {
+    return (
+      <Planilha
+        perfil={perfil}
+        rubricas={rubricas}
+        aoMutar={aoMutarRubricas}
+        aoVoltar={() => setPlanilha(false)}
+      />
+    )
+  }
 
   return (
     <>
-      <h1 className="titulo">Perfil e orçamento</h1>
-      <p className="sub">
-        Itemize sua renda e despesas — o diagnóstico recalcula ao vivo.
-      </p>
+      <div className="titulo-linha">
+        <div>
+          <h1 className="titulo">Perfil e orçamento</h1>
+          <p className="sub">
+            Itemize sua renda e despesas — o diagnóstico recalcula ao vivo.
+          </p>
+        </div>
+        <button className="btn-add" onClick={() => setPlanilha(true)}>
+          Detalhar orçamento
+        </button>
+      </div>
 
       <section className="card">
         <div className="card-titulo">Para onde vai a sua renda</div>
@@ -50,89 +82,35 @@ export default function Perfil({
       </section>
 
       <div className="perfil-grid">
-        <Secao titulo="Renda líquida mensal" cor="var(--green)" total={renda}>
-          <CampoMoeda
-            rotulo="Salário/benefício líquido"
-            valor={perfil.renda?.salario_liquido ?? 0}
-            onValor={(v) => setRenda('salario_liquido', v)}
-          />
-          <CampoMoeda
-            rotulo="Renda extra/autônoma"
-            valor={perfil.renda?.renda_extra ?? 0}
-            onValor={(v) => setRenda('renda_extra', v)}
-          />
-          <CampoMoeda
-            rotulo="Outras rendas"
-            valor={perfil.renda?.outras_rendas ?? 0}
-            onValor={(v) => setRenda('outras_rendas', v)}
-          />
-        </Secao>
-
-        <Secao titulo="Despesas fixas" cor="var(--red)" total={fixas}>
-          <CampoMoeda
-            rotulo="Moradia"
-            valor={perfil.fixas?.moradia ?? 0}
-            onValor={(v) => setFixas('moradia', v)}
-          />
-          <CampoMoeda
-            rotulo="Contas da casa"
-            valor={perfil.fixas?.contas_casa ?? 0}
-            onValor={(v) => setFixas('contas_casa', v)}
-          />
-          <CampoMoeda
-            rotulo="Transporte"
-            valor={perfil.fixas?.transporte ?? 0}
-            onValor={(v) => setFixas('transporte', v)}
-          />
-          <CampoMoeda
-            rotulo="Saúde"
-            valor={perfil.fixas?.saude ?? 0}
-            onValor={(v) => setFixas('saude', v)}
-          />
-          <CampoMoeda
-            rotulo="Educação"
-            valor={perfil.fixas?.educacao ?? 0}
-            onValor={(v) => setFixas('educacao', v)}
-          />
-          <CampoMoeda
-            rotulo="Assinaturas/academia"
-            valor={perfil.fixas?.assinaturas ?? 0}
-            onValor={(v) => setFixas('assinaturas', v)}
-          />
-          <CampoMoeda
-            rotulo="Outras fixas"
-            valor={perfil.fixas?.outras_fixas ?? 0}
-            onValor={(v) => setFixas('outras_fixas', v)}
-          />
-        </Secao>
-
-        <Secao titulo="Despesas variáveis" cor="var(--orange)" total={variaveis}>
-          <CampoMoeda
-            rotulo="Mercado"
-            valor={perfil.variaveis?.mercado ?? 0}
-            onValor={(v) => setVar('mercado', v)}
-          />
-          <CampoMoeda
-            rotulo="Lazer/delivery"
-            valor={perfil.variaveis?.lazer ?? 0}
-            onValor={(v) => setVar('lazer', v)}
-          />
-          <CampoMoeda
-            rotulo="Vestuário/cuidados"
-            valor={perfil.variaveis?.vestuario ?? 0}
-            onValor={(v) => setVar('vestuario', v)}
-          />
-          <CampoMoeda
-            rotulo="Imprevistos"
-            valor={perfil.variaveis?.imprevistos ?? 0}
-            onValor={(v) => setVar('imprevistos', v)}
-          />
-          <CampoMoeda
-            rotulo="Outras variáveis"
-            valor={perfil.variaveis?.outras_variaveis ?? 0}
-            onValor={(v) => setVar('outras_variaveis', v)}
-          />
-        </Secao>
+        {SECOES_ORCAMENTO.map((secao) => (
+          <Secao
+            key={secao.categoria}
+            titulo={secao.titulo}
+            cor={secao.cor}
+            total={totais[secao.categoria]}
+          >
+            {secao.campos.map(({ campo, rotulo }) => {
+              const valor =
+                (perfil[secao.categoria] as Record<string, number> | undefined)
+                  ?.[campo] ?? 0
+              return campoDetalhado(rubricas, secao.categoria, campo) ? (
+                <CampoDetalhado
+                  key={campo}
+                  rotulo={rotulo}
+                  valor={valor}
+                  aoAbrir={() => setPlanilha(true)}
+                />
+              ) : (
+                <CampoMoeda
+                  key={campo}
+                  rotulo={rotulo}
+                  valor={valor}
+                  onValor={(v) => setCampo(secao.categoria, campo, v)}
+                />
+              )
+            })}
+          </Secao>
+        ))}
 
         <Secao
           titulo="Reserva e FGTS"
@@ -173,6 +151,37 @@ export default function Perfil({
         <ResumoItem rotulo="Despesas totais" valor={brl(d?.despesas_totais ?? 0)} />
       </div>
     </>
+  )
+}
+
+/**
+ * Campo detalhado em rubricas (ADR-0012): somente-leitura, exibindo a soma
+ * feita no core; o selo leva à planilha, onde a edição acontece.
+ */
+function CampoDetalhado({
+  rotulo,
+  valor,
+  aoAbrir,
+}: {
+  rotulo: string
+  valor: number
+  aoAbrir: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="campo campo-detalhado"
+      onClick={aoAbrir}
+      title="Campo detalhado em rubricas — clique para abrir a planilha"
+    >
+      <span className="campo-rotulo">
+        {rotulo} <span className="selo-det">detalhado ▸</span>
+      </span>
+      <span className="campo-input">
+        <span className="campo-prefixo">R$</span>
+        <span className="campo-num campo-num-fixo">{numBR(valor)}</span>
+      </span>
+    </button>
   )
 }
 

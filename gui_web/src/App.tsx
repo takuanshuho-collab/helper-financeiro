@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 
 import { IconeLua, IconeSol } from './components/Icones'
 import { hf } from './hf/client'
-import type { DividaIn, PerfilIn, SecaoIaOut } from './hf/contract'
+import type {
+  DividaIn,
+  PerfilIn,
+  RubricaMutOut,
+  RubricaOut,
+  SecaoIaOut,
+} from './hf/contract'
 import { useAnalise } from './hf/useAnalise'
 import Analise from './screens/Analise'
 import Carta from './screens/Carta'
@@ -94,6 +100,10 @@ export default function App() {
     setEscuro(novo)
   }
   const [perfil, setPerfil] = useState<PerfilIn>(PERFIL_SEED)
+  // Rubricas do orçamento (T-1104, REQ-F-017): vivem no App porque a aba
+  // Perfil precisa delas (selos "detalhado") e as mutações também atualizam
+  // o perfil (roll-up devolvido pelo sidecar).
+  const [rubricas, setRubricas] = useState<RubricaOut[]>([])
   // Persistência (T-1102, REQ-F-018): o auto-save só liga DEPOIS da
   // hidratação — senão o seed sobrescreveria o banco antes da carga chegar.
   const [hidratado, setHidratado] = useState(false)
@@ -102,7 +112,9 @@ export default function App() {
     let ativo = true
     hf.estadoCarregar()
       .then((estado) => {
-        if (ativo && estado.perfil) setPerfil(estado.perfil)
+        if (!ativo) return
+        if (estado.perfil) setPerfil(estado.perfil)
+        setRubricas(estado.rubricas ?? [])
       })
       .catch(() => {
         // sidecar sem banco/fora do Electron: segue o seed em memória
@@ -139,12 +151,27 @@ export default function App() {
     setAbaAtiva(2)
   }
 
+  // Mutações de rubrica: o sidecar devolve a lista E o perfil já recalculado
+  // no core (campo detalhado = soma) — hidratamos os dois de uma vez.
+  const aoMutarRubricas = (r: RubricaMutOut) => {
+    setRubricas(r.rubricas)
+    setPerfil(r.perfil)
+  }
+
   function tela() {
     switch (abaAtiva) {
       case 0:
         return <VisaoGeral analise={analise} />
       case 1:
-        return <Perfil perfil={perfil} setPerfil={setPerfil} analise={analise} />
+        return (
+          <Perfil
+            perfil={perfil}
+            setPerfil={setPerfil}
+            analise={analise}
+            rubricas={rubricas}
+            aoMutarRubricas={aoMutarRubricas}
+          />
+        )
       case 2:
         return <Dividas perfil={perfil} setPerfil={setPerfil} analise={analise} />
       case 3:
