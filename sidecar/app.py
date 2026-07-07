@@ -37,6 +37,7 @@ from core.models import (
     Divida,
     PerfilFinanceiro,
 )
+from core.rubricas import Rubrica, aplicar_somas, somas_por_campo, validar_rubrica
 from guardrails.pii import anonimizar_credores
 from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta, montar_carta
@@ -55,6 +56,8 @@ from .schemas import (
     ExportarPlanilhaIn,
     ExportarRelatorioIn,
     PerfilIn,
+    RubricaEditIn,
+    RubricaIn,
 )
 from .security import exigir_token
 
@@ -154,10 +157,39 @@ def repositorio() -> Repositorio:
     return _REPO
 
 
+def _rubricas_do_banco(repo: Repositorio) -> list[Rubrica]:
+    return [Rubrica(**r) for r in repo.listar_rubricas()]
+
+
+def _com_roll_up(perfil: dict, repo: Repositorio) -> dict:
+    """Aplica o invariante do ADR-0012 ao perfil: campo detalhado = soma.
+
+    A aritmética vem do `core` (REQ-NF-005); aqui só orquestramos banco↔core.
+    """
+    return aplicar_somas(perfil, somas_por_campo(_rubricas_do_banco(repo)))
+
+
+def _perfil_apos_mutacao(repo: Repositorio) -> dict:
+    """Recalcula e persiste o perfil após criar/editar/remover uma rubrica.
+
+    O perfil salvo continua sendo a fonte única que alimenta os demais
+    endpoints — as mutações de rubrica o mantêm consistente por construção.
+    """
+    bruto = repo.carregar_estado(CHAVE_PERFIL) or PerfilIn().model_dump()
+    perfil = PerfilIn(**_com_roll_up(bruto, repo)).model_dump()
+    repo.salvar_estado(CHAVE_PERFIL, perfil)
+    return perfil
+
+
 @app.get("/estado", dependencies=[Depends(exigir_token)])
 def estado_carregar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
-    """Estado salvo do usuário; `perfil` é None na primeira execução."""
-    return {"perfil": repo.carregar_estado(CHAVE_PERFIL)}
+    """Estado salvo do usuário; `perfil` é None na primeira execução.
+
+    As rubricas vêm junto: a GUI precisa delas para a planilha e para saber
+    quais campos do Perfil estão detalhados (somente-leitura).
+    """
+    return {"perfil": repo.carregar_estado(CHAVE_PERFIL),
+            "rubricas": repo.listar_rubricas()}
 
 
 @app.post("/estado", dependencies=[Depends(exigir_token)])
@@ -166,10 +198,62 @@ def estado_salvar(perfil_in: PerfilIn,
     """Salva o perfil completo (auto-save da GUI).
 
     O payload passa pela validação do `PerfilIn` antes de ir ao banco — o que
-    está persistido sempre volta a hidratar a GUI sem surpresa de schema.
+    está persistido sempre volta a hidratar a GUI sem surpresa de schema. Os
+    campos detalhados são reimpostos pela soma das rubricas (ADR-0012): nem
+    um front fora de sincronia consegue gravar um total divergente.
     """
-    repo.salvar_estado(CHAVE_PERFIL, perfil_in.model_dump())
+    repo.salvar_estado(CHAVE_PERFIL,
+                       _com_roll_up(perfil_in.model_dump(), repo))
     return {"ok": True}
+
+
+# ---------------------------------------------------------- rubricas (T-1103)
+# Toda mutação devolve a lista atualizada E o perfil recalculado: a GUI
+# hidrata os dois estados numa resposta só, sem janela de inconsistência.
+@app.get("/rubricas", dependencies=[Depends(exigir_token)])
+def rubricas_listar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    return {"rubricas": repo.listar_rubricas()}
+
+
+@app.post("/rubricas", dependencies=[Depends(exigir_token)])
+def rubrica_criar(entrada: RubricaIn,
+                  repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Cria um lançamento; a ancoragem é validada contra o modelo do core."""
+    try:
+        validar_rubrica(entrada.categoria, entrada.campo_pai, entrada.nome)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    rubrica = repo.criar_rubrica(entrada.categoria, entrada.campo_pai,
+                                 entrada.nome.strip(), entrada.valor,
+                                 entrada.ordem)
+    return {"rubrica": rubrica, "rubricas": repo.listar_rubricas(),
+            "perfil": _perfil_apos_mutacao(repo)}
+
+
+@app.post("/rubricas/{rubrica_id}", dependencies=[Depends(exigir_token)])
+def rubrica_editar(rubrica_id: int, entrada: RubricaEditIn,
+                   repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Edita nome/valor/ordem. Mover de grupo é remover + criar."""
+    if not entrada.nome.strip():
+        raise HTTPException(status_code=422,
+                            detail="A rubrica precisa de um nome.")
+    rubrica = repo.atualizar_rubrica(rubrica_id, entrada.nome.strip(),
+                                     entrada.valor, entrada.ordem)
+    if rubrica is None:
+        raise HTTPException(status_code=404, detail="Rubrica desconhecida.")
+    return {"rubrica": rubrica, "rubricas": repo.listar_rubricas(),
+            "perfil": _perfil_apos_mutacao(repo)}
+
+
+@app.post("/rubricas/{rubrica_id}/remover", dependencies=[Depends(exigir_token)])
+def rubrica_remover(rubrica_id: int,
+                    repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Remove o lançamento. O campo-pai fica com a última soma e volta a ser
+    editável quando perde a última rubrica (decisão do ADR-0012)."""
+    if not repo.remover_rubrica(rubrica_id):
+        raise HTTPException(status_code=404, detail="Rubrica desconhecida.")
+    return {"ok": True, "rubricas": repo.listar_rubricas(),
+            "perfil": _perfil_apos_mutacao(repo)}
 
 
 @app.post("/estrategias", dependencies=[Depends(exigir_token)])

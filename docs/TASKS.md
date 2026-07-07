@@ -176,7 +176,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 |----|------|-----|---------|--------|
 | T-1101 | ADR-0012 + bump 2.4.0 + camada de persistência SQLite no sidecar (repositório, schema v1 com `esquema`/`estado`/`rubrica`, `HF_DB_PATH`) + testes | REQ-F-018 | — | ✅ |
 | T-1102 | Persistência de perfil + dívidas fim-a-fim: `GET/POST /estado`, hidratação no boot da GUI, auto-save com debounce | REQ-F-018 | T-1101 | ✅ |
-| T-1103 | Rubricas no core (roll-up campo↔rubricas, campo com rubricas = soma) + endpoints CRUD no sidecar + testes | REQ-F-017 | T-1101 | ⬜ |
+| T-1103 | Rubricas no core (roll-up campo↔rubricas, campo com rubricas = soma) + endpoints CRUD no sidecar + testes | REQ-F-017 | T-1101 | ✅ |
 | T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ⬜ |
 | T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ⬜ |
 | T-1106 | Fechamento do ciclo: gates verdes, ata `FREEZE.md` v2.4.0 e docs sincronizados | Processo | todos | ⬜ |
@@ -200,10 +200,18 @@ sidecar (payload validado pelo `PerfilIn` antes de persistir — a hidratação
 nunca surpreende a GUI), hidratação no boot (`hf.estadoCarregar`) e auto-save
 com debounce de 600 ms no `App.tsx` (só liga após a hidratação, para o seed
 não sobrescrever o banco); E2E com banco isolado (`HF_DB_PATH` em tmp) + teste
-novo: perfil editado sobrevive à reabertura do app (8º cenário). Próximo:
-**T-1103** (rubricas no core + CRUD).
+novo: perfil editado sobrevive à reabertura do app (8º cenário). **T-1103 ✅**:
+`core/rubricas.py` (Rubrica, `CAMPOS_POR_CATEGORIA` derivado dos dataclasses
+do ADR-0008, `somas_por_campo` + `aplicar_somas`) e CRUD no sidecar
+(`GET/POST /rubricas`, `POST /rubricas/{id}`, `POST /rubricas/{id}/remover` —
+a ponte do Electron só faz GET/POST). O roll-up é aplicado NA ESCRITA: toda
+mutação de rubrica recalcula e persiste o perfil (campo detalhado = soma) e
+devolve `rubricas` + `perfil` juntos; `POST /estado` reimpõe a soma (front
+fora de sincronia não grava total divergente); remover a última rubrica
+conserva a última soma no campo. Próximo: **T-1104** (tela planilha).
 
 ### Histórico do ciclo v2.3 (fechado)
+
 **Ciclo v2.3 ABERTO (ADR-0009).** **T-701 concluída**: SPEC v2.3 com
 REQ-F-010..016 (6 telas) + REQ-NF-005 (contrato do sidecar) + REQ-SEC-004
 (loopback+token, Electron seguro, telemetria local opt-in); PRD §8 DEC-2

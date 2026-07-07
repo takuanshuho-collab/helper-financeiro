@@ -60,6 +60,28 @@ class PerfilIn(BaseModel):
     dividas: list[DividaIn] = Field(default_factory=list)
 
 
+class RubricaIn(BaseModel):
+    """Novo lançamento do orçamento (T-1103, REQ-F-017).
+
+    A ancoragem (`categoria` + `campo_pai`) é validada contra o modelo do
+    core (`CAMPOS_POR_CATEGORIA`) no endpoint — 422 se não existir.
+    """
+
+    categoria: str   # 'renda' | 'fixas' | 'variaveis'
+    campo_pai: str   # ex.: 'contas_casa'
+    nome: str
+    valor: float = 0.0
+    ordem: int = 0
+
+
+class RubricaEditIn(BaseModel):
+    """Edição de rubrica: nome/valor (e ordem, opcional). Ancoragem não muda."""
+
+    nome: str
+    valor: float = 0.0
+    ordem: int | None = None
+
+
 class EstrategiasIn(BaseModel):
     """Perfil + pagamento extra mensal para simular a quitação."""
 

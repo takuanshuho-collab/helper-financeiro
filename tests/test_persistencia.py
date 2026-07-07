@@ -125,6 +125,58 @@ def test_acentos_sobrevivem_ao_roundtrip(tmp_path):
     repo.fechar()
 
 
+# -------------------------------------------------- rubricas (CRUD, T-1103)
+def test_rubrica_crud_roundtrip(tmp_path):
+    repo = Repositorio(tmp_path / "dados.db")
+    criada = repo.criar_rubrica("fixas", "contas_casa", "Conta de luz", 180.0)
+    assert criada["id"] is not None
+
+    listadas = repo.listar_rubricas()
+    assert listadas == [criada]
+
+    editada = repo.atualizar_rubrica(criada["id"], "Luz + taxa", 195.5)
+    assert editada is not None
+    assert editada["valor"] == 195.5
+    # A ancoragem não muda numa edição.
+    assert editada["categoria"] == "fixas"
+    assert editada["campo_pai"] == "contas_casa"
+
+    assert repo.remover_rubrica(criada["id"]) is True
+    assert repo.listar_rubricas() == []
+    repo.fechar()
+
+
+def test_rubrica_ordenacao_por_grupo_e_ordem(tmp_path):
+    repo = Repositorio(tmp_path / "dados.db")
+    repo.criar_rubrica("variaveis", "mercado", "Feira", 100.0, ordem=1)
+    repo.criar_rubrica("fixas", "contas_casa", "Internet", 120.0, ordem=2)
+    repo.criar_rubrica("fixas", "contas_casa", "Luz", 180.0, ordem=1)
+    nomes = [r["nome"] for r in repo.listar_rubricas()]
+    assert nomes == ["Luz", "Internet", "Feira"]
+    repo.fechar()
+
+
+def test_rubrica_id_desconhecido(tmp_path):
+    repo = Repositorio(tmp_path / "dados.db")
+    assert repo.atualizar_rubrica(999, "X", 1.0) is None
+    assert repo.remover_rubrica(999) is False
+    repo.fechar()
+
+
+def test_rubrica_com_mes_fica_fora_do_orcamento_vivo(tmp_path):
+    # A coluna `mes` existe para o histórico mensal futuro (ADR-0012): o
+    # orçamento vivo lista só as linhas com mes NULL.
+    repo = Repositorio(tmp_path / "dados.db")
+    repo.criar_rubrica("fixas", "contas_casa", "Luz", 180.0)
+    with repo._conn:  # simula uma linha de snapshot mensal (v2.5)
+        repo._conn.execute(
+            "INSERT INTO rubrica (categoria, campo_pai, nome, valor, mes) "
+            "VALUES ('fixas', 'contas_casa', 'Luz de julho', 170.0, '2026-07')"
+        )
+    assert [r["nome"] for r in repo.listar_rubricas()] == ["Luz"]
+    repo.fechar()
+
+
 def test_escritas_concorrentes_nao_se_corrompem(tmp_path):
     repo = Repositorio(tmp_path / "dados.db")
 

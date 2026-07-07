@@ -667,3 +667,103 @@ def test_estado_payload_invalido_422(repo_tmp):
     resposta = cliente.post("/estado", json=payload, headers=CABECALHO)
     assert resposta.status_code == 422
     assert cliente.get("/estado", headers=CABECALHO).json()["perfil"] is None
+
+
+# --- Rubricas (T-1103, REQ-F-017 / ADR-0012) ----------------------------------
+
+
+def _criar_rubrica(nome: str, valor: float, campo="contas_casa",
+                   categoria="fixas") -> dict:
+    resposta = cliente.post(
+        "/rubricas",
+        json={"categoria": categoria, "campo_pai": campo,
+              "nome": nome, "valor": valor},
+        headers=CABECALHO,
+    )
+    assert resposta.status_code == 200
+    return resposta.json()
+
+
+def test_rubricas_sem_token_401(repo_tmp):
+    assert cliente.get("/rubricas").status_code == 401
+    assert cliente.post("/rubricas", json={}).status_code == 401
+
+
+def test_rubrica_criar_aplica_roll_up_no_perfil(repo_tmp):
+    # Perfil salvo com contas_casa digitado direto (500).
+    cliente.post("/estado", json={"fixas": {"contas_casa": 500.0}},
+                 headers=CABECALHO)
+
+    dados = _criar_rubrica("Conta de luz", 180.0)
+    assert dados["rubrica"]["id"] is not None
+    # Campo detalhado passa a valer a SOMA das rubricas, não o valor digitado.
+    assert dados["perfil"]["fixas"]["contas_casa"] == 180.0
+
+    dados = _criar_rubrica("Internet", 120.0)
+    assert dados["perfil"]["fixas"]["contas_casa"] == 300.0
+    assert [r["nome"] for r in dados["rubricas"]] == ["Conta de luz", "Internet"]
+
+    # O perfil PERSISTIDO ficou consistente (fonte dos demais endpoints).
+    perfil = cliente.get("/estado", headers=CABECALHO).json()["perfil"]
+    assert perfil["fixas"]["contas_casa"] == 300.0
+
+
+def test_rubrica_editar_recalcula(repo_tmp):
+    rid = _criar_rubrica("Luz", 180.0)["rubrica"]["id"]
+    resposta = cliente.post(f"/rubricas/{rid}",
+                            json={"nome": "Luz + taxa", "valor": 200.0},
+                            headers=CABECALHO)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert dados["rubrica"]["nome"] == "Luz + taxa"
+    assert dados["perfil"]["fixas"]["contas_casa"] == 200.0
+
+
+def test_rubrica_remover_mantem_a_ultima_soma(repo_tmp):
+    rid = _criar_rubrica("Luz", 180.0)["rubrica"]["id"]
+    resposta = cliente.post(f"/rubricas/{rid}/remover", headers=CABECALHO)
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert dados["rubricas"] == []
+    # Sem rubricas o campo volta a ser editável, mas conserva a última soma —
+    # remover o detalhamento não zera o orçamento (ADR-0012).
+    assert dados["perfil"]["fixas"]["contas_casa"] == 180.0
+
+
+def test_rubrica_ancoragem_invalida_422(repo_tmp):
+    r = cliente.post("/rubricas",
+                     json={"categoria": "investimentos", "campo_pai": "acoes",
+                           "nome": "PETR4"},
+                     headers=CABECALHO)
+    assert r.status_code == 422
+    r = cliente.post("/rubricas",
+                     json={"categoria": "fixas", "campo_pai": "mercado",
+                           "nome": "Feira"},
+                     headers=CABECALHO)
+    assert r.status_code == 422
+    assert "mercado" in r.json()["detail"]
+
+
+def test_rubrica_id_desconhecido_404(repo_tmp):
+    assert cliente.post("/rubricas/999", json={"nome": "X", "valor": 1.0},
+                        headers=CABECALHO).status_code == 404
+    assert cliente.post("/rubricas/999/remover",
+                        headers=CABECALHO).status_code == 404
+
+
+def test_estado_salvar_reimpoe_a_soma_das_rubricas(repo_tmp):
+    _criar_rubrica("Luz", 180.0)
+    # Um front fora de sincronia tenta gravar contas_casa=999 direto...
+    cliente.post("/estado",
+                 json={"fixas": {"contas_casa": 999.0, "moradia": 1400.0}},
+                 headers=CABECALHO)
+    perfil = cliente.get("/estado", headers=CABECALHO).json()["perfil"]
+    # ...e o invariante vence: campo detalhado = soma; o resto fica como veio.
+    assert perfil["fixas"]["contas_casa"] == 180.0
+    assert perfil["fixas"]["moradia"] == 1400.0
+
+
+def test_estado_devolve_as_rubricas_para_a_hidratacao(repo_tmp):
+    _criar_rubrica("Luz", 180.0)
+    dados = cliente.get("/estado", headers=CABECALHO).json()
+    assert [r["nome"] for r in dados["rubricas"]] == ["Luz"]

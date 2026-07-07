@@ -128,6 +128,59 @@ class Repositorio:
             return None  # conteúdo inesperado: melhor "sem estado" que quebrar
         return dados
 
+    # ------------------------------------------------------------ rubricas
+    # CRUD dos lançamentos do orçamento (T-1103, REQ-F-017). `mes` fica NULL
+    # no orçamento vivo (v2.4); o filtro já existe para o histórico futuro.
+    def listar_rubricas(self) -> list[dict]:
+        with self._lock:
+            linhas = self._conn.execute(
+                "SELECT id, categoria, campo_pai, nome, valor, ordem FROM rubrica "
+                "WHERE mes IS NULL ORDER BY categoria, campo_pai, ordem, id"
+            ).fetchall()
+        return [dict(linha) for linha in linhas]
+
+    def criar_rubrica(self, categoria: str, campo_pai: str, nome: str,
+                      valor: float = 0.0, ordem: int = 0) -> dict:
+        with self._lock, self._conn:
+            cursor = self._conn.execute(
+                "INSERT INTO rubrica (categoria, campo_pai, nome, valor, ordem) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (categoria, campo_pai, nome, valor, ordem),
+            )
+        return {"id": cursor.lastrowid, "categoria": categoria,
+                "campo_pai": campo_pai, "nome": nome, "valor": valor,
+                "ordem": ordem}
+
+    def atualizar_rubrica(self, rubrica_id: int, nome: str, valor: float,
+                          ordem: int | None = None) -> dict | None:
+        """Edita nome/valor (e ordem, se enviada); None se o id não existe.
+
+        Categoria/campo_pai são a ANCORAGEM da rubrica — não mudam numa
+        edição; mover de grupo é remover + criar (decisão de simplicidade).
+        """
+        with self._lock, self._conn:
+            linha = self._conn.execute(
+                "SELECT id, categoria, campo_pai, ordem FROM rubrica WHERE id = ?",
+                (rubrica_id,),
+            ).fetchone()
+            if linha is None:
+                return None
+            ordem_final = linha["ordem"] if ordem is None else ordem
+            self._conn.execute(
+                "UPDATE rubrica SET nome = ?, valor = ?, ordem = ? WHERE id = ?",
+                (nome, valor, ordem_final, rubrica_id),
+            )
+        return {"id": rubrica_id, "categoria": linha["categoria"],
+                "campo_pai": linha["campo_pai"], "nome": nome, "valor": valor,
+                "ordem": ordem_final}
+
+    def remover_rubrica(self, rubrica_id: int) -> bool:
+        with self._lock, self._conn:
+            cursor = self._conn.execute(
+                "DELETE FROM rubrica WHERE id = ?", (rubrica_id,)
+            )
+        return cursor.rowcount > 0
+
     # -------------------------------------------------------------- ciclo
     def fechar(self) -> None:
         with self._lock:
