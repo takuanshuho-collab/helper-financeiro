@@ -153,7 +153,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-902 | Tela **Análise**: estratégias/portabilidade recalculadas + IA sênior (job async) + exportações xlsx/docx; teste de anonimização da fronteira cloud (H2/SEC-003) | REQ-F-015 | M8 | ✅ |
 | T-903 | Tela **Carta ao credor**: tipos selecionáveis + campos contextuais + pré-visualização ao vivo + `.docx` | REQ-F-016 | M8 | ✅ |
 | T-904 | Modo escuro persistido (`localStorage` `hf_dark`) e reidratação ao abrir | REQ-F-010 | T-801 | ✅ |
-| T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ⬜ |
+| T-905 | Paridade funcional com o tkinter (checklist de equivalência) + E2E Playwright | Processo | T-901..904 | ✅ |
 
 ## Milestone M10 — Empacotamento & freeze v2.3.0
 
@@ -214,5 +214,12 @@ topbar: `hf_dark` no `localStorage` ('1'/'0'; sem escolha salva segue o SO via
 `prefers-color-scheme`), reidratação ao abrir, `data-theme` no `<html>`;
 completados os tokens faltantes do escuro forçado (`--trilha`, tints) e o
 fundo inicial da janela Electron segue o `nativeTheme` (sem flash branco).
-**Próximo: T-905** (paridade + E2E Playwright). Nova ata `FREEZE.md` v2.3.0 no
-fechamento (M10).
+**T-905 ✅ — M9 FECHADO**: checklist de equivalência em **docs/PARIDADE.md**
+(nada do tkinter se perdeu; nome/CPF migraram para a Carta) e **E2E
+Playwright** (`gui_web/e2e/app.spec.ts`, `npm run e2e`) rodando o Electron +
+sidecar REAIS, offline (`HF_MODO_DEGRADADO=1`): 6 cenários — visão geral,
+perfil→recálculo, CRUD de dívidas, análise (portabilidade + job da IA
+degradando com P8), carta (prévia viva) e tema persistido com reabertura do
+app. Portão local; o gate-front do CI segue sem Electron (T-706). **Próximo:
+M10** (T-1001 packaging electron-builder + PyInstaller). Nova ata `FREEZE.md`
+v2.3.0 no fechamento.

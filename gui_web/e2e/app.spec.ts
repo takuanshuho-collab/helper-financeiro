@@ -1,0 +1,186 @@
+/**
+ * E2E do Helper Financeiro (T-905): Electron + sidecar Python REAIS.
+ *
+ * Percorre as 6 telas provando a paridade funcional com a GUI tkinter
+ * (docs/PARIDADE.md). Tudo offline: os números vêm do core determinístico e a
+ * IA roda em HF_MODO_DEGRADADO (o job async degrada rápido e sem rede).
+ *
+ * Os testes são seriais e compartilham a mesma janela — a ordem importa.
+ */
+import * as path from 'node:path'
+
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test'
+
+const RAIZ_GUI = path.resolve(__dirname, '..')
+
+test.describe.configure({ mode: 'serial' })
+
+let app: ElectronApplication
+let win: Page
+
+async function abrirApp(): Promise<[ElectronApplication, Page]> {
+  const instancia = await electron.launch({
+    args: ['.'],
+    cwd: RAIZ_GUI,
+    env: { ...process.env, HF_MODO_DEGRADADO: '1' },
+  })
+  const janela = await instancia.firstWindow()
+  // O hero só aparece quando o sidecar respondeu o primeiro /diagnostico.
+  await janela.waitForSelector('.hero', { timeout: 30_000 })
+  return [instancia, janela]
+}
+
+/** Input de um CampoMoeda/CampoPercent/CampoTexto pelo rótulo. */
+function campo(rotulo: string) {
+  return win.locator('label.campo', { hasText: rotulo }).locator('input')
+}
+
+/**
+ * Digita num campo controlado como um usuário: foca, seleciona tudo e tecla.
+ * (`fill()` seta o valor de uma vez e briga com o padrão foco/rascunho do
+ * CampoMoeda — o valor acabava concatenado.)
+ */
+async function preencher(rotulo: string, valor: string) {
+  const input = campo(rotulo)
+  await input.click()
+  await input.press('Control+a')
+  await input.pressSequentially(valor)
+  await input.blur()
+}
+
+function aba(nome: string) {
+  return win.locator('.nav-item', { hasText: nome })
+}
+
+test.beforeAll(async () => {
+  ;[app, win] = await abrirApp()
+})
+
+test.afterAll(async () => {
+  await app.close().catch(() => {})
+})
+
+test('visão geral: diagnóstico do core com o perfil semente', async () => {
+  // Seed: parcelas 1.950 / renda 5.000 = 39% ⇒ "Atenção".
+  await expect(win.locator('.pill')).toHaveText('Atenção')
+  await expect(win.locator('.anel-num')).toHaveText('39%')
+  // As 3 dívidas do seed, com a mais cara sinalizada.
+  await expect(win.locator('.ldiv')).toHaveCount(3)
+  await expect(win.locator('.selo-cara')).toHaveText('Mais cara')
+  // Estratégias simuladas no core.
+  await expect(win.locator('.scard-win .scard-meses')).toContainText('meses')
+})
+
+test('perfil: editar a renda recalcula o diagnóstico ao vivo', async () => {
+  await aba('Perfil').click()
+  await preencher('Salário/benefício líquido', '10000')
+  // O roll-up da seção vem do core via sidecar (nenhuma soma no front).
+  await expect(
+    win
+      .locator('.secao', { hasText: 'Renda líquida mensal' })
+      .locator('.secao-total'),
+  ).toContainText('10.000,00', { timeout: 5_000 })
+
+  // O diagnóstico global recalculou: 1.950 / 10.000 = 19,5% ⇒ "Saudável".
+  await aba('Visão geral').click()
+  await expect(win.locator('.pill')).toHaveText('Saudável', { timeout: 5_000 })
+
+  // Volta ao seed para os próximos testes.
+  await aba('Perfil').click()
+  await preencher('Salário/benefício líquido', '5000')
+  await aba('Visão geral').click()
+  await expect(win.locator('.pill')).toHaveText('Atenção', { timeout: 5_000 })
+})
+
+test('dívidas: adicionar e remover recalculam as estatísticas', async () => {
+  await aba('Dívidas').click()
+  await expect(win.locator('.dcard')).toHaveCount(3)
+
+  await win.locator('.btn-add', { hasText: 'Adicionar dívida' }).click()
+  await expect(win.locator('.dcard')).toHaveCount(4)
+  const nova = win.locator('.dcard').last()
+  await expect(nova.locator('.dcard-credor')).toHaveValue('Nova dívida')
+
+  await nova.locator('.btn-remover').click()
+  await expect(win.locator('.dcard')).toHaveCount(3)
+  await expect(
+    win.locator('.stat', { hasText: 'Saldo devedor total' }),
+  ).toContainText('3 dívida(s)')
+})
+
+test('análise: estratégias, portabilidade e IA (degradada) no job async', async () => {
+  await aba('Análise').click()
+  await preencher('Pagamento extra por mês', '300')
+
+  // Estratégias recalculadas no core com o extra.
+  await expect(win.locator('.scard-win .scard-meses')).toContainText('meses', {
+    timeout: 5_000,
+  })
+  // Portabilidade: cartão a 12% a.m. supera a taxa-alvo de 1,8% a.m.
+  await expect(
+    win.locator('.ldiv', { hasText: 'Cartão Banco A' }),
+  ).toBeVisible()
+  await expect(win.locator('.port-total-valor')).toContainText('R$')
+  // Recomendações determinísticas do core.
+  await expect(win.locator('.rec').first()).toBeVisible()
+
+  // IA sênior: dispara o job async; com HF_MODO_DEGRADADO=1 ele degrada
+  // rápido e a tela mostra o aviso com o motivo (P8).
+  await win.locator('.btn-add', { hasText: 'Gerar análise sênior' }).click()
+  await expect(win.locator('.ia-degradada')).toContainText('Modo degradado', {
+    timeout: 20_000,
+  })
+})
+
+test('carta: campos contextuais por tipo e prévia ao vivo do core', async () => {
+  await aba('Carta ao credor').click()
+
+  // A prévia nasce no tipo padrão (quitação).
+  await expect(win.locator('.letter')).toContainText('Prezados,', {
+    timeout: 5_000,
+  })
+  await expect(win.locator('.letter-titulo')).toContainText('quitação à vista')
+
+  // Trocar para portabilidade revela os campos contextuais.
+  await win.locator('.propcard', { hasText: 'Portabilidade' }).click()
+  await preencher('Banco concorrente', 'Banco Teste E2E')
+  await expect(win.locator('.letter')).toContainText('Banco Teste E2E', {
+    timeout: 5_000,
+  })
+  await expect(win.locator('.letter-titulo')).toContainText('portabilidade')
+
+  // A assinatura entra ao vivo.
+  await preencher('Seu nome (assinatura)', 'Fulana E2E')
+  await expect(win.locator('.letter-ass')).toContainText('Fulana E2E', {
+    timeout: 5_000,
+  })
+})
+
+test('tema: toggle persiste em hf_dark e reidrata ao reabrir', async () => {
+  const anterior = await win.evaluate(() => localStorage.getItem('hf_dark'))
+
+  await win.locator('.btn-tema').click()
+  const tema = await win.evaluate(
+    () => document.documentElement.dataset.theme ?? '',
+  )
+  expect(['dark', 'light']).toContain(tema)
+  const salvo = await win.evaluate(() => localStorage.getItem('hf_dark'))
+  expect(salvo).toBe(tema === 'dark' ? '1' : '0')
+
+  // Reidratação: reabre o app inteiro e o tema escolhido volta aplicado.
+  await app.close()
+  ;[app, win] = await abrirApp()
+  await expect(win.locator('html')).toHaveAttribute('data-theme', tema)
+
+  // Restaura a preferência que existia antes do teste (boa vizinhança).
+  await win.evaluate((v) => {
+    if (v === null) localStorage.removeItem('hf_dark')
+    else localStorage.setItem('hf_dark', v)
+  }, anterior)
+})
