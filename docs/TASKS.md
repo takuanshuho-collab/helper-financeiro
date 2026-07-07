@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.3.0 (ciclo aberto) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.4.0 (ciclo aberto) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -165,6 +165,22 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1004 | Troca do entrypoint para a GUI web (tkinter aposentada ou mantida como fallback) | Processo | T-905 | ✅ |
 | T-1005 | Ata de freeze v2.3.0 (SHA-256 dos artefatos + binário) e docs sincronizados | Processo | todos | ✅ |
 
+## Milestone M11 — Rubricas do orçamento + persistência local (v2.4, ADR-0012)
+
+> Primeira mudança pós-freeze v2.3.0, autorizada pela ADR-0012. Cada campo do
+> Perfil pode ser detalhado em **rubricas** criadas pelo usuário (roll-up no
+> core); o estado (perfil + dívidas + rubricas) passa a ser **persistido em
+> SQLite local** gerido pelo sidecar — o app lembra do usuário entre sessões.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1101 | ADR-0012 + bump 2.4.0 + camada de persistência SQLite no sidecar (repositório, schema v1 com `esquema`/`estado`/`rubrica`, `HF_DB_PATH`) + testes | REQ-F-018 | — | 🟨 |
+| T-1102 | Persistência de perfil + dívidas fim-a-fim: `GET/PUT /estado`, hidratação no boot da GUI, auto-save com debounce | REQ-F-018 | T-1101 | ⬜ |
+| T-1103 | Rubricas no core (roll-up campo↔rubricas, campo com rubricas = soma) + endpoints CRUD no sidecar + testes | REQ-F-017 | T-1101 | ⬜ |
+| T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ⬜ |
+| T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ⬜ |
+| T-1106 | Fechamento do ciclo: gates verdes, ata `FREEZE.md` v2.4.0 e docs sincronizados | Processo | todos | ⬜ |
+
 ---
 
 ## Definição de Pronto (DoD)
@@ -173,6 +189,14 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
+**Ciclo v2.4 ABERTO (ADR-0012)** — rubricas do orçamento (subcampos criados
+pelo usuário, roll-up no core) + persistência local SQLite no sidecar
+(`%APPDATA%\HelperFinanceiro\dados.db`, `HF_DB_PATH` p/ testes). Decisões do
+mantenedor: SQLite (não MySQL), orçamento único vivo (schema já preparado p/
+histórico mensal), persistir TUDO (perfil + dívidas + rubricas), rubricas em
+renda/fixas/variáveis. Em andamento: **T-1101**.
+
+### Histórico do ciclo v2.3 (fechado)
 **Ciclo v2.3 ABERTO (ADR-0009).** **T-701 concluída**: SPEC v2.3 com
 REQ-F-010..016 (6 telas) + REQ-NF-005 (contrato do sidecar) + REQ-SEC-004
 (loopback+token, Electron seguro, telemetria local opt-in); PRD §8 DEC-2
