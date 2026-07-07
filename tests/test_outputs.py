@@ -13,6 +13,7 @@ from docx import Document
 from openpyxl import load_workbook
 
 from contracts import PassoRoteiroIA, SecaoIA
+from core.rubricas import Rubrica
 from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta
 from outputs.relatorio import gerar_relatorio
@@ -58,6 +59,34 @@ def test_planilha_gate_b_sem_erro_de_formula(perfil_atencao, tmp_path):
     caminho = gerar_planilha(perfil_atencao, str(tmp_path / "diag.xlsx"),
                              extra_mensal=500, taxa_alvo_mensal=0.018)
     assert _validar_formulas(caminho) == []
+
+
+def test_planilha_com_rubricas_ganha_aba_orcamento(perfil_atencao, tmp_path):
+    rubricas = [
+        Rubrica("fixas", "contas_casa", "Conta de luz", 180.0, id=1),
+        Rubrica("fixas", "contas_casa", "Internet", 120.0, id=2),
+        Rubrica("renda", "renda_extra", "Freela", 800.0, id=3),
+    ]
+    caminho = gerar_planilha(perfil_atencao, str(tmp_path / "diag.xlsx"),
+                             rubricas=rubricas)
+    wb = load_workbook(caminho)
+    assert "Orçamento detalhado" in wb.sheetnames
+    ws = wb["Orçamento detalhado"]
+
+    textos = [str(c.value) for row in ws.iter_rows() for c in row if c.value]
+    assert any("Conta de luz" in t for t in textos)
+    assert any("Freela" in t for t in textos)
+    # Subtotal por campo é FÓRMULA (planilha viva), com rótulo pt-BR.
+    assert any(t.startswith("Subtotal — Contas da casa") for t in textos)
+    assert any(t.startswith("=SUM(") for t in textos), \
+        "subtotais das rubricas devem ser fórmulas =SUM"
+    # Gate B também vale para a aba nova.
+    assert _validar_formulas(caminho) == []
+
+
+def test_planilha_sem_rubricas_nao_cria_a_aba(perfil_atencao, tmp_path):
+    caminho = gerar_planilha(perfil_atencao, str(tmp_path / "diag.xlsx"))
+    assert "Orçamento detalhado" not in load_workbook(caminho).sheetnames
 
 
 def test_planilha_estrutura_e_formulas_chave(perfil_atencao, tmp_path):

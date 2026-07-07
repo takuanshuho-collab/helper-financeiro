@@ -113,4 +113,6 @@ ruff → mypy → pytest com piso de cobertura de **90%** (catraca: só sobe).
 | REQ-SEC-004 (telemetria local opt-in, tracing forçado off — T-1002) | `tests/test_telemetria.py` |
 | ADR-0011 (retry com feedback + redação determinística) | `tests/test_recuperacao.py`, `tests/test_grounding.py` |
 | REQ-F-010..016 (6 telas, paridade tkinter↔web — T-905) | `gui_web/e2e/app.spec.ts` (+ `docs/PARIDADE.md`) |
+| REQ-F-017 (rubricas: roll-up no core, CRUD, aba no .xlsx — v2.4/ADR-0012) | `tests/test_rubricas.py`, `tests/test_sidecar.py::test_rubrica_*`, `tests/test_outputs.py::test_planilha_com_rubricas_ganha_aba_orcamento`, E2E "planilha" |
+| REQ-F-018 (persistência local SQLite: hidratação + auto-save — v2.4/ADR-0012) | `tests/test_persistencia.py`, `tests/test_sidecar.py::test_estado_*`, E2E "persistência" |
 | T-1001 (pacote real: Electron + sidecar congelado) | `gui_web/e2e/empacotado.spec.ts` (`HF_E2E_PACOTE=1`) |

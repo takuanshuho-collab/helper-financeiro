@@ -7,12 +7,15 @@ pode mudar um saldo ou uma taxa e ver tudo recalcular sozinho.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from core.estrategias import comparar_estrategias, oportunidades_portabilidade
 from core.models import PerfilFinanceiro
+from core.rubricas import ROTULO_CAMPO, ROTULO_CATEGORIA, Rubrica
 
 # --- Paleta e estilos ---
 AZUL = "1F4E79"
@@ -201,13 +204,66 @@ def _aba_estrategias(wb, perfil: PerfilFinanceiro, extra_mensal: float,
     return ws
 
 
+def _aba_orcamento(wb, rubricas: Sequence[Rubrica]):
+    """Aba "Orçamento detalhado": as rubricas do usuário (ADR-0012).
+
+    Segue a filosofia da planilha viva: o VALOR de cada rubrica é entrada
+    editável e o subtotal por campo é uma fórmula =SUM — alterar uma conta no
+    Excel recalcula o subtotal na hora.
+    """
+    ws = wb.create_sheet("Orçamento detalhado")
+    _mesclar_titulo(ws, "A1", "ORÇAMENTO DETALHADO (RUBRICAS)", "C")
+
+    ws.append([])
+    ws.append(["Campo do orçamento", "Rubrica", "Valor"])
+    for cell in ws[3]:
+        cell.font = _cabecalho
+        cell.fill = _fill_cab
+
+    # Agrupa preservando a ordem canônica dos campos (a mesma da GUI).
+    linha = 4
+    for categoria, campos in ROTULO_CAMPO.items():
+        for campo, rotulo in campos.items():
+            do_campo = [r for r in rubricas
+                        if r.categoria == categoria and r.campo_pai == campo]
+            if not do_campo:
+                continue
+            primeira = linha
+            for r in do_campo:
+                ws.cell(linha, 1,
+                        f"{ROTULO_CATEGORIA[categoria]} · {rotulo}").font = _normal
+                ws.cell(linha, 2, r.nome).font = _normal
+                c = ws.cell(linha, 3, round(r.valor, 2))
+                c.font = _entrada
+                c.fill = _fill_entrada
+                c.number_format = MOEDA
+                linha += 1
+            sub = ws.cell(linha, 2, f"Subtotal — {rotulo}")
+            sub.font = _negrito
+            c = ws.cell(linha, 3, f"=SUM(C{primeira}:C{linha - 1})")
+            c.font = _negrito
+            c.number_format = MOEDA
+            linha += 2
+
+    nota = ws.cell(linha, 1,
+                   "Este campo aparece com o subtotal na aba Diagnóstico; no "
+                   "app, o campo detalhado vale a soma das rubricas.")
+    nota.font = Font(name=FONTE, italic=True, size=9, color="808080")
+    for letra, largura in (("A", 40), ("B", 32), ("C", 16)):
+        ws.column_dimensions[letra].width = largura
+    return ws
+
+
 def gerar_planilha(perfil: PerfilFinanceiro, caminho_saida: str,
-                   extra_mensal: float = 0.0, taxa_alvo_mensal: float = 0.018) -> str:
+                   extra_mensal: float = 0.0, taxa_alvo_mensal: float = 0.018,
+                   rubricas: Sequence[Rubrica] | None = None) -> str:
     """Monta e salva a planilha completa. Retorna o caminho salvo."""
     wb = Workbook()
     _, primeira, ultima = _aba_dividas(wb, perfil)
     _aba_diagnostico(wb, perfil, primeira, ultima)
     _aba_estrategias(wb, perfil, extra_mensal, taxa_alvo_mensal)
+    if rubricas:  # aba só existe quando o usuário detalhou o orçamento
+        _aba_orcamento(wb, rubricas)
     # Ordena as abas: Diagnóstico primeiro
     wb.move_sheet("Diagnóstico", -(wb.sheetnames.index("Diagnóstico")))
     wb.save(caminho_saida)

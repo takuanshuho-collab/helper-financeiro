@@ -556,7 +556,7 @@ def test_exportar_carta_docx(tmp_path):
 # --- Exportações .xlsx/.docx (T-902) ------------------------------------------
 
 
-def test_exportar_planilha_e_relatorio(tmp_path):
+def test_exportar_planilha_e_relatorio(tmp_path, repo_tmp):
     xlsx = tmp_path / "diagnostico.xlsx"
     resp = cliente.post(
         "/exportar/planilha",
@@ -582,7 +582,24 @@ def test_exportar_planilha_e_relatorio(tmp_path):
     assert docx.stat().st_size > 0
 
 
-def test_exportar_caminho_invalido_400():
+def test_exportar_planilha_inclui_rubricas_salvas(tmp_path, repo_tmp):
+    """As rubricas do banco entram na aba "Orçamento detalhado" (T-1105)."""
+    from openpyxl import load_workbook
+
+    _criar_rubrica("Conta de luz", 180.0)
+    xlsx = tmp_path / "diagnostico.xlsx"
+    resp = cliente.post(
+        "/exportar/planilha",
+        json={"perfil": PERFIL_ANALISE, "caminho": str(xlsx)},
+        headers=CABECALHO,
+    )
+    assert resp.status_code == 200
+    ws = load_workbook(xlsx)["Orçamento detalhado"]
+    textos = [str(c.value) for row in ws.iter_rows() for c in row if c.value]
+    assert any("Conta de luz" in t for t in textos)
+
+
+def test_exportar_caminho_invalido_400(repo_tmp):
     resp = cliente.post(
         "/exportar/planilha",
         json={"perfil": PERFIL_ANALISE,

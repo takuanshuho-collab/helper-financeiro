@@ -86,6 +86,15 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
 - **REQ-F-016 (v2.3)** — A tela **Carta ao credor** DEVE oferecer os tipos de
   proposta (quitação à vista / portabilidade / redução), campos contextuais por
   tipo e pré-visualização **ao vivo**, gerando a carta `.docx`.
+- **REQ-F-017 (v2.4, ADR-0012)** — Cada campo do orçamento (renda/fixas/
+  variáveis) PODE ser detalhado em **rubricas** criadas pelo usuário numa
+  planilha dedicada; campo com rubricas DEVE valer a **soma das rubricas**
+  (roll-up no `core`) e ficar somente-leitura na aba Perfil. As rubricas
+  DEVEM entrar no export `.xlsx` (aba "Orçamento detalhado").
+- **REQ-F-018 (v2.4, ADR-0012)** — O estado do usuário (perfil, dívidas e
+  rubricas) DEVE ser **persistido localmente** (SQLite gerido pelo sidecar em
+  `%APPDATA%\HelperFinanceiro\dados.db`; `HF_DB_PATH` sobrescreve p/ testes),
+  com hidratação no boot e auto-save — o app lembra o usuário entre sessões.
 
 ## 2. Requisitos do Agente (LLM)
 

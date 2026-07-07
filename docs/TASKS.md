@@ -178,7 +178,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1102 | Persistência de perfil + dívidas fim-a-fim: `GET/POST /estado`, hidratação no boot da GUI, auto-save com debounce | REQ-F-018 | T-1101 | ✅ |
 | T-1103 | Rubricas no core (roll-up campo↔rubricas, campo com rubricas = soma) + endpoints CRUD no sidecar + testes | REQ-F-017 | T-1101 | ✅ |
 | T-1104 | Tela "Planilha de orçamento" (grade editável: grupos expansíveis, adicionar/remover/renomear, subtotais ao vivo) + integração com a aba Perfil (campo detalhado somente-leitura + selo "detalhado ▸") | REQ-F-017 | T-1103 | ✅ |
-| T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ⬜ |
+| T-1105 | Rubricas no export `.xlsx`, `PARIDADE.md` atualizado e E2E Playwright dos fluxos novos (banco isolado por `HF_DB_PATH`) | REQ-F-017/018 | T-1104 | ✅ |
 | T-1106 | Fechamento do ciclo: gates verdes, ata `FREEZE.md` v2.4.0 e docs sincronizados | Processo | todos | ⬜ |
 
 ---
@@ -216,7 +216,15 @@ rótulos pt-BR, espelha `CAMPOS_POR_CATEGORIA`), aba Perfil refatorada para
 derivar as seções do mesmo módulo — campo detalhado vira somente-leitura com
 selo "detalhado ▸" que abre a planilha; botão "Detalhar orçamento" no topo.
 E2E: 9º cenário (rubricas → roll-up do core → selo no Perfil → remoção
-conserva a soma), 8 passed. Próximo: **T-1105** (xlsx/paridade).
+conserva a soma), 8 passed. **T-1105 ✅**: aba **"Orçamento detalhado"** no
+`.xlsx` (`_aba_orcamento` — rubricas como entradas editáveis + subtotal por
+campo como fórmula =SUM, filosofia da planilha viva; a aba só existe quando
+há rubricas), rótulos pt-BR canônicos no core (`ROTULO_CATEGORIA`/
+`ROTULO_CAMPO`, espelhados pelo front), `/exportar/planilha` lê as rubricas
+do banco; SPEC ganhou REQ-F-017/018, `PARIDADE.md` ganhou a §7 (novidades
+v2.4 só na web; tkinter = fallback congelado do v2.3) e o HARNESS mapeou os
+REQs novos. E2E dos fluxos novos já entregue no T-1102/T-1104 (banco isolado
++ cenários "persistência" e "planilha"). Próximo: **T-1106** (freeze v2.4.0).
 
 ### Histórico do ciclo v2.3 (fechado)
 

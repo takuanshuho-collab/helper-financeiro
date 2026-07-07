@@ -26,6 +26,38 @@ CAMPOS_POR_CATEGORIA: dict[str, tuple[str, ...]] = {
     "variaveis": tuple(f.name for f in fields(DespesasVariaveis)),
 }
 
+# Rótulos pt-BR canônicos (exports e telas; `gui_web/src/lib/orcamento.ts`
+# espelha estes textos).
+ROTULO_CATEGORIA: dict[str, str] = {
+    "renda": "Renda líquida mensal",
+    "fixas": "Despesas fixas",
+    "variaveis": "Despesas variáveis",
+}
+
+ROTULO_CAMPO: dict[str, dict[str, str]] = {
+    "renda": {
+        "salario_liquido": "Salário/benefício líquido",
+        "renda_extra": "Renda extra/autônoma",
+        "outras_rendas": "Outras rendas",
+    },
+    "fixas": {
+        "moradia": "Moradia",
+        "contas_casa": "Contas da casa",
+        "transporte": "Transporte",
+        "saude": "Saúde",
+        "educacao": "Educação",
+        "assinaturas": "Assinaturas/academia",
+        "outras_fixas": "Outras fixas",
+    },
+    "variaveis": {
+        "mercado": "Mercado",
+        "lazer": "Lazer/delivery",
+        "vestuario": "Vestuário/cuidados",
+        "imprevistos": "Imprevistos",
+        "outras_variaveis": "Outras variáveis",
+    },
+}
+
 
 @dataclass(frozen=True)
 class Rubrica:

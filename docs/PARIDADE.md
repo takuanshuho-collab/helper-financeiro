@@ -5,6 +5,11 @@
 > perdeu na migração. Cobertura automatizada: **E2E Playwright**
 > (`gui_web/e2e/app.spec.ts`, roda o Electron + sidecar REAIS — portão local,
 > `npm run e2e`) + testes de contrato do sidecar (`tests/test_sidecar.py`).
+>
+> **Atualização v2.4 (ADR-0012):** o ciclo v2.4 adicionou recursos **só na
+> GUI web** — ver §7. A tkinter permanece como fallback congelado do v2.3,
+> sem rubricas e sem persistência (decisão consciente: nenhum recurso novo
+> no fallback).
 
 Legenda: ✅ paridade plena · ✨ web supera o tkinter · Δ mudou de lugar (sem perda).
 
@@ -68,6 +73,14 @@ Legenda: ✅ paridade plena · ✨ web supera o tkinter · Δ mudou de lugar (se
 | — | Tela **Visão geral** (hero + anel + métricas) | ✨ | E2E "visão geral" |
 | — | **Modo escuro** persistido (`hf_dark`) + segue o SO | ✨ | E2E "tema" |
 | Segurança: cálculo 100% no core Python | Sidecar loopback+token; zero aritmética em TS (REQ-NF-005) | ✅ | `tests/test_sidecar.py` (contrato completo) |
+
+## 7. Novidades do ciclo v2.4 (ADR-0012) — só na GUI web
+
+| Recurso | Onde | Status | Coberto por |
+|---|---|---|---|
+| Persistência local (perfil + dívidas + rubricas em SQLite; hidratação + auto-save) | Sidecar (`/estado`) + `App.tsx` | ✨ | E2E "persistência" + `tests/test_persistencia.py` + `test_estado_*` |
+| Rubricas por campo do orçamento (roll-up no core; campo detalhado somente-leitura com selo) | Planilha de orçamento (sub-tela do Perfil) | ✨ | E2E "planilha" + `tests/test_rubricas.py` + `test_rubrica_*` |
+| Rubricas no export `.xlsx` (aba "Orçamento detalhado", subtotais =SUM) | `outputs/planilha.py` | ✨ | `test_planilha_com_rubricas_ganha_aba_orcamento` + `test_exportar_planilha_inclui_rubricas_salvas` |
 
 ## Limitações conhecidas do E2E
 

@@ -360,13 +360,18 @@ def analise_ia_status(job_id: str) -> dict:
 
 # ------------------------------------------------------- exportações (T-902)
 @app.post("/exportar/planilha", dependencies=[Depends(exigir_token)])
-def exportar_planilha(entrada: ExportarPlanilhaIn) -> dict:
-    """Gera o .xlsx no caminho escolhido pelo usuário (diálogo do Electron)."""
+def exportar_planilha(entrada: ExportarPlanilhaIn,
+                      repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Gera o .xlsx no caminho escolhido pelo usuário (diálogo do Electron).
+
+    As rubricas salvas entram na aba "Orçamento detalhado" (T-1105).
+    """
     perfil = _para_perfil(entrada.perfil)
     try:
         caminho = gerar_planilha(perfil, entrada.caminho,
                                  extra_mensal=entrada.extra,
-                                 taxa_alvo_mensal=entrada.taxa_alvo)
+                                 taxa_alvo_mensal=entrada.taxa_alvo,
+                                 rubricas=_rubricas_do_banco(repo))
     except OSError as e:
         raise HTTPException(status_code=400,
                             detail=f"Não foi possível salvar a planilha: {e}") from e
