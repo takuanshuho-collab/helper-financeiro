@@ -17,6 +17,8 @@ dependencies = [
     "llama-index-readers-file>=0.6.0",       # leitura de PDF/docx na ingestão
     "fastapi>=0.139.0",
     "uvicorn>=0.50.0",
+    "rapidocr>=3.9.1",   # OCR local: PaddleOCR PP-OCRv6 em ONNX (ADR-0015; H2/H7)
+    "onnxruntime>=1.27.0",  # runtime de inferência do rapidocr (CPU, sem nuvem)
 ]
 
 [dependency-groups]
@@ -66,7 +68,7 @@ no_implicit_optional = true
 # GUI tkinter tem tipagem dinâmica pesada; endurecer na Fase 3 (AppController)
 [[tool.mypy.overrides]]
 module = ["pdfplumber.*", "openpyxl.*", "docx.*", "llama_index.*",
-          "pymupdf.*", "pymupdf4llm.*"]
+          "pymupdf.*", "pymupdf4llm.*", "rapidocr.*", "onnxruntime.*", "cv2.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest

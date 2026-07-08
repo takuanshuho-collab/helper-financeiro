@@ -221,7 +221,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-1401 | ADR-0015 + bump 2.7.0 + `core/documento.py`: detector determinístico "precisa de OCR?" (densidade de texto p/ PDF, extensão p/ imagem) + pré-marcação por tipo (`<valor>/<data>/<percentual>`) + testes | REQ-F-024/025 | — | ✅ |
-| T-1402 | `agent/ocr.py`: RapidOCR + PP-OCRv6 medium local-only, rasteriza PDF escaneado via PyMuPDF, saída texto+layout; degrada com motivo se o motor faltar (P8); dep no `pyproject`/`PLAN §Stack`; testes com fixtures de imagem | REQ-F-024, REQ-NF-006 | T-1401 | ⬜ |
+| T-1402 | `agent/ocr.py`: RapidOCR + PP-OCRv6 medium local-only, rasteriza PDF escaneado via PyMuPDF, saída texto+layout ordenado; degrada com motivo se o motor faltar (P8); deps no `pyproject`/`PLAN §Stack`; testes com fixtures de imagem | REQ-F-024, REQ-NF-006 | T-1401 | ✅ |
 | T-1403 | Trave de citação normalizada (glifos de OCR nas duas vias) em `agent/extracao.py` + integração OCR→pipeline de extração + confirmação humana na aba Contrato + E2E | REQ-F-025 | T-1402 | ⬜ |
 | T-1404 | Empacotamento: modelos ONNX + onnxruntime no `SidecarHF.spec`, smoke do pacote OCRizando de verdade | Processo | T-1402 | ⬜ |
 
@@ -243,24 +243,25 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.7 ABERTO (ADR-0015, M14+M15) — T-1401 ✅.** Primeira mudança
-pós-freeze v2.6.0: OCR de documento escaneado/imagem. **T-1401** entregou a
-fundação determinística: `core/documento.py` com o detector "precisa de OCR?"
-(densidade de texto por página p/ PDF, extensão p/ imagem — a bifurcação é
-código, não LLM) e a pré-marcação por tipo (`<valor>/<data>/<percentual>`,
-tags de tipo, nunca semânticas); ADR-0015 escrita, bump 2.7.0 nos três lugares
-(pyproject + sidecar + gui_web/package.json), SPEC (REQ-F-024/025/026,
-REQ-NF-006) e HARNESS 2.7.0 sincronizados. Gates: **278 passed** (+23), mypy e
-ruff limpos. **Próxima:** T-1402 — `agent/ocr.py` com RapidOCR + PP-OCRv6
-medium (aqui entram as dependências novas no `pyproject`/`PLAN §Stack`).
+**Ciclo v2.7 ABERTO (ADR-0015, M14+M15) — T-1401 e T-1402 ✅.** OCR de documento
+escaneado/imagem. **T-1401** deu a fundação determinística (`core/documento.py`:
+detector "precisa de OCR?" + pré-marcação por tipo). **T-1402** entregou o motor
+`agent/ocr.py`: RapidOCR + **PP-OCRv6 medium** em ONNX Runtime, 100% local
+(H2/H7), rasterização de PDF via PyMuPDF, reconstrução do texto pela ordem de
+leitura do layout; degrada com motivo se o motor faltar (P8). Deps novas no
+`pyproject`/`PLAN §Stack` (`rapidocr`, `onnxruntime`; o `opencv` veio junto).
+Gate offline com motor FALSO + helpers puros; o motor real fica atrás de
+`HF_OCR_REAL=1` — **validado de verdade** (leu "600" de uma imagem renderizada;
+config correta: `lang_type='pt'`, string, não Enum). Gates: **289 passed**
+(+11), 1 skipped (real), mypy e ruff limpos.
 
-Motivo do motor: RapidOCR *é* o PaddleOCR em ONNX (mesmos pesos), sem a
-dependência de ~500 MB do `paddlepaddle`; qualidade em original ruim é função
-do calibre (medium/"server"), não da biblioteca. Watch-item herdado: flake do
-E2E "planilha" pós-build (2/8 rodadas, sempre timing, nunca valor errado —
-capturar trace se voltar). Qualquer mudança nos artefatos **congelados no
-v2.6.0** exige nova ADR + versão + nova ata (o v2.7 já está autorizado pela
-ADR-0015).
+**Próxima:** T-1403 — trave de citação normalizada (glifos de OCR nas duas vias)
+em `agent/extracao.py` + ligar o OCR no pipeline de extração da aba Contrato.
+Watch-items: (1) empacotamento do rapidocr/onnxruntime no PyInstaller +
+embarcar os `.onnx` sem download em runtime (T-1404, REQ-NF-006); (2) flake do
+E2E "planilha" pós-build (2/8, timing, nunca valor errado). Qualquer mudança
+nos artefatos **congelados no v2.6.0** exige nova ADR + versão + nova ata (o
+v2.7 já está autorizado pela ADR-0015).
 
 ### Histórico do ciclo v2.6 (fechado)
 

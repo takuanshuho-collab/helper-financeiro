@@ -81,6 +81,7 @@ variáveis (`capital`, `taxa`, `prazo`...), o código **verifica** e **calcula**
 | Documentos | python-docx | `.docx` sem Node |
 | PDF (LLM) | pymupdf4llm → Markdown | ADR-0010: tabelas p/ a extração; AGPL (uso não-comercial) |
 | PDF (fallback/regex) | pdfplumber | extração de texto (MIT) |
+| OCR local | rapidocr (PP-OCRv6 medium, ONNX) + onnxruntime | ADR-0015: scan/imagem, 100% local (H2/H7); rasterização via PyMuPDF |
 | Schemas | pydantic v2 | contratos tipados |
 | LLM (structured) | JSON Schema nativo (Ollama `format` / `response_format`) + Pydantic, via stdlib | ADR-0005: sem SDK/framework |
 | Orquestração | LangGraph (StateGraph + interrupt + InMemorySaver) | ADR-0006: fluxo rígido, pausa p/ humano |
@@ -168,3 +169,9 @@ financeiro dentro de prompts.
 - Peso de langgraph/llama-index no freeze → spike T-257 mediu: ~84 MB
   `--onefile`, sem collects extras. Aceito.
 - pdfplumber no PyInstaller → `--collect-all` (ver README).
+- rapidocr/onnxruntime no PyInstaller (ADR-0015) → os modelos ONNX são *data
+  files* e o onnxruntime traz binários nativos; o `SidecarHF.spec` precisa de
+  `--collect-data`/`--collect-all` e os `.onnx` embarcados e apontados
+  localmente (sem download em execução, REQ-NF-006) — validado no smoke do
+  pacote (T-1404). Config validada em runtime: PP-OCRv6 medium, `lang_type='pt'`
+  (é um modelo multilíngue único; `lang_type` é string, não Enum).
