@@ -553,14 +553,17 @@ def exportar_planilha(entrada: ExportarPlanilhaIn,
                       repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
     """Gera o .xlsx no caminho escolhido pelo usuário (diálogo do Electron).
 
-    As rubricas salvas entram na aba "Orçamento detalhado" (T-1105).
+    As rubricas salvas entram na aba "Orçamento detalhado" (T-1105) e as
+    competências arquivadas na aba "Evolução mensal" (T-1305, REQ-F-023).
     """
     perfil = _para_perfil(entrada.perfil)
+    snapshots = [(m, repo.carregar_mes(m) or {}) for m in repo.listar_meses()]
     try:
         caminho = gerar_planilha(perfil, entrada.caminho,
                                  extra_mensal=entrada.extra,
                                  taxa_alvo_mensal=entrada.taxa_alvo,
-                                 rubricas=_rubricas_do_banco(repo))
+                                 rubricas=_rubricas_do_banco(repo),
+                                 evolucao=serie_evolucao(snapshots))
     except OSError as e:
         raise HTTPException(status_code=400,
                             detail=f"Não foi possível salvar a planilha: {e}") from e

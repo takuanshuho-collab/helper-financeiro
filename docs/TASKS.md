@@ -208,7 +208,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1302 | Classificação LLM local (`índice → campo`, valor NUNCA vem do modelo; sem LLM degrada p/ manual — P8) + endpoints de importação no sidecar + aplicação como rubricas na competência escolhida + testes | REQ-F-021 | T-1301 | ✅ |
 | T-1303 | GUI importação: drop-zone CSV, painel de revisão (grupo + dropdown de campo + seletor de competência), aplicar → rubricas + E2E | REQ-F-021 | T-1302 | ✅ |
 | T-1304 | Gráfico de evolução: `GET /historico/evolucao` + SVG próprio na Planilha (totais por seção + zoom por campo, tema claro/escuro) + E2E | REQ-F-022 | T-1301 | ✅ |
-| T-1305 | Histórico no `.xlsx`: aba "Evolução mensal" (campos × competências, totais =SUM, gráfico nativo) + Gate B + SPEC/PARIDADE/HARNESS sincronizados | REQ-F-023 | T-1301 | ⬜ |
+| T-1305 | Histórico no `.xlsx`: aba "Evolução mensal" (campos × competências, totais =SUM, gráfico nativo) + Gate B + SPEC/PARIDADE/HARNESS sincronizados | REQ-F-023 | T-1301 | ✅ |
 | T-1306 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.6.0 e docs sincronizados | Processo | todos | ⬜ |
 
 ---
@@ -272,8 +272,15 @@ CSS). E2E: 12º cenário "evolução" (arquiva o mês anterior → 3 séries →
 zoom no Mercado → valor final do core), 12 passed. Observação: o flake
 intermitente pré-existente do cenário "planilha" reapareceu em 2 de 5
 rodadas (pós-build; passa na reexecução) — investigar no fechamento.
-Próximo: **T-1305** (aba "Evolução mensal" no `.xlsx` + Gate B +
-SPEC/PARIDADE/HARNESS sincronizados).
+**T-1305 ✅**: aba **"Evolução mensal"** no `.xlsx` (`_aba_evolucao` —
+campos × competências com valores editáveis, total da seção = fórmula
+`=SUM` por coluna, bloco-resumo referenciando os totais que alimenta o
+**gráfico de linhas nativo**; a aba só existe com histórico e seção zerada
+no período fica de fora); `/exportar/planilha` monta a `serie_evolucao`
+dos snapshots do banco. SPEC ganhou REQ-F-021/022/023, PARIDADE §7 ganhou
+as 3 linhas do ciclo e o HARNESS (2.6.0) mapeou os REQs novos. Gate B
+verde na aba nova (255 passed). Próximo: **T-1306** (fechamento: gates,
+binários, investigar o flake do E2E "planilha", ata `FREEZE.md` v2.6.0).
 
 ### Histórico do ciclo v2.5 (fechado)
 

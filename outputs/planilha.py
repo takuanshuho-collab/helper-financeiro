@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from openpyxl import Workbook
-from openpyxl.chart import BarChart, Reference
+from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from core.estrategias import comparar_estrategias, oportunidades_portabilidade
 from core.models import PerfilFinanceiro
@@ -254,16 +255,100 @@ def _aba_orcamento(wb, rubricas: Sequence[Rubrica]):
     return ws
 
 
+def _aba_evolucao(wb, evolucao: dict):
+    """Aba "Evolução mensal": campos × competências arquivadas (ADR-0014).
+
+    Os valores dos campos são entradas editáveis e o total de cada seção é
+    fórmula =SUM por coluna (planilha viva). Um bloco-resumo referencia os
+    totais e alimenta o gráfico de linhas nativo do Excel.
+    """
+    meses: list[str] = evolucao["meses"]
+    ultima_col = 1 + len(meses)
+
+    ws = wb.create_sheet("Evolução mensal")
+    _mesclar_titulo(ws, "A1", "EVOLUÇÃO MENSAL DO ORÇAMENTO",
+                    get_column_letter(max(ultima_col, 2)))
+
+    linha_cab = 3
+    ws.cell(linha_cab, 1, "Campo do orçamento")
+    for j, mes in enumerate(meses, start=2):
+        ws.cell(linha_cab, j, mes)
+    for cell in ws[linha_cab]:
+        cell.font = _cabecalho
+        cell.fill = _fill_cab
+        cell.alignment = Alignment(horizontal="center")
+
+    linha = linha_cab + 1
+    totais_por_secao: list[tuple[str, int]] = []  # (rótulo, linha do total)
+    for secao in evolucao["secoes"]:
+        if not secao["campos"]:
+            continue  # seção zerada em todo o período: fora (ruído)
+        ws.cell(linha, 1, secao["rotulo"]).font = _negrito
+        linha += 1
+        primeira = linha
+        for campo in secao["campos"]:
+            ws.cell(linha, 1, campo["rotulo"]).font = _normal
+            for j, valor in enumerate(campo["valores"], start=2):
+                c = ws.cell(linha, j, round(valor, 2))
+                c.font = _entrada
+                c.fill = _fill_entrada
+                c.number_format = MOEDA
+            linha += 1
+        ws.cell(linha, 1, f"Total — {secao['rotulo']}").font = _negrito
+        for j in range(2, ultima_col + 1):
+            letra = get_column_letter(j)
+            c = ws.cell(linha, j, f"=SUM({letra}{primeira}:{letra}{linha - 1})")
+            c.font = _negrito
+            c.number_format = MOEDA
+        totais_por_secao.append((secao["rotulo"], linha))
+        linha += 2
+
+    # Bloco-resumo (referencia os totais) — é a fonte do gráfico de linhas.
+    resumo_primeira = linha
+    for rotulo, linha_total in totais_por_secao:
+        ws.cell(linha, 1, rotulo).font = _normal
+        for j in range(2, ultima_col + 1):
+            letra = get_column_letter(j)
+            c = ws.cell(linha, j, f"={letra}{linha_total}")
+            c.number_format = MOEDA
+        linha += 1
+    resumo_ultima = linha - 1
+
+    chart = LineChart()
+    chart.title = "Evolução por seção"
+    dados = Reference(ws, min_col=1, max_col=ultima_col,
+                      min_row=resumo_primeira, max_row=resumo_ultima)
+    chart.add_data(dados, titles_from_data=True, from_rows=True)
+    cats = Reference(ws, min_col=2, max_col=ultima_col, min_row=linha_cab)
+    chart.set_categories(cats)
+    chart.height = 8
+    chart.width = 18
+    ws.add_chart(chart, f"A{linha + 2}")
+
+    ws.column_dimensions["A"].width = 30
+    for j in range(2, ultima_col + 1):
+        ws.column_dimensions[get_column_letter(j)].width = 14
+    return ws
+
+
 def gerar_planilha(perfil: PerfilFinanceiro, caminho_saida: str,
                    extra_mensal: float = 0.0, taxa_alvo_mensal: float = 0.018,
-                   rubricas: Sequence[Rubrica] | None = None) -> str:
-    """Monta e salva a planilha completa. Retorna o caminho salvo."""
+                   rubricas: Sequence[Rubrica] | None = None,
+                   evolucao: dict | None = None) -> str:
+    """Monta e salva a planilha completa. Retorna o caminho salvo.
+
+    `evolucao` é a saída de `core.rubricas.serie_evolucao` (competências
+    arquivadas); a aba "Evolução mensal" só existe quando há histórico.
+    """
     wb = Workbook()
     _, primeira, ultima = _aba_dividas(wb, perfil)
     _aba_diagnostico(wb, perfil, primeira, ultima)
     _aba_estrategias(wb, perfil, extra_mensal, taxa_alvo_mensal)
     if rubricas:  # aba só existe quando o usuário detalhou o orçamento
         _aba_orcamento(wb, rubricas)
+    if (evolucao and evolucao.get("meses")
+            and any(s["campos"] for s in evolucao["secoes"])):
+        _aba_evolucao(wb, evolucao)
     # Ordena as abas: Diagnóstico primeiro
     wb.move_sheet("Diagnóstico", -(wb.sheetnames.index("Diagnóstico")))
     wb.save(caminho_saida)

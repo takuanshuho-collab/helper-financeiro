@@ -611,6 +611,27 @@ def test_exportar_planilha_inclui_rubricas_salvas(tmp_path, repo_tmp):
     assert any("Conta de luz" in t for t in textos)
 
 
+def test_exportar_planilha_inclui_historico_arquivado(tmp_path, repo_tmp):
+    """As competências do banco entram na aba "Evolução mensal" (T-1305)."""
+    from openpyxl import load_workbook
+
+    cliente.post("/estado", json={"variaveis": {"mercado": 750.0}},
+                 headers=CABECALHO)
+    cliente.post("/historico/arquivar", json={"mes": "2026-05"},
+                 headers=CABECALHO)
+    xlsx = tmp_path / "diagnostico.xlsx"
+    resp = cliente.post(
+        "/exportar/planilha",
+        json={"perfil": PERFIL_ANALISE, "caminho": str(xlsx)},
+        headers=CABECALHO,
+    )
+    assert resp.status_code == 200
+    ws = load_workbook(xlsx)["Evolução mensal"]
+    textos = [str(c.value) for row in ws.iter_rows() for c in row if c.value]
+    assert "2026-05" in textos
+    assert any("Mercado" in t for t in textos)
+
+
 def test_exportar_caminho_invalido_400(repo_tmp):
     resp = cliente.post(
         "/exportar/planilha",

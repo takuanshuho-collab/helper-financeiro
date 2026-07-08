@@ -83,6 +83,9 @@ Legenda: ✅ paridade plena · ✨ web supera o tkinter · Δ mudou de lugar (se
 | Rubricas no export `.xlsx` (aba "Orçamento detalhado", subtotais =SUM) | `outputs/planilha.py` | ✨ | `test_planilha_com_rubricas_ganha_aba_orcamento` + `test_exportar_planilha_inclui_rubricas_salvas` |
 | Histórico mensal: arquivar competência + comparação com deltas/% do core (v2.5, ADR-0013) | Planilha, seção "Histórico mensal" | ✨ | E2E "histórico" + `test_historico_*` |
 | Sugestões de nome de rubrica (datalist local, v2.5) | Planilha, linhas de rubrica | ✨ | E2E "sugestões" |
+| Importação de CSV classificada por LLM local, com revisão humana e degradação p/ manual (v2.6, ADR-0014) | Planilha, seção "Importar extrato (CSV)" | ✨ | E2E "importação" + `tests/test_extrato.py` + `tests/test_classificacao.py` + `test_importar_*` |
+| Gráfico de evolução das competências (totais por seção + zoom por campo; séries do core) (v2.6) | Planilha, seção "Histórico mensal" | ✨ | E2E "evolução" + `test_serie_evolucao_*` + `test_historico_evolucao_*` |
+| Histórico no export `.xlsx` (aba "Evolução mensal", totais =SUM + gráfico nativo) (v2.6) | `outputs/planilha.py` | ✨ | `test_planilha_com_historico_ganha_aba_evolucao` + `test_exportar_planilha_inclui_historico_arquivado` |
 
 ## Limitações conhecidas do E2E
 

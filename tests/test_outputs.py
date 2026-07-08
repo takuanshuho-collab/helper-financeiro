@@ -13,7 +13,7 @@ from docx import Document
 from openpyxl import load_workbook
 
 from contracts import PassoRoteiroIA, SecaoIA
-from core.rubricas import Rubrica
+from core.rubricas import Rubrica, serie_evolucao
 from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta
 from outputs.relatorio import gerar_relatorio
@@ -87,6 +87,40 @@ def test_planilha_com_rubricas_ganha_aba_orcamento(perfil_atencao, tmp_path):
 def test_planilha_sem_rubricas_nao_cria_a_aba(perfil_atencao, tmp_path):
     caminho = gerar_planilha(perfil_atencao, str(tmp_path / "diag.xlsx"))
     assert "Orçamento detalhado" not in load_workbook(caminho).sheetnames
+
+
+def test_planilha_com_historico_ganha_aba_evolucao(perfil_atencao, tmp_path):
+    # Duas competências arquivadas: mercado 750 → 900 (T-1305, REQ-F-023).
+    evolucao = serie_evolucao([
+        ("2026-05", {"variaveis": {"mercado": 750.0},
+                     "fixas": {"moradia": 1400.0}}),
+        ("2026-06", {"variaveis": {"mercado": 900.0},
+                     "fixas": {"moradia": 1400.0}}),
+    ])
+    caminho = gerar_planilha(perfil_atencao, str(tmp_path / "diag.xlsx"),
+                             evolucao=evolucao)
+    wb = load_workbook(caminho)
+    assert "Evolução mensal" in wb.sheetnames
+    ws = wb["Evolução mensal"]
+    textos = [str(c.value) for row in ws.iter_rows() for c in row if c.value]
+
+    # Colunas = competências; linhas = campos com valor no período.
+    assert "2026-05" in textos and "2026-06" in textos
+    assert any("Mercado" in t for t in textos)
+    assert any(t.startswith("Total — Despesas variáveis") for t in textos)
+    # Total da seção é FÓRMULA por coluna (planilha viva) e o bloco-resumo
+    # que alimenta o gráfico referencia os totais.
+    assert any(t.startswith("=SUM(") for t in textos)
+    # A seção de renda (zerada nos dois meses) fica de fora.
+    assert not any("Renda líquida" in t for t in textos)
+    # Gate B também vale para a aba nova.
+    assert _validar_formulas(caminho) == []
+
+
+def test_planilha_sem_historico_nao_cria_aba_evolucao(perfil_atencao, tmp_path):
+    caminho = gerar_planilha(perfil_atencao, str(tmp_path / "diag.xlsx"),
+                             evolucao=serie_evolucao([]))
+    assert "Evolução mensal" not in load_workbook(caminho).sheetnames
 
 
 def test_planilha_estrutura_e_formulas_chave(perfil_atencao, tmp_path):

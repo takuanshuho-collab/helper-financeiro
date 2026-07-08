@@ -103,6 +103,22 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
 - **REQ-F-020 (v2.5, ADR-0013)** — Ao nomear uma rubrica, a GUI DEVE oferecer
   **sugestões locais** de nomes comuns por campo (autocompletar nativo, sem
   rede).
+- **REQ-F-021 (v2.6, ADR-0014)** — O usuário PODE **importar um extrato/fatura
+  CSV**: o parse DEVE ser determinístico no `core` (separador, colunas,
+  valores BR/US, agrupamento por estabelecimento, competência sugerida pelas
+  datas); a LLM local PODE **apenas rotular** os grupos com campos do
+  orçamento (nenhum número passa pelo modelo; rótulo inválido é descartado);
+  o sistema DEVE exigir **revisão humana** antes de aplicar e DEVE degradar
+  para classificação manual sem LLM (P8). A importação **acrescenta** rubricas
+  no destino escolhido (orçamento vivo ou competência) — nunca apaga.
+- **REQ-F-022 (v2.6, ADR-0014)** — Com 2 ou mais competências arquivadas, o
+  sistema DEVE exibir o **gráfico de evolução** (totais por seção + zoom por
+  campo); as séries DEVEM vir prontas do `core` (`serie_evolucao`) — o front
+  só projeta e formata (REQ-NF-005).
+- **REQ-F-023 (v2.6, ADR-0014)** — QUANDO houver competências arquivadas, o
+  export `.xlsx` DEVE incluir a aba **"Evolução mensal"** (campos ×
+  competências, totais por seção como fórmula `=SUM` e gráfico nativo),
+  sujeita ao Gate B (zero erro de fórmula).
 
 ## 2. Requisitos do Agente (LLM)
 
