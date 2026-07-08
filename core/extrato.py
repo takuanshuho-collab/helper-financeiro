@@ -36,6 +36,11 @@ _CHAVES_VALOR = ("valor", "amount", "value", "montante")
 _RE_DATA_BR = re.compile(r"^(\d{2})[/.-](\d{2})[/.-](\d{4})$")
 _RE_DATA_ISO = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 
+# Texto livre (OCR de comprovante/extrato): valor monetário BR (número + sinal
+# opcional à frente) e data em qualquer posição da linha.
+_RE_VALOR_LIVRE = re.compile(r"(-)?\s*R?\$?\s*(\d[\d.]*,\d{2})(?![\d,])")
+_RE_DATA_EM_TEXTO = re.compile(r"\b(\d{2}[/.-]\d{2}[/.-]\d{4}|\d{4}-\d{2}-\d{2})\b")
+
 
 @dataclass(frozen=True)
 class Lancamento:
@@ -261,4 +266,85 @@ def ler_extrato_csv(texto: str) -> Extrato:
         grupos=_agrupar(lancamentos),
         competencia_sugerida=_competencia_sugerida(lancamentos),
         avisos=tuple(avisos),
+    )
+
+
+def _parse_linha_livre(linha: str) -> tuple[str | None, str, float] | None:
+    """Uma linha de texto (OCR de comprovante/extrato) → (data, descrição, valor).
+
+    Heurística por linha, no espírito de `_inferir_colunas` mas sobre texto sem
+    colunas: o ÚLTIMO número monetário é o valor (bancos põem o valor no fim da
+    linha); um sinal '-' à frente, ou '-'/'D' logo após, marca débito, 'C' marca
+    crédito; a data (se houver) é o 1º token de data; a descrição é o que sobra.
+    Linha sem valor monetário não é lançamento (título, rodapé) → None; linha de
+    SALDO também não (é o balanço da conta, não uma transação — e o valor pouparia
+    o usuário de desmarcá-lo na revisão).
+    """
+    if re.search(r"\bsaldo\b", linha, re.IGNORECASE):
+        return None
+    achados = list(_RE_VALOR_LIVRE.finditer(linha))
+    if not achados:
+        return None
+    m = achados[-1]
+    valor = parse_valor(m.group(2))
+    if valor == 0.0:
+        return None
+    # Sinal: '-' à frente, ou '-'/'D' logo após (extratos BR); 'C' = crédito.
+    sufixo = linha[m.end():m.end() + 2].strip().upper()[:1]
+    negativo = m.group(1) == "-" or sufixo in ("-", "D")
+    valor = -abs(valor) if negativo else abs(valor)
+
+    data_match = _RE_DATA_EM_TEXTO.search(linha)
+    data = _parse_data(data_match.group(1)) if data_match else None
+
+    # Descrição = linha sem os trechos de data e valor (splice do fim p/ início,
+    # p/ os índices não invalidarem), sem R$/moeda e sem o marcador de sinal.
+    spans = sorted(
+        ([data_match.span()] if data_match else []) + [m.span()], reverse=True
+    )
+    desc = linha
+    for ini, fim in spans:
+        desc = desc[:ini] + " " + desc[fim:]
+    tokens = desc.replace("R$", " ").replace("$", " ").split()
+    if tokens and tokens[-1].upper() in ("D", "C", "-"):
+        tokens.pop()
+    descricao = " ".join(tokens).strip(" -–—:|")
+    return data, (descricao if len(descricao) >= 2 else "Lançamento"), valor
+
+
+def ler_extrato_ocr(texto: str) -> Extrato:
+    """Texto OCRizado de um comprovante/extrato → mesmo `Extrato` do CSV.
+
+    O OCR (`agent/ocr.py`) já reconstruiu as linhas pela leitura do layout; aqui
+    cada linha com valor monetário vira um `Lancamento` e o resto do pipeline é
+    IDÊNTICO ao do CSV (agrupamento por estabelecimento, natureza por sinais,
+    competência pela moda das datas) — a classificação e o `/importar/aplicar`
+    do v2.6 são reusados sem mudança (ADR-0015 §E). Todo número vem daqui, nunca
+    do modelo (H1); linhas sem valor são silenciosamente ignoradas (num
+    documento livre a maioria não é lançamento).
+    """
+    brutos: list[tuple[str | None, str, float]] = []
+    for linha in texto.splitlines():
+        if not linha.strip():
+            continue
+        parsed = _parse_linha_livre(linha)
+        if parsed is not None:
+            brutos.append(parsed)
+
+    if not brutos:
+        return Extrato(
+            (), (), None,
+            ("Não reconheci lançamentos com valor no documento escaneado.",),
+        )
+
+    naturezas = _naturezas([valor for _, _, valor in brutos])
+    lancamentos = [
+        Lancamento(data=data, descricao=descricao, valor=valor, natureza=nat)
+        for (data, descricao, valor), nat in zip(brutos, naturezas, strict=True)
+    ]
+    return Extrato(
+        lancamentos=tuple(lancamentos),
+        grupos=_agrupar(lancamentos),
+        competencia_sugerida=_competencia_sugerida(lancamentos),
+        avisos=(),
     )

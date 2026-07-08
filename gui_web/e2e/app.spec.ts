@@ -358,6 +358,45 @@ test('importação: CSV do extrato vira rubricas após revisão', async () => {
   await win.waitForTimeout(1_500)
 })
 
+test('importação por OCR: comprovante escaneado vira rubricas (T-1405)', async () => {
+  // A mesma seção de importação agora aceita FOTO/PDF além de CSV: sobe uma
+  // imagem de extrato e o OCR local (sidecar) lê os lançamentos. Todo número
+  // continua vindo do core; a LLM (aqui degradada, P8) só rotularia.
+  await win.locator('.btn-add', { hasText: 'Detalhar orçamento' }).click()
+  await win.locator('.imp input[type="file"]').setInputFiles(
+    path.resolve(__dirname, 'fixtures', 'comprovante-escaneado.png'),
+  )
+
+  // Carregar os modelos PP-OCRv6 + OCRizar leva alguns segundos. O banner de
+  // OCR confirma que a imagem passou pelo motor local; os 2 débitos (luz,
+  // padaria) chegam do parser do core — o "Saldo final" NÃO vira lançamento.
+  await expect(win.locator('.extr-ocr')).toBeVisible({ timeout: 60_000 })
+  await expect(win.locator('.imp-linha')).toHaveCount(2)
+  const linha = win.locator('.imp-linha', { hasText: 'Conta de luz Enel' })
+  await expect(linha).toContainText('180,50') // total do core, formatado
+
+  // Classifica só a luz (padaria fica "não importar") e grava no vivo.
+  await linha.locator('.imp-sel').selectOption('fixas/contas_casa')
+  await win.locator('.imp-destino').selectOption('vivo')
+  await win.locator('.imp .btn-add', { hasText: 'Importar' }).click()
+  await expect(win.locator('.imp-feito')).toContainText('1 rubrica(s)', {
+    timeout: 5_000,
+  })
+
+  // Roll-up do core: o campo passou a valer a soma da rubrica importada.
+  const grupo = win.locator('.plan-grupo', { hasText: 'Contas da casa' })
+  await expect(grupo.locator('.plan-grupo-total')).toContainText('180,50')
+
+  // Limpeza: remove a rubrica e restaura o seed (500), terminando no Perfil.
+  const topo = grupo.locator('.plan-grupo-topo')
+  if ((await topo.getAttribute('aria-expanded')) !== 'true') await topo.click()
+  await grupo.locator('.btn-remover').first().click()
+  await expect(grupo.locator('.plan-linha')).toHaveCount(0)
+  await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
+  await preencher('Contas da casa', '500')
+  await win.waitForTimeout(1_500)
+})
+
 test('evolução: gráfico das competências arquivadas com zoom por campo', async () => {
   await win.locator('.btn-add', { hasText: 'Detalhar orçamento' }).click()
 

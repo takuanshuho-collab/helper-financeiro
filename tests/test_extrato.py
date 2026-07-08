@@ -8,8 +8,10 @@ valor '1.234,56' e '1234.56', data 'DD/MM/AAAA' e 'AAAA-MM-DD', com e sem
 cabeçalho. Linha ilegível vira aviso, nunca exceção.
 """
 from core.extrato import (
+    _parse_linha_livre,
     decodificar_csv,
     ler_extrato_csv,
+    ler_extrato_ocr,
     normalizar_estabelecimento,
 )
 
@@ -135,3 +137,83 @@ def test_decodificar_utf8_bom_e_cp1252():
         "Padaria São João"
     assert decodificar_csv("Padaria São João".encode("cp1252")) == \
         "Padaria São João"
+
+
+# ------------------------------------------------- texto livre de OCR (T-1405)
+def test_parse_linha_livre_valor_no_fim_com_data():
+    data, descricao, valor = _parse_linha_livre("07/06/2026 UBER *TRIP 8291 R$ 29,90")
+    assert data == "2026-06-07"
+    assert descricao == "UBER *TRIP 8291"
+    assert valor == 29.90
+
+
+def test_parse_linha_livre_marcador_de_debito_e_credito():
+    # '-' à frente, ou 'D'/'C' logo após o valor (extratos BR).
+    assert _parse_linha_livre("MERCADO BOM PRECO -45,10")[2] == -45.10
+    assert _parse_linha_livre("PIX ENVIADO PADARIA 1.234,56 D")[2] == -1234.56
+    _, desc, valor = _parse_linha_livre("TED RECEBIDA 2.000,00 C")
+    assert valor == 2000.00 and desc == "TED RECEBIDA"
+
+
+def test_parse_linha_livre_ultimo_numero_e_o_valor():
+    # Parcelamento: o valor da linha é o ÚLTIMO monetário, não o "12,00".
+    _, _, valor = _parse_linha_livre("LOJA XYZ 3x de 12,00 total 36,00")
+    assert valor == 36.00
+
+
+def test_parse_linha_livre_sem_valor_nao_e_lancamento():
+    assert _parse_linha_livre("COMPROVANTE DE PAGAMENTO") is None
+    assert _parse_linha_livre("Agencia 0001 Conta 12345-6") is None
+
+
+def test_parse_linha_livre_ignora_linha_de_saldo():
+    # Saldo é balanço da conta, não transação — mesmo tendo valor.
+    assert _parse_linha_livre("Saldo final: 3.244,50") is None
+    assert _parse_linha_livre("SALDO ANTERIOR 1.000,00") is None
+
+
+# Comprovante escaneado, texto já reconstruído por layout pelo motor de OCR:
+# cabeçalho/rodapé sem valor + linhas de lançamento (sinais mistos = conta).
+OCR_EXTRATO = """\
+BANCO EXEMPLO S.A.
+Extrato de conta corrente
+05/06/2026 Conta de luz Enel -180,50
+07/06/2026 UBER *TRIP 8291 -29,90
+15/06/2026 UBER *TRIP 4415 -45,10
+30/06/2026 Salario ACME LTDA 3.500,00
+Saldo final: 3.244,50
+"""
+
+
+def test_ler_extrato_ocr_reconhece_lancamentos_e_agrupa():
+    extrato = ler_extrato_ocr(OCR_EXTRATO)
+    # 4 lançamentos (as 2 linhas Uber agrupam), crédito e débito por sinal.
+    assert len(extrato.lancamentos) == 4
+    nomes = {g.nome: g for g in extrato.grupos}
+    assert nomes["Uber Trip"].quantidade == 2
+    assert nomes["Uber Trip"].total == 75.00
+    assert nomes["Uber Trip"].natureza == "debito"
+    salario = next(g for g in extrato.grupos if g.natureza == "credito")
+    assert salario.total == 3500.00
+    assert extrato.competencia_sugerida == "2026-06"
+
+
+def test_ler_extrato_ocr_sem_valores_avisa_sem_excecao():
+    extrato = ler_extrato_ocr("COMPROVANTE\nAgencia 0001\nObrigado pela preferencia")
+    assert extrato.lancamentos == ()
+    assert extrato.grupos == ()
+    assert len(extrato.avisos) == 1
+
+
+def test_ler_extrato_ocr_comprovante_de_um_pagamento():
+    # Comprovante simples: sem sinais ⇒ tudo débito (é uma despesa).
+    extrato = ler_extrato_ocr(
+        "COMPROVANTE DE PAGAMENTO\n"
+        "Beneficiario ENEL DISTRIBUICAO\n"
+        "Valor R$ 180,50\n"
+        "Data 05/06/2026\n"
+    )
+    assert len(extrato.lancamentos) == 1
+    (lanc,) = extrato.lancamentos
+    assert lanc.valor == 180.50
+    assert lanc.natureza == "debito"

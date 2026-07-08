@@ -88,6 +88,10 @@ export const hf = {
   /** Importação de CSV (T-1303): parse + rótulos PARA REVISÃO, nada persiste. */
   importarCsv: (csvBase64: string, nome: string): Promise<CsvImportadoOut> =>
     chamar('/importar/csv', { csv_base64: csvBase64, nome }),
+  /** Importação de comprovante/extrato ESCANEADO via OCR local (T-1405):
+   * mesma revisão do CSV, só a entrada muda (imagem/PDF). */
+  importarOcr: (arquivoBase64: string, nome: string): Promise<CsvImportadoOut> =>
+    chamar('/importar/ocr', { arquivo_base64: arquivoBase64, nome }),
   /** Grava os itens revisados; `mes` null = orçamento vivo. */
   importarAplicar: (
     mes: string | null,

@@ -29,6 +29,18 @@ type Fase =
   | { tipo: 'feito'; quantos: number; mes: string | null }
   | { tipo: 'erro'; msg: string }
 
+// Comprovante/extrato escaneado: imagem ou PDF passam pelo OCR local no
+// sidecar (ADR-0015); CSV segue o parse determinístico do v2.6.
+const EXTS_ESCANEADO = [
+  '.pdf', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff',
+]
+
+function tipoArquivo(nome: string): 'csv' | 'escaneado' | null {
+  const n = nome.toLowerCase()
+  if (n.endsWith('.csv')) return 'csv'
+  return EXTS_ESCANEADO.some((ext) => n.endsWith(ext)) ? 'escaneado' : null
+}
+
 /** Competência corrente 'AAAA-MM' (apenas texto de data — nenhum cálculo). */
 function mesAtual(): string {
   return new Date().toISOString().slice(0, 7)
@@ -54,13 +66,23 @@ export default function ImportarCsv({
 
   async function processar(file: File | null | undefined) {
     if (!file) return
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setFase({ tipo: 'erro', msg: 'Selecione um arquivo CSV.' })
+    const tipo = tipoArquivo(file.name)
+    if (!tipo) {
+      setFase({
+        tipo: 'erro',
+        msg: 'Selecione um CSV, ou uma foto/PDF do comprovante ou extrato.',
+      })
       return
     }
     setFase({ tipo: 'processando', nome: file.name })
     try {
-      const resultado = await hf.importarCsv(await arquivoParaBase64(file), file.name)
+      const b64 = await arquivoParaBase64(file)
+      // Imagem/PDF escaneado → OCR local; CSV → parse determinístico. Ambos
+      // devolvem o MESMO formato de revisão (ADR-0015 §E).
+      const resultado =
+        tipo === 'csv'
+          ? await hf.importarCsv(b64, file.name)
+          : await hf.importarOcr(b64, file.name)
       if (resultado.modo === 'vazio') {
         setFase({
           tipo: 'erro',
@@ -81,7 +103,7 @@ export default function ImportarCsv({
     } catch (e) {
       setFase({
         tipo: 'erro',
-        msg: e instanceof Error ? e.message : 'Falha ao ler o CSV.',
+        msg: e instanceof Error ? e.message : 'Falha ao ler o arquivo.',
       })
     }
   }
@@ -119,28 +141,30 @@ export default function ImportarCsv({
       <div className="secao-topo">
         <span className="secao-titulo">
           <span className="secao-ponto" style={{ background: 'var(--accent)' }} />
-          Importar extrato (CSV)
+          Importar extrato (CSV ou imagem)
         </span>
       </div>
 
       {fase.tipo === 'ocioso' && (
         <>
           <div className="plan-dica">
-            Exporte o extrato ou a fatura do seu banco em CSV — os lançamentos
-            viram rubricas depois da sua revisão. Tudo roda localmente.
+            Exporte o extrato/fatura em CSV, ou envie uma foto/PDF do
+            comprovante ou extrato — o texto de documentos escaneados é lido por{' '}
+            <strong>OCR na sua máquina</strong>. Os lançamentos viram rubricas
+            depois da sua revisão. Tudo roda localmente.
           </div>
           <div className="imp-acoes">
             <button
               className="btn-add"
               onClick={() => inputRef.current?.click()}
             >
-              Escolher arquivo CSV
+              Escolher arquivo (CSV ou imagem)
             </button>
           </div>
           <input
             ref={inputRef}
             type="file"
-            accept="text/csv,.csv"
+            accept="text/csv,.csv,application/pdf,.pdf,image/*,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff"
             hidden
             onChange={(ev) => {
               void processar(ev.target.files?.[0])
@@ -164,7 +188,7 @@ export default function ImportarCsv({
               className="btn-secundario"
               onClick={() => setFase({ tipo: 'ocioso' })}
             >
-              Escolher outro CSV
+              Escolher outro arquivo
             </button>
           </div>
         </>
@@ -183,7 +207,7 @@ export default function ImportarCsv({
               className="btn-secundario"
               onClick={() => setFase({ tipo: 'ocioso' })}
             >
-              Importar outro CSV
+              Importar outro arquivo
             </button>
           </div>
         </>
@@ -255,6 +279,13 @@ function Revisao({
           </>
         )}
       </div>
+
+      {resultado.ocr && (
+        <div className="extr-ocr">
+          📷 Documento escaneado lido por <strong>OCR local</strong> — o texto
+          pode conter pequenos erros de leitura; confira valores e campos.
+        </div>
+      )}
 
       <div className="card-titulo">Lançamentos de “{nome}”</div>
 

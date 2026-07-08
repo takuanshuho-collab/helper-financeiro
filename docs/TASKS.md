@@ -232,7 +232,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-1405 | Comprovante escaneado → `Lancamento` (reconstrução de linhas por layout) reusando `agent/classificacao.py` e `/importar/*` do v2.6 + GUI + E2E | REQ-F-026 | T-1403 | ⬜ |
+| T-1405 | Comprovante escaneado → `Lancamento` (reconstrução de linhas por layout) reusando `agent/classificacao.py` e `/importar/*` do v2.6 + GUI + E2E | REQ-F-026 | T-1403 | ✅ |
 | T-1406 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.7.0 e docs sincronizados | Processo | todos | ⬜ |
 
 ---
@@ -243,30 +243,32 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.7 (ADR-0015) — M14 FECHADO (T-1401..T-1404 ✅).** OCR de documento
-escaneado/imagem, da fundação ao pacote. **T-1401** deu a fundação determinística
-(`core/documento.py`); **T-1402** o motor `agent/ocr.py` (RapidOCR + PP-OCRv6
-medium, 100% local); **T-1403** a trave de citação tolerante ao ruído de glifo +
-OCR ligado no `POST /contrato/extrair` + aba Contrato aceitando imagem.
-**T-1404 fechou o empacotamento:** `SidecarHF.spec` embarca `rapidocr`,
-`onnxruntime`, `cv2` e `shapely` via `collect_all`; como o wheel do rapidocr só
-traz os modelos tiny/small, os **medium** (det+rec, ~132 MB) são materializados
-na venv por **`scripts/preparar_ocr.py`** antes do freeze (rede só no build) e o
-spec **TRAVA** o build se algum `.onnx` obrigatório faltar (fonte única em
-`agent.ocr.MODELOS_OCR_NECESSARIOS` / `diretorio_modelos_ocr`). Sem download em
-runtime (REQ-NF-006). O smoke `e2e/empacotado.spec.ts` ganhou um 2º cenário que
-**OCRiza de verdade** a partir do binário congelado (fixture
-`e2e/fixtures/contrato-escaneado.png`, offline): sobe o pacote, envia a imagem
-na aba Contrato e afirma o banner "📷 OCR local" + campos extraídos. O rec
-PP-OCRv6 traz o dicionário **embutido no ONNX** (sem `.txt` avulso).
+**Ciclo v2.7 (ADR-0015) — M14 e M15/T-1405 ✅; falta só o fechamento (T-1406).**
+OCR local de documento escaneado, do Contrato à importação. **T-1401** deu a
+fundação (`core/documento.py`); **T-1402** o motor `agent/ocr.py`; **T-1403** a
+trave de citação tolerante a glifo + Contrato aceitando imagem; **T-1404** o
+empacotamento (modelos ONNX embarcados no sidecar congelado + smoke OCRizando de
+verdade). **T-1405 ligou o OCR na importação do v2.6:** o núcleo ganhou
+`core.extrato.ler_extrato_ocr` (+ `_parse_linha_livre`) — cada linha do texto
+OCRizado com valor monetário vira `Lancamento` (último número = valor; sinal por
+`-`/`D`/`C`; linha de **saldo** nunca é lançamento; H1: número sempre do core), e
+daí o pipeline é IDÊNTICO ao do CSV (`_agrupar`/`_naturezas`/competência). O
+sidecar ganhou `POST /importar/ocr` (irmão de `/importar/csv`, mora junto da
+maquinaria de OCR que compartilha com `/contrato/extrair`; OCR local → mesmo
+`_resposta_importacao` extraído p/ ser fonte única; degrada P8, nunca 500) e o
+`/importar/aplicar` do v2.6 é reusado sem tocar. A tela "Importar extrato (CSV ou
+imagem)" aceita foto/PDF além de CSV (roteia p/ `importarOcr`), com banner de OCR
+na revisão. Gates: pytest verde (parser + `test_importar_ocr_*`), gate-front
+verde, **E2E 14 passed** (novo cenário "importação por OCR", fixture
+`e2e/fixtures/comprovante-escaneado.png`).
 
-**Próxima:** T-1405 (M15) — comprovante escaneado → `Lancamento` (reconstrução de
-linhas por layout) reusando `agent/classificacao.py` e `/importar/*` do v2.6 +
-GUI + E2E. Depois T-1406 (fechamento: gates, binários, ata `FREEZE.md` v2.7.0).
-Watch-items: (1) build do pacote agora depende de `preparar_ocr.py` ter rodado
-(instalador ~+132 MB, esperado pela ADR); (2) flake do E2E "planilha" pós-build
-(2/8, timing, nunca valor errado). Mudança em artefato **congelado no v2.6.0**
-exige nova ADR + versão + nova ata (o v2.7 já está autorizado pela ADR-0015).
+**Próxima:** T-1406 (fechamento do ciclo v2.7) — gates finais, rebuild dos
+binários (sidecar + instalador NSIS 2.7.0, agora com os modelos OCR ~+132 MB),
+smoke do pacote (`HF_E2E_PACOTE=1`) e ata **`FREEZE.md` v2.7.0** com SHA-256.
+Watch-items: (1) o build do pacote depende de `scripts/preparar_ocr.py` ter
+rodado antes do PyInstaller; (2) flake do E2E "planilha" pós-build (2/8, timing,
+nunca valor errado). Mudança em artefato **congelado no v2.6.0** exige nova ADR +
+versão + nova ata (o v2.7 já está autorizado pela ADR-0015).
 
 ### Histórico do ciclo v2.6 (fechado)
 

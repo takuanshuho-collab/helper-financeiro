@@ -1033,6 +1033,91 @@ def test_importar_csv_base64_invalido_422(repo_tmp):
     assert fake.chamadas == 0
 
 
+# --- Importação de comprovante ESCANEADO via OCR (T-1405, REQ-F-026) ----------
+
+# Bytes ignorados pelo motor falso; o nome é imagem ⇒ segue o caminho de OCR.
+IMG_B64 = base64.b64encode(b"imagem-escaneada").decode()
+
+# Texto que o OCR "leria" de um extrato escaneado: mesmas 3 rubricas do teste de
+# CSV (luz, Uber ×2, salário) + cabeçalho e linha de SALDO que NÃO viram
+# lançamento — prova que o pipeline pós-parse é o mesmo do CSV.
+OCR_EXTRATO_TXT = (
+    "BANCO EXEMPLO S.A.\n"
+    "05/06/2026 Conta de luz Enel -180,50\n"
+    "07/06/2026 UBER *TRIP 8291 -92,30\n"
+    "15/06/2026 UBER *TRIP 4415 -45,10\n"
+    "30/06/2026 Salario Acme Ltda 3.500,00\n"
+    "Saldo final: 3.244,50\n"
+)
+
+
+def _importar_ocr(fake, motor, arquivo_b64=IMG_B64, nome="extrato.jpg"):
+    # Deletes pontuais (não .clear()): o fixture repo_tmp instala o override do
+    # `repositorio` e faz `del` dele no teardown — um clear() aqui o derrubaria.
+    cliente.app.dependency_overrides[contexto_classificacao] = (
+        lambda: (CFG_TESTE, fake))
+    cliente.app.dependency_overrides[contexto_ocr] = lambda: motor
+    try:
+        return cliente.post("/importar/ocr",
+                            json={"arquivo_base64": arquivo_b64, "nome": nome},
+                            headers=CABECALHO)
+    finally:
+        del cliente.app.dependency_overrides[contexto_classificacao]
+        del cliente.app.dependency_overrides[contexto_ocr]
+
+
+def test_importar_ocr_classifica_para_revisao(repo_tmp):
+    fake = FakeClassificador(ClassificacaoExtrato(itens=[
+        ItemClassificado(indice=0, categoria="renda",
+                         campo_pai="salario_liquido"),
+        ItemClassificado(indice=1, categoria="fixas", campo_pai="contas_casa"),
+        ItemClassificado(indice=2, categoria="fixas", campo_pai="transporte"),
+    ]))
+    motor = MotorFalso([_linha(OCR_EXTRATO_TXT, topo=10, esquerda=10)])
+    dados = _importar_ocr(fake, motor).json()
+    assert dados["ocr"] is True
+    assert dados["modo"] == "ia"
+    assert dados["competencia_sugerida"] == "2026-06"
+    assert motor.chamadas == 1
+    # Mesmos grupos/valores do CSV (o parse é o mesmo core); a LLM só rotulou.
+    salario, luz, uber = dados["grupos"]
+    assert (salario["nome"], salario["total"], salario["natureza"]) == (
+        "Salario Acme Ltda", 3500.0, "credito")
+    assert (uber["nome"], uber["total"], uber["quantidade"]) == (
+        "Uber Trip", 137.4, 2)
+    assert uber["campo_pai"] == "transporte" and luz["campo_pai"] == "contas_casa"
+    # Nada persistido — a revisão humana (e o /importar/aplicar) vêm depois.
+    assert cliente.get("/rubricas", headers=CABECALHO).json()["rubricas"] == []
+
+
+def test_importar_ocr_sem_motor_degrada(monkeypatch, repo_tmp):
+    """Sem motor de OCR ⇒ degrada (P8): vazio, ocr=False, motivo — nunca 500."""
+    # contexto_ocr default = None ⇒ cai no singleton; patchamos p/ indisponível
+    # (mesmo padrão do teste de contrato escaneado sem OCR).
+    monkeypatch.setattr("sidecar.app._motor_ocr_singleton", lambda: None)
+    fake = FakeClassificador()
+    cliente.app.dependency_overrides[contexto_classificacao] = (
+        lambda: (CFG_TESTE, fake))
+    try:
+        resp = cliente.post("/importar/ocr",
+                            json={"arquivo_base64": IMG_B64, "nome": "extrato.jpg"},
+                            headers=CABECALHO)
+    finally:
+        del cliente.app.dependency_overrides[contexto_classificacao]
+    dados = resp.json()
+    assert dados["modo"] == "vazio"
+    assert dados["ocr"] is False
+    assert dados["motivos"] == ["OCR_INDISPONIVEL"]
+    assert dados["grupos"] == []
+    assert fake.chamadas == 0  # nem chega a classificar
+
+
+def test_importar_ocr_base64_invalido_422(repo_tmp):
+    fake = FakeClassificador()
+    motor = MotorFalso([_linha("x", topo=1, esquerda=1)])
+    assert _importar_ocr(fake, motor, arquivo_b64="###").status_code == 422
+
+
 def test_importar_aplicar_no_vivo_faz_roll_up(repo_tmp):
     resp = cliente.post("/importar/aplicar", json={"mes": None, "itens": [
         {"categoria": "fixas", "campo_pai": "transporte",

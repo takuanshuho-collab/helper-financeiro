@@ -33,7 +33,7 @@ from core.estrategias import (
     gerar_recomendacoes,
     oportunidades_portabilidade,
 )
-from core.extrato import decodificar_csv, ler_extrato_csv
+from core.extrato import Extrato, decodificar_csv, ler_extrato_csv, ler_extrato_ocr
 from core.extrator_pdf import extrair_texto_pdf_bytes, parsear_campos
 from core.models import (
     ComposicaoRenda,
@@ -72,6 +72,7 @@ from .schemas import (
     ExportarPlanilhaIn,
     ExportarRelatorioIn,
     ImportarCsvIn,
+    ImportarOcrIn,
     PerfilIn,
     RubricaEditIn,
     RubricaIn,
@@ -368,28 +369,17 @@ def contexto_classificacao() -> tuple[ConfigAgente | None, Classificador | None]
     return None, None
 
 
-@app.post("/importar/csv", dependencies=[Depends(exigir_token)])
-def importar_csv(
-    entrada: ImportarCsvIn,
-    ctx: tuple[ConfigAgente | None, Classificador | None] = Depends(
-        contexto_classificacao),
+def _resposta_importacao(
+    extrato: Extrato,
+    cfg: ConfigAgente | None,
+    classificador: Classificador | None,
 ) -> dict:
-    """Lê o extrato CSV e devolve os grupos classificados PARA REVISÃO.
+    """Grupos do `Extrato` classificados pela LLM local → resposta de revisão.
 
-    Nada é persistido aqui: o usuário confere (e corrige) no painel e só o
-    `/importar/aplicar` grava. O parse é 100% determinístico (`core/extrato`);
-    a LLM local SÓ rotula grupos — recebe nomes normalizados, sem valores e
-    sem datas (H1/H2, ADR-0014). Sem LLM, `modo` degrada para "manual" com os
-    motivos (P8) e todos os grupos voltam sem rótulo.
+    Fonte única do contrato de importação (CSV e OCR): a LLM SÓ rotula (recebe
+    nome normalizado + natureza, sem valores/datas — H1/H2); sem LLM degrada
+    para "manual" (P8). Nada é persistido aqui — o `/importar/aplicar` grava.
     """
-    cfg, classificador = ctx
-    try:
-        dados = base64.b64decode(entrada.csv_base64, validate=True)
-    except (binascii.Error, ValueError) as e:
-        raise HTTPException(status_code=422,
-                            detail="CSV inválido (base64).") from e
-
-    extrato = ler_extrato_csv(decodificar_csv(dados))
     pares = [(g.nome, g.natureza) for g in extrato.grupos]
     resultado = classificar_grupos(pares, cfg=cfg, classificador=classificador)
 
@@ -413,6 +403,32 @@ def importar_csv(
             "avisos": list(extrato.avisos),
             "descartes": resultado.descartes,
             "motivos": resultado.motivos, "llm": _diag_llm(cfg)}
+
+
+@app.post("/importar/csv", dependencies=[Depends(exigir_token)])
+def importar_csv(
+    entrada: ImportarCsvIn,
+    ctx: tuple[ConfigAgente | None, Classificador | None] = Depends(
+        contexto_classificacao),
+) -> dict:
+    """Lê o extrato CSV e devolve os grupos classificados PARA REVISÃO.
+
+    Nada é persistido aqui: o usuário confere (e corrige) no painel e só o
+    `/importar/aplicar` grava. O parse é 100% determinístico (`core/extrato`);
+    a LLM local SÓ rotula grupos — recebe nomes normalizados, sem valores e
+    sem datas (H1/H2, ADR-0014). Sem LLM, `modo` degrada para "manual" com os
+    motivos (P8) e todos os grupos voltam sem rótulo. O irmão escaneado é o
+    `/importar/ocr` (mora junto da maquinaria de OCR).
+    """
+    cfg, classificador = ctx
+    try:
+        dados = base64.b64decode(entrada.csv_base64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(status_code=422,
+                            detail="CSV inválido (base64).") from e
+
+    extrato = ler_extrato_csv(decodificar_csv(dados))
+    return _resposta_importacao(extrato, cfg, classificador)
 
 
 @app.post("/importar/aplicar", dependencies=[Depends(exigir_token)])
@@ -669,6 +685,48 @@ def _motor_ocr_singleton() -> Motor | None:
             log.warning("Motor de OCR indisponível: %s", e)
             _motor_ocr = None
     return _motor_ocr
+
+
+@app.post("/importar/ocr", dependencies=[Depends(exigir_token)])
+def importar_ocr(
+    entrada: ImportarOcrIn,
+    ctx: tuple[ConfigAgente | None, Classificador | None] = Depends(
+        contexto_classificacao),
+    motor_ocr: Annotated[Motor | None, Depends(contexto_ocr)] = None,
+) -> dict:
+    """Comprovante/extrato ESCANEADO → grupos classificados PARA REVISÃO (REQ-F-026).
+
+    Fica aqui, junto da maquinaria de OCR que compartilha com `/contrato/extrair`
+    (o singleton preguiçoso `contexto_ocr`); o irmão determinístico é o
+    `/importar/csv`. OCRiza LOCALMENTE (H2/H7), reconstrói os lançamentos pelo
+    mesmo `core/extrato` (`ler_extrato_ocr`) e reusa a classificação e o
+    `/importar/aplicar` do v2.6 — só a ENTRADA muda (ADR-0015 §E). Sem motor de
+    OCR, degrada (P8): `modo` 'vazio' com o motivo. Nunca 500.
+    """
+    cfg, classificador = ctx
+    try:
+        dados = base64.b64decode(entrada.arquivo_base64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(status_code=422,
+                            detail="Arquivo inválido (base64).") from e
+
+    def _degradado(motivo: str) -> dict:
+        return {"modo": "vazio", "grupos": [], "competencia_sugerida": None,
+                "avisos": [AVISO_OCR_INDISPONIVEL], "descartes": [],
+                "motivos": [motivo], "llm": _diag_llm(cfg), "ocr": False}
+
+    motor = motor_ocr if motor_ocr is not None else _motor_ocr_singleton()
+    if motor is None:  # sem motor de OCR ⇒ P8
+        return _degradado("OCR_INDISPONIVEL")
+    try:
+        texto = ocr_documento(dados, entrada.nome, motor=motor).texto
+    except Exception as e:  # noqa: BLE001 — documento ilegível ⇒ P8, nunca 500
+        log.warning("Falha no OCR de %r: %s", entrada.nome, e)
+        return _degradado(f"OCR_FALHOU:{type(e).__name__}")
+
+    resposta = _resposta_importacao(ler_extrato_ocr(texto), cfg, classificador)
+    resposta["ocr"] = True
+    return resposta
 
 
 def _campo(valor: object) -> dict:

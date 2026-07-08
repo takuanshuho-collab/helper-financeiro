@@ -107,6 +107,18 @@ class ImportarCsvIn(BaseModel):
     nome: str = ""
 
 
+class ImportarOcrIn(BaseModel):
+    """Comprovante/extrato ESCANEADO (imagem ou PDF, base64) para importação
+    classificada via OCR local (REQ-F-026 / ADR-0015).
+
+    Base64 do arquivo cru; o OCR roda no sidecar (H2/H7) e o texto vira
+    lançamentos pelo mesmo `core/extrato`. Nada é persistido até revisar.
+    """
+
+    arquivo_base64: str
+    nome: str = ""
+
+
 class ItemImportacaoIn(BaseModel):
     """Um grupo revisado pelo usuário, pronto para virar rubrica."""
 

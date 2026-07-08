@@ -233,6 +233,9 @@ export interface CsvImportadoOut {
   descartes: string[]
   motivos: string[]
   llm: DiagLlm
+  /** true quando os lançamentos vieram de um documento escaneado via OCR
+   * local (REQ-F-026 / ADR-0015). Ausente/false na importação por CSV. */
+  ocr?: boolean
 }
 
 export interface ItemImportacaoIn {
