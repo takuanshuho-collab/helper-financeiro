@@ -9,6 +9,9 @@
 # Electron o lê (o spawn usa windowsHide, então nenhuma janela aparece).
 #
 # langgraph/llama-index congelam sem collects extras (validado no T-257/T-401).
+import os
+import sys
+
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 datas = []
@@ -24,6 +27,33 @@ for pacote in ('pdfplumber', 'pdfminer'):
     datas += d
     binaries += b
     hiddenimports += h
+
+# OCR local (ADR-0015, T-1404): os modelos .onnx são *data files* (rapidocr os
+# resolve em <pacote>/models) e o onnxruntime + cv2 + shapely trazem binários
+# nativos que o grafo de imports não pega sozinho. `collect_all` embarca dados,
+# DLLs e submódulos (o engine onnxruntime é importado dinamicamente).
+for pacote in ('rapidocr', 'onnxruntime', 'cv2', 'shapely'):
+    d, b, h = collect_all(pacote)
+    datas += d
+    binaries += b
+    hiddenimports += h
+
+# Trave de empacotamento (REQ-NF-006): sem os modelos medium embarcados o OCR
+# baixaria os pesos no computador do usuário. Falha o build CEDO, com o passo de
+# correção, se algum .onnx obrigatório não estiver na venv (fonte única em
+# agent.ocr). Rode `uv run python scripts/preparar_ocr.py` antes do PyInstaller.
+sys.path.insert(0, os.path.abspath('.'))
+from agent.ocr import MODELOS_OCR_NECESSARIOS, diretorio_modelos_ocr
+
+_dir_modelos = diretorio_modelos_ocr()
+_faltando = [n for n in MODELOS_OCR_NECESSARIOS if not (_dir_modelos / n).is_file()]
+if _faltando:
+    raise SystemExit(
+        "Modelos de OCR ausentes para o freeze: "
+        + ", ".join(_faltando)
+        + f"\n  (esperados em {_dir_modelos})"
+        + "\n  Rode antes: uv run python scripts/preparar_ocr.py"
+    )
 
 # uvicorn escolhe loop/protocolo por import dinâmico (uvicorn.loops.auto etc.).
 hiddenimports += collect_submodules('uvicorn')

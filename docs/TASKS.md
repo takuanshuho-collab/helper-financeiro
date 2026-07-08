@@ -223,7 +223,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1401 | ADR-0015 + bump 2.7.0 + `core/documento.py`: detector determinístico "precisa de OCR?" (densidade de texto p/ PDF, extensão p/ imagem) + pré-marcação por tipo (`<valor>/<data>/<percentual>`) + testes | REQ-F-024/025 | — | ✅ |
 | T-1402 | `agent/ocr.py`: RapidOCR + PP-OCRv6 medium local-only, rasteriza PDF escaneado via PyMuPDF, saída texto+layout ordenado; degrada com motivo se o motor faltar (P8); deps no `pyproject`/`PLAN §Stack`; testes com fixtures de imagem | REQ-F-024, REQ-NF-006 | T-1401 | ✅ |
 | T-1403 | Trave de citação normalizada (glifos de OCR nas duas vias) em `agent/extracao.py` + pré-marcação por tipo no prompt + integração OCR no `/contrato/extrair` + aba Contrato aceita imagem/scan com indicador de OCR + E2E | REQ-F-025 | T-1402 | ✅ |
-| T-1404 | Empacotamento: modelos ONNX + onnxruntime no `SidecarHF.spec`, smoke do pacote OCRizando de verdade | Processo | T-1402 | ⬜ |
+| T-1404 | Empacotamento: modelos ONNX + onnxruntime no `SidecarHF.spec`, smoke do pacote OCRizando de verdade | Processo | T-1402 | ✅ |
 
 ## Milestone M15 — Comprovante escaneado → importação (v2.7, ADR-0015)
 
@@ -243,28 +243,30 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.7 (ADR-0015, M14+M15) — T-1401, T-1402 e T-1403 ✅.** OCR de documento
-escaneado/imagem. **T-1401** deu a fundação determinística (`core/documento.py`);
-**T-1402** o motor `agent/ocr.py` (RapidOCR + PP-OCRv6 medium, 100% local).
-**T-1403 fechou o M14 no lado do usuário:** trave de citação **tolerante ao ruído
-de glifo** do OCR (`0↔O`, `1↔l↔I`, `5↔S`, `8↔B`) só dentro de tokens numéricos e
-nas duas vias, sem afrouxar H1; pré-marcação por tipo aplicada **só no prompt**
-(`montar_prompt_extracao`), com o `_normalizar` removendo a marcação para o
-quote-check casar contra o texto CRU; OCR ligado no `POST /contrato/extrair`
-(imagem por extensão / PDF `<40` chars = escaneado ⇒ OCR local, singleton
-preguiçoso, degrada P8 e nunca dá 500); a aba **Contrato aceita PDF e imagem**
-(JPG/PNG) com indicador de OCR. Gates: **293 passed** (+4), gate-front verde,
-**E2E 13 passed** (novo cenário "contrato: aceita imagem").
+**Ciclo v2.7 (ADR-0015) — M14 FECHADO (T-1401..T-1404 ✅).** OCR de documento
+escaneado/imagem, da fundação ao pacote. **T-1401** deu a fundação determinística
+(`core/documento.py`); **T-1402** o motor `agent/ocr.py` (RapidOCR + PP-OCRv6
+medium, 100% local); **T-1403** a trave de citação tolerante ao ruído de glifo +
+OCR ligado no `POST /contrato/extrair` + aba Contrato aceitando imagem.
+**T-1404 fechou o empacotamento:** `SidecarHF.spec` embarca `rapidocr`,
+`onnxruntime`, `cv2` e `shapely` via `collect_all`; como o wheel do rapidocr só
+traz os modelos tiny/small, os **medium** (det+rec, ~132 MB) são materializados
+na venv por **`scripts/preparar_ocr.py`** antes do freeze (rede só no build) e o
+spec **TRAVA** o build se algum `.onnx` obrigatório faltar (fonte única em
+`agent.ocr.MODELOS_OCR_NECESSARIOS` / `diretorio_modelos_ocr`). Sem download em
+runtime (REQ-NF-006). O smoke `e2e/empacotado.spec.ts` ganhou um 2º cenário que
+**OCRiza de verdade** a partir do binário congelado (fixture
+`e2e/fixtures/contrato-escaneado.png`, offline): sobe o pacote, envia a imagem
+na aba Contrato e afirma o banner "📷 OCR local" + campos extraídos. O rec
+PP-OCRv6 traz o dicionário **embutido no ONNX** (sem `.txt` avulso).
 
-**Próxima:** T-1404 — empacotamento: `rapidocr`/`onnxruntime` no `SidecarHF.spec`
-(modelos ONNX como *data files* + binários nativos) e **embarcar os `.onnx` sem
-download em runtime** (REQ-NF-006), com o smoke do pacote **OCRizando de verdade**
-(hoje o smoke `empacotado` roda com `HF_E2E_PACOTE=1`). Watch-items: (1) o E2E de
-OCR usa modelos cacheados no `.venv` — numa máquina limpa a 1ª chamada baixaria
-os pesos (some quando o T-1404 embarcar); (2) flake do E2E "planilha" pós-build
-(2/8, timing, nunca valor errado). Depois vem o M15 (T-1405, comprovante
-escaneado → importação). Mudança em artefato **congelado no v2.6.0** exige nova
-ADR + versão + nova ata (o v2.7 já está autorizado pela ADR-0015).
+**Próxima:** T-1405 (M15) — comprovante escaneado → `Lancamento` (reconstrução de
+linhas por layout) reusando `agent/classificacao.py` e `/importar/*` do v2.6 +
+GUI + E2E. Depois T-1406 (fechamento: gates, binários, ata `FREEZE.md` v2.7.0).
+Watch-items: (1) build do pacote agora depende de `preparar_ocr.py` ter rodado
+(instalador ~+132 MB, esperado pela ADR); (2) flake do E2E "planilha" pós-build
+(2/8, timing, nunca valor errado). Mudança em artefato **congelado no v2.6.0**
+exige nova ADR + versão + nova ata (o v2.7 já está autorizado pela ADR-0015).
 
 ### Histórico do ciclo v2.6 (fechado)
 

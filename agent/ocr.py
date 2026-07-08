@@ -17,11 +17,36 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 from core.documento import FonteDocumento, fonte_por_extensao
 
 log = logging.getLogger(__name__)
+
+# Modelos ONNX que a nossa configuração (`_params_medium` + o classificador
+# padrão do rapidocr) exige em runtime. São a fonte única para o passo de build
+# (`scripts/preparar_ocr.py`) e para a trave do `SidecarHF.spec`: o binário
+# congelado precisa trazer estes três arquivos ou o OCR não roda (REQ-NF-006).
+#   det/rec: PP-OCRv6 medium (o que `_params_medium` seleciona; lang latino/pt)
+#   cls:     PP-OCRv4 mobile (orientação de linha; default do rapidocr, não trocado)
+MODELOS_OCR_NECESSARIOS = (
+    "PP-OCRv6_det_medium.onnx",
+    "PP-OCRv6_rec_medium.onnx",
+    "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+)
+
+
+def diretorio_modelos_ocr() -> Path:
+    """Diretório onde o `rapidocr` guarda/resolve os `.onnx` (dentro do pacote).
+
+    É o `model_root_dir` padrão do rapidocr (`<pacote>/models`); o
+    `OrtInferSession` monta `model_root_dir / <nome>.onnx` e só baixa se faltar.
+    """
+    import rapidocr
+
+    return Path(rapidocr.__file__).resolve().parent / "models"
+
 
 # Rasterização: DPI que dá sinal ao OCR sem estourar memória em documento longo.
 DPI_OCR = 200

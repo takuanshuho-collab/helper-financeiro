@@ -169,9 +169,13 @@ financeiro dentro de prompts.
 - Peso de langgraph/llama-index no freeze → spike T-257 mediu: ~84 MB
   `--onefile`, sem collects extras. Aceito.
 - pdfplumber no PyInstaller → `--collect-all` (ver README).
-- rapidocr/onnxruntime no PyInstaller (ADR-0015) → os modelos ONNX são *data
-  files* e o onnxruntime traz binários nativos; o `SidecarHF.spec` precisa de
-  `--collect-data`/`--collect-all` e os `.onnx` embarcados e apontados
-  localmente (sem download em execução, REQ-NF-006) — validado no smoke do
-  pacote (T-1404). Config validada em runtime: PP-OCRv6 medium, `lang_type='pt'`
-  (é um modelo multilíngue único; `lang_type` é string, não Enum).
+- rapidocr/onnxruntime no PyInstaller (ADR-0015, T-1404) → os modelos ONNX são
+  *data files* e o onnxruntime/cv2/shapely trazem binários nativos; o
+  `SidecarHF.spec` os embarca com `collect_all` (`rapidocr`, `onnxruntime`,
+  `cv2`, `shapely`). O wheel do rapidocr só traz os modelos tiny/small, então
+  os **medium** (det+rec, ~132 MB) são materializados na venv por
+  `scripts/preparar_ocr.py` ANTES do freeze (rede só no build); o spec TRAVA o
+  build se algum `.onnx` obrigatório faltar (`agent.ocr.MODELOS_OCR_NECESSARIOS`).
+  Sem download em execução (REQ-NF-006) — validado no smoke do pacote que OCRiza
+  de verdade (`e2e/empacotado.spec.ts`). Config validada em runtime: PP-OCRv6
+  medium, `lang_type='pt'` (modelo multilíngue único; `lang_type` é string).
