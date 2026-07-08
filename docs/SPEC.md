@@ -119,6 +119,23 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   export `.xlsx` DEVE incluir a aba **"Evolução mensal"** (campos ×
   competências, totais por seção como fórmula `=SUM` e gráfico nativo),
   sujeita ao Gate B (zero erro de fórmula).
+- **REQ-F-024 (v2.7, ADR-0015)** — QUANDO um documento for um **PDF escaneado
+  ou uma imagem** (JPG/PNG), o sistema DEVE detectá-lo de forma
+  **determinística** (`core.documento`: densidade de texto por página para
+  PDF, extensão para imagem) e passá-lo pelo **OCR local** (RapidOCR +
+  PP-OCRv6, na máquina) antes da extração; sem o motor de OCR, DEVE degradar
+  para preenchimento manual (P8). PDF com camada de texto NÃO passa por OCR.
+- **REQ-F-025 (v2.7, ADR-0015)** — Antes da extração pela LLM, o `core` DEVE
+  envolver os candidatos por **tipo** (`<valor>`, `<data>`, `<percentual>`) —
+  nunca semanticamente; e a trave de citação literal DEVE tolerar o **ruído de
+  glifo do OCR** (`0`↔`O`, `1`↔`l`↔`I`, `5`↔`S`, `8`↔`B`) por normalização
+  determinística, **sem** afrouxar H1 (número sem citação verificável continua
+  descartado).
+- **REQ-F-026 (v2.7, ADR-0015)** — O usuário PODE **importar um comprovante/
+  extrato escaneado** (imagem ou PDF sem texto): após o OCR local, os
+  lançamentos DEVEM ser reconstruídos por layout e seguir a **mesma**
+  classificação, revisão humana e regra de acréscimo da importação de CSV
+  (REQ-F-021).
 
 ## 2. Requisitos do Agente (LLM)
 
@@ -181,6 +198,10 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   **exclusivamente** do sidecar Python (contrato RPC local sobre `core`/`agent`/
   `guardrails`/`outputs`); o front **NÃO DEVE** reimplementar cálculo financeiro
   em TypeScript — fonte única da verdade, extensão do REQ-NF-004.
+- **REQ-NF-006 (v2.7, ADR-0015)** — O OCR DEVE rodar **100% na máquina** do
+  usuário, com os modelos **empacotados** (sem download em execução) e **sem
+  rede**; a imagem/PDF com PII nunca sai do computador (H2/H7). Sem o motor
+  disponível, o sistema degrada (P8), nunca recorre a OCR na nuvem.
 
 ---
 

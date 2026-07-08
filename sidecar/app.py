@@ -75,7 +75,7 @@ from .schemas import (
 )
 from .security import exigir_token
 
-app = FastAPI(title="Helper Financeiro — sidecar", version="2.6.0")
+app = FastAPI(title="Helper Financeiro — sidecar", version="2.7.0")
 
 # Chaves do resumo que carregam objetos `Divida` (precisam de serialização).
 _CHAVES_OBJETO = ("divida_mais_cara", "ranking")

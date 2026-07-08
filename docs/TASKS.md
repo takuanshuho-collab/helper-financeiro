@@ -211,6 +211,30 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1305 | Histórico no `.xlsx`: aba "Evolução mensal" (campos × competências, totais =SUM, gráfico nativo) + Gate B + SPEC/PARIDADE/HARNESS sincronizados | REQ-F-023 | T-1301 | ✅ |
 | T-1306 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.6.0 e docs sincronizados | Processo | todos | ✅ |
 
+## Milestone M14 — OCR de contrato escaneado/imagem (v2.7, ADR-0015)
+
+> Primeira mudança pós-freeze v2.6.0, autorizada pela ADR-0015. Leva o OCR
+> local (RapidOCR + PP-OCRv6 medium, na máquina) até a aba Contrato: detecção
+> determinística da fonte, motor de OCR, pré-marcação por tipo e trave de
+> citação tolerante ao ruído de glifo.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1401 | ADR-0015 + bump 2.7.0 + `core/documento.py`: detector determinístico "precisa de OCR?" (densidade de texto p/ PDF, extensão p/ imagem) + pré-marcação por tipo (`<valor>/<data>/<percentual>`) + testes | REQ-F-024/025 | — | ✅ |
+| T-1402 | `agent/ocr.py`: RapidOCR + PP-OCRv6 medium local-only, rasteriza PDF escaneado via PyMuPDF, saída texto+layout; degrada com motivo se o motor faltar (P8); dep no `pyproject`/`PLAN §Stack`; testes com fixtures de imagem | REQ-F-024, REQ-NF-006 | T-1401 | ⬜ |
+| T-1403 | Trave de citação normalizada (glifos de OCR nas duas vias) em `agent/extracao.py` + integração OCR→pipeline de extração + confirmação humana na aba Contrato + E2E | REQ-F-025 | T-1402 | ⬜ |
+| T-1404 | Empacotamento: modelos ONNX + onnxruntime no `SidecarHF.spec`, smoke do pacote OCRizando de verdade | Processo | T-1402 | ⬜ |
+
+## Milestone M15 — Comprovante escaneado → importação (v2.7, ADR-0015)
+
+> Liga o OCR na importação do v2.6: comprovante/extrato em imagem ou PDF sem
+> texto vira lançamentos e segue a mesma classificação/revisão/acréscimo.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1405 | Comprovante escaneado → `Lancamento` (reconstrução de linhas por layout) reusando `agent/classificacao.py` e `/importar/*` do v2.6 + GUI + E2E | REQ-F-026 | T-1403 | ⬜ |
+| T-1406 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.7.0 e docs sincronizados | Processo | todos | ⬜ |
+
 ---
 
 ## Definição de Pronto (DoD)
@@ -219,22 +243,24 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.6 FECHADO E CONGELADO (`FREEZE.md` v2.6.0, ADR-0014)** — ver a
-narrativa completa do milestone M13 abaixo. **T-1306 ✅ — CICLO v2.6
-FECHADO**: gates verdes (255 passed, cobertura 95,9%; gate-front ok; E2E
-**13 passed** — 12 cenários no app dev + smoke do pacote real com banco
-isolado), binários reconstruídos (sidecar PyInstaller + instalador NSIS
-2.6.0; instaladores antigos removidos de `release/`), docs sincronizados
-(INDEX com o parágrafo v2.6 e regra de freeze → v2.6.0; README com o ciclo
-e a privacidade citando extratos CSV) e nova ata **`FREEZE.md` v2.6.0**
-com SHA-256 de todos os artefatos e binários. Sobre o flake do E2E
-"planilha": 3 rodadas pós-build limpas no fechamento (2 falhas em 8
-rodadas no total, sempre após builds pesados, nunca com valor errado —
-timing); segue anotado, sem correção às cegas. Candidatos ao próximo
-ciclo: code signing (exige certificado do mantenedor), OCR p/ PDF
-escaneado, exportar histórico/comparação no `.docx`, metas de orçamento
-por campo. Qualquer mudança nos artefatos congelados exige nova ADR +
-incremento de versão + nova ata.
+**Ciclo v2.7 ABERTO (ADR-0015, M14+M15) — T-1401 ✅.** Primeira mudança
+pós-freeze v2.6.0: OCR de documento escaneado/imagem. **T-1401** entregou a
+fundação determinística: `core/documento.py` com o detector "precisa de OCR?"
+(densidade de texto por página p/ PDF, extensão p/ imagem — a bifurcação é
+código, não LLM) e a pré-marcação por tipo (`<valor>/<data>/<percentual>`,
+tags de tipo, nunca semânticas); ADR-0015 escrita, bump 2.7.0 nos três lugares
+(pyproject + sidecar + gui_web/package.json), SPEC (REQ-F-024/025/026,
+REQ-NF-006) e HARNESS 2.7.0 sincronizados. Gates: **278 passed** (+23), mypy e
+ruff limpos. **Próxima:** T-1402 — `agent/ocr.py` com RapidOCR + PP-OCRv6
+medium (aqui entram as dependências novas no `pyproject`/`PLAN §Stack`).
+
+Motivo do motor: RapidOCR *é* o PaddleOCR em ONNX (mesmos pesos), sem a
+dependência de ~500 MB do `paddlepaddle`; qualidade em original ruim é função
+do calibre (medium/"server"), não da biblioteca. Watch-item herdado: flake do
+E2E "planilha" pós-build (2/8 rodadas, sempre timing, nunca valor errado —
+capturar trace se voltar). Qualquer mudança nos artefatos **congelados no
+v2.6.0** exige nova ADR + versão + nova ata (o v2.7 já está autorizado pela
+ADR-0015).
 
 ### Histórico do ciclo v2.6 (fechado)
 
