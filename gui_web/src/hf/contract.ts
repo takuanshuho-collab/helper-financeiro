@@ -185,6 +185,29 @@ export interface HistoricoComparadoOut {
   comparacao: ComparacaoOut
 }
 
+// --- Evolução mensal (T-1304, REQ-F-022 / ADR-0014) ----------------------------
+
+export interface SerieCampoOut {
+  campo: string
+  rotulo: string
+  /** Um valor por competência, alinhado a `EvolucaoOut.meses` (core). */
+  valores: number[]
+}
+
+export interface SerieSecaoOut {
+  categoria: Categoria
+  rotulo: string
+  /** Total da seção por competência (sempre presente — eixo estável). */
+  totais: number[]
+  /** Só os campos com algum valor no período (zoom). */
+  campos: SerieCampoOut[]
+}
+
+export interface EvolucaoOut {
+  meses: string[]
+  secoes: SerieSecaoOut[]
+}
+
 // --- Importação de CSV (T-1303, REQ-F-021 / ADR-0014) ---------------------------
 
 /** Lançamentos do mesmo estabelecimento somados pelo core — candidato a rubrica. */

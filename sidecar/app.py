@@ -43,6 +43,7 @@ from core.rubricas import (
     Rubrica,
     aplicar_somas,
     comparar_orcamentos,
+    serie_evolucao,
     somas_por_campo,
     validar_mes,
     validar_rubrica,
@@ -247,6 +248,19 @@ def historico_arquivar(entrada: ArquivarMesIn,
 @app.get("/historico", dependencies=[Depends(exigir_token)])
 def historico_listar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
     return {"meses": repo.listar_meses()}
+
+
+@app.get("/historico/evolucao", dependencies=[Depends(exigir_token)])
+def historico_evolucao(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Séries de evolução das competências arquivadas (REQ-F-022, ADR-0014).
+
+    Totais por seção + série por campo, prontos do core (`serie_evolucao`) —
+    a GUI só desenha o SVG (REQ-NF-005). Declarada ANTES de
+    `/historico/{mes}` para "evolucao" não ser lida como competência.
+    """
+    snapshots = [(mes, repo.carregar_mes(mes) or {})
+                 for mes in repo.listar_meses()]
+    return serie_evolucao(snapshots)
 
 
 @app.get("/historico/{mes}", dependencies=[Depends(exigir_token)])

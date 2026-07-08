@@ -1869,6 +1869,73 @@ body {
   font-weight: 500;
 }
 
+/* ---- Evolução mensal (T-1304, REQ-F-022 / ADR-0014) ---- */
+
+.evo {
+  border-top: 1px solid var(--divisor);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.evo-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.evo-titulo {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.evo-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.evo-grade {
+  stroke: var(--divisor);
+  stroke-width: 1;
+}
+
+.evo-linha {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.evo-mes {
+  font-size: 10px;
+  fill: var(--muted);
+}
+
+.evo-valor {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.evo-legenda {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  margin-top: 4px;
+}
+
+.evo-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ---- Importação de CSV (T-1303, REQ-F-021 / ADR-0014) ---- */
 
 .imp {

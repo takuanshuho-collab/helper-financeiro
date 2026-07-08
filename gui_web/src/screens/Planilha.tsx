@@ -8,6 +8,7 @@ import {
 import { hf } from '../hf/client'
 import type {
   Categoria,
+  EvolucaoOut,
   HistoricoComparadoOut,
   PerfilIn,
   RubricaMutOut,
@@ -216,11 +217,172 @@ function Historico({
         </div>
       )}
 
+      <Evolucao meses={meses} />
+
       {comp &&
         comp.comparacao.secoes
           .filter((s) => s.campos.length > 0)
           .map((s) => <SecaoComparada key={s.categoria} secao={s} />)}
     </section>
+  )
+}
+
+// Cor de cada seção no gráfico (mesma paleta das seções do orçamento).
+const COR_SECAO: Record<Categoria, string> = {
+  renda: 'var(--green)',
+  fixas: 'var(--red)',
+  variaveis: 'var(--orange)',
+}
+
+interface LinhaGrafico {
+  id: string
+  nome: string
+  cor: string
+  valores: number[]
+}
+
+/**
+ * Gráfico de evolução (T-1304, REQ-F-022): as competências arquivadas viram
+ * série temporal. As séries chegam PRONTAS do core (`/historico/evolucao`);
+ * aqui só se projeta em coordenadas SVG — escala e eixos são apresentação,
+ * todo número exibido é do core (REQ-NF-005).
+ */
+function Evolucao({ meses }: { meses: string[] }) {
+  const [serie, setSerie] = useState<EvolucaoOut | null>(null)
+  const [zoom, setZoom] = useState('') // '' = totais; senão 'categoria/campo'
+
+  // Só busca com 2+ competências; a condição de render abaixo esconde o
+  // gráfico quando não há meses suficientes (sem setState síncrono no effect).
+  useEffect(() => {
+    if (meses.length < 2) return
+    hf.historicoEvolucao()
+      .then(setSerie)
+      .catch(() => {}) // sem gráfico ≠ sem histórico: falha fica silenciosa
+  }, [meses])
+
+  if (meses.length < 2 || serie === null) return null
+
+  let linhas: LinhaGrafico[]
+  if (zoom === '') {
+    linhas = serie.secoes.map((s) => ({
+      id: s.categoria,
+      nome: s.rotulo,
+      cor: COR_SECAO[s.categoria],
+      valores: s.totais,
+    }))
+  } else {
+    const [categoria, campo] = zoom.split('/')
+    const secao = serie.secoes.find((s) => s.categoria === categoria)
+    const c = secao?.campos.find((x) => x.campo === campo)
+    linhas = c
+      ? [{
+          id: zoom,
+          nome: c.rotulo,
+          cor: COR_SECAO[categoria as Categoria],
+          valores: c.valores,
+        }]
+      : []
+  }
+
+  return (
+    <div className="evo">
+      <div className="evo-topo">
+        <span className="evo-titulo">Evolução por categoria</span>
+        <select
+          className="hist-sel evo-zoom"
+          value={zoom}
+          onChange={(ev) => setZoom(ev.target.value)}
+          aria-label="Série exibida no gráfico"
+        >
+          <option value="">Totais por seção</option>
+          {serie.secoes
+            .filter((s) => s.campos.length > 0)
+            .map((s) => (
+              <optgroup key={s.categoria} label={s.rotulo}>
+                {s.campos.map((c) => (
+                  <option key={c.campo} value={`${s.categoria}/${c.campo}`}>
+                    {c.rotulo}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+        </select>
+      </div>
+      <Grafico meses={serie.meses} linhas={linhas} />
+      <div className="evo-legenda">
+        {linhas.map((l) => (
+          <span key={l.id} className="evo-leg">
+            <span className="secao-ponto" style={{ background: l.cor }} />
+            {l.nome}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Projeção SVG das séries. Coordenadas são apresentação; os rótulos exibidos
+ *  (valor final de cada série e tooltip por ponto) são valores do core. */
+function Grafico({ meses, linhas }: { meses: string[]; linhas: LinhaGrafico[] }) {
+  const W = 560
+  const H = 180
+  const PAD = { esq: 12, dir: 84, topo: 14, base: 26 }
+  const larg = W - PAD.esq - PAD.dir
+  const alt = H - PAD.topo - PAD.base
+  const maior = Math.max(...linhas.flatMap((l) => l.valores), 1)
+  const x = (i: number) =>
+    PAD.esq + (meses.length > 1 ? (i * larg) / (meses.length - 1) : larg / 2)
+  const y = (v: number) => PAD.topo + alt - (v / maior) * alt
+
+  return (
+    <svg
+      className="evo-svg"
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label="Evolução mensal do orçamento"
+    >
+      <line
+        className="evo-grade"
+        x1={PAD.esq}
+        y1={y(0)}
+        x2={W - PAD.dir}
+        y2={y(0)}
+      />
+      {meses.map((m, i) => (
+        <text key={m} className="evo-mes" x={x(i)} y={H - 8} textAnchor="middle">
+          {m}
+        </text>
+      ))}
+      {linhas.map((l) => (
+        <g key={l.id}>
+          <polyline
+            className="evo-linha"
+            points={l.valores.map((v, i) => `${x(i)},${y(v)}`).join(' ')}
+            style={{ stroke: l.cor }}
+          />
+          {l.valores.map((v, i) => (
+            <circle
+              key={meses[i]}
+              className="evo-ponto"
+              cx={x(i)}
+              cy={y(v)}
+              r={3}
+              style={{ fill: l.cor }}
+            >
+              <title>{`${meses[i]} — ${l.nome}: ${brl(v)}`}</title>
+            </circle>
+          ))}
+          <text
+            className="evo-valor"
+            x={x(l.valores.length - 1) + 7}
+            y={y(l.valores[l.valores.length - 1] ?? 0) + 4}
+            style={{ fill: l.cor }}
+          >
+            {brl(l.valores[l.valores.length - 1] ?? 0)}
+          </text>
+        </g>
+      ))}
+    </svg>
   )
 }
 

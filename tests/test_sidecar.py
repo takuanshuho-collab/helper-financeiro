@@ -871,6 +871,38 @@ def test_historico_mes_invalido_422_e_sem_snapshot_404(repo_tmp):
                         headers=CABECALHO).status_code == 404
 
 
+def test_historico_evolucao_series_do_core(repo_tmp):
+    # Duas competências: mercado 750 → 900.
+    cliente.post("/estado", json={"variaveis": {"mercado": 750.0}},
+                 headers=CABECALHO)
+    cliente.post("/historico/arquivar", json={"mes": "2026-05"},
+                 headers=CABECALHO)
+    cliente.post("/estado", json={"variaveis": {"mercado": 900.0}},
+                 headers=CABECALHO)
+    cliente.post("/historico/arquivar", json={"mes": "2026-06"},
+                 headers=CABECALHO)
+
+    resp = cliente.get("/historico/evolucao", headers=CABECALHO)
+    assert resp.status_code == 200
+    serie = resp.json()
+    assert serie["meses"] == ["2026-05", "2026-06"]
+    variaveis = next(s for s in serie["secoes"]
+                     if s["categoria"] == "variaveis")
+    assert variaveis["totais"] == [750.0, 900.0]
+    mercado = next(c for c in variaveis["campos"] if c["campo"] == "mercado")
+    assert mercado["valores"] == [750.0, 900.0]
+
+
+def test_historico_evolucao_sem_competencias(repo_tmp):
+    # A rota literal vence o parâmetro {mes} (nunca 422 "competência inválida").
+    resp = cliente.get("/historico/evolucao", headers=CABECALHO)
+    assert resp.status_code == 200
+    dados = resp.json()
+    assert dados["meses"] == []
+    assert [s["categoria"] for s in dados["secoes"]] == [
+        "renda", "fixas", "variaveis"]
+
+
 # --- Importação de CSV (T-1302, REQ-F-021 / ADR-0014) --------------------------
 
 # Grupos resultantes (ordenados por total decrescente pelo core):

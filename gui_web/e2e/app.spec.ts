@@ -357,3 +357,29 @@ test('importação: CSV do extrato vira rubricas após revisão', async () => {
   await preencher('Contas da casa', '500')
   await win.waitForTimeout(1_500)
 })
+
+test('evolução: gráfico das competências arquivadas com zoom por campo', async () => {
+  await win.locator('.btn-add', { hasText: 'Detalhar orçamento' }).click()
+
+  // O teste "histórico" arquivou a competência corrente (mercado 800). O
+  // gráfico pede 2+ meses: arquiva o mês ANTERIOR com o orçamento vivo
+  // atual (mercado 900) — cronologicamente, o mês corrente fica por último.
+  const hoje = new Date()
+  const ant = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+  const mesAnterior = `${ant.getFullYear()}-${String(ant.getMonth() + 1).padStart(2, '0')}`
+  await win.locator('.hist .hist-mes').fill(mesAnterior)
+  await win.locator('.hist .btn-add', { hasText: 'Arquivar' }).click()
+
+  // As 3 séries de totais (renda/fixas/variáveis) — tudo do core.
+  await expect(win.locator('.evo-svg')).toBeVisible({ timeout: 5_000 })
+  await expect(win.locator('.evo-linha')).toHaveCount(3)
+  await expect(win.locator('.evo-legenda')).toContainText('Despesas variáveis')
+  await expect(win.locator('.evo-mes')).toHaveCount(2)
+
+  // Zoom no Mercado: uma série só; o rótulo final é o valor do core no
+  // último mês arquivado (a competência corrente, com 800).
+  await win.locator('.evo-zoom').selectOption('variaveis/mercado')
+  await expect(win.locator('.evo-linha')).toHaveCount(1)
+  await expect(win.locator('.evo-valor')).toContainText('800,00')
+  await expect(win.locator('.evo-legenda')).toContainText('Mercado')
+})

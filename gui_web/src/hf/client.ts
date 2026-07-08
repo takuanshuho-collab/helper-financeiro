@@ -15,6 +15,7 @@ import type {
   DiagnosticoOut,
   EstadoOut,
   EstrategiasOut,
+  EvolucaoOut,
   ExportadoOut,
   HistoricoComparadoOut,
   HistoricoOut,
@@ -82,6 +83,8 @@ export const hf = {
     mesB: string | null = null,
   ): Promise<HistoricoComparadoOut> =>
     chamar('/historico/comparar', { mes_a: mesA, mes_b: mesB }),
+  /** Séries prontas do core para o gráfico de evolução (T-1304). */
+  historicoEvolucao: (): Promise<EvolucaoOut> => chamar('/historico/evolucao'),
   /** Importação de CSV (T-1303): parse + rótulos PARA REVISÃO, nada persiste. */
   importarCsv: (csvBase64: string, nome: string): Promise<CsvImportadoOut> =>
     chamar('/importar/csv', { csv_base64: csvBase64, nome }),
