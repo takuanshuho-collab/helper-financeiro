@@ -209,7 +209,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1303 | GUI importação: drop-zone CSV, painel de revisão (grupo + dropdown de campo + seletor de competência), aplicar → rubricas + E2E | REQ-F-021 | T-1302 | ✅ |
 | T-1304 | Gráfico de evolução: `GET /historico/evolucao` + SVG próprio na Planilha (totais por seção + zoom por campo, tema claro/escuro) + E2E | REQ-F-022 | T-1301 | ✅ |
 | T-1305 | Histórico no `.xlsx`: aba "Evolução mensal" (campos × competências, totais =SUM, gráfico nativo) + Gate B + SPEC/PARIDADE/HARNESS sincronizados | REQ-F-023 | T-1301 | ✅ |
-| T-1306 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.6.0 e docs sincronizados | Processo | todos | ⬜ |
+| T-1306 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.6.0 e docs sincronizados | Processo | todos | ✅ |
 
 ---
 
@@ -219,6 +219,25 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
+**Ciclo v2.6 FECHADO E CONGELADO (`FREEZE.md` v2.6.0, ADR-0014)** — ver a
+narrativa completa do milestone M13 abaixo. **T-1306 ✅ — CICLO v2.6
+FECHADO**: gates verdes (255 passed, cobertura 95,9%; gate-front ok; E2E
+**13 passed** — 12 cenários no app dev + smoke do pacote real com banco
+isolado), binários reconstruídos (sidecar PyInstaller + instalador NSIS
+2.6.0; instaladores antigos removidos de `release/`), docs sincronizados
+(INDEX com o parágrafo v2.6 e regra de freeze → v2.6.0; README com o ciclo
+e a privacidade citando extratos CSV) e nova ata **`FREEZE.md` v2.6.0**
+com SHA-256 de todos os artefatos e binários. Sobre o flake do E2E
+"planilha": 3 rodadas pós-build limpas no fechamento (2 falhas em 8
+rodadas no total, sempre após builds pesados, nunca com valor errado —
+timing); segue anotado, sem correção às cegas. Candidatos ao próximo
+ciclo: code signing (exige certificado do mantenedor), OCR p/ PDF
+escaneado, exportar histórico/comparação no `.docx`, metas de orçamento
+por campo. Qualquer mudança nos artefatos congelados exige nova ADR +
+incremento de versão + nova ata.
+
+### Histórico do ciclo v2.6 (fechado)
+
 **Ciclo v2.6 ABERTO (ADR-0014, M13)** — importação de CSV classificada por
 LLM local, gráfico de evolução e histórico no `.xlsx`. Decisões do
 mantenedor: lançamentos **agrupados por estabelecimento**, destino com

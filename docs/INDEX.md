@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0013) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0014) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
@@ -78,7 +78,18 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   subir = verde, despesa subir = vermelho). Bônus: **sugestões de nome de
   rubrica** por campo via `datalist` local (REQ-F-019/020). Sem migração de
   schema: a coluna `mes` já estava reservada desde o v2.4.
-- **Mudanças nos artefatos congelados (v2.5.0) exigem nova ADR + incremento de
+- **Ciclo v2.6 FECHADO (`FREEZE.md` v2.6.0, ADR-0014):** o caminho **CSV →
+  rubricas** — parse determinístico no `core` (`core/extrato.py`: separador,
+  colunas, valores BR/US, agrupamento por estabelecimento, competência
+  sugerida), **LLM local que SÓ rotula** (`índice → campo`, travas
+  determinísticas, endpoint loopback obrigatório — H1/H2) e **revisão humana**
+  antes de aplicar (degrada p/ classificação manual sem LLM, P8); destino =
+  orçamento vivo ou competência (acrescenta, nunca apaga). **Gráfico de
+  evolução** das competências (SVG próprio; séries prontas do `core` via
+  `/historico/evolucao`; totais por seção + zoom por campo) e aba **"Evolução
+  mensal"** no `.xlsx` (totais `=SUM` + gráfico nativo, Gate B) —
+  REQ-F-021/022/023. Sem migração de schema.
+- **Mudanças nos artefatos congelados (v2.6.0) exigem nova ADR + incremento de
   versão + nova ata.**
 
 ## Rodar

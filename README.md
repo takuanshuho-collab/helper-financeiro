@@ -11,7 +11,11 @@ clássica segue como fallback (`--tkinter`). O ciclo v2.4 (ADR-0012) trouxe o
 **persistência local**: perfil, dívidas e rubricas ficam salvos entre sessões.
 O ciclo v2.5 (ADR-0013) adicionou o **histórico mensal**: arquive a
 competência e compare os meses ("seu mercado subiu 12,5%"), com sugestões de
-nomes ao criar rubricas.
+nomes ao criar rubricas. O ciclo v2.6 (ADR-0014) fechou o circuito do dado:
+**importe o extrato/fatura CSV** do banco (a IA local só sugere a
+classificação — você revisa antes de aplicar), acompanhe o **gráfico de
+evolução** por categoria e leve o histórico para o `.xlsx` (aba "Evolução
+mensal").
 
 ---
 
@@ -130,7 +134,8 @@ adicione o pacote em falta com outro `--collect-all`.
 
 ## 🔒 Privacidade
 
-Tudo roda **localmente**: os dados financeiros e os PDFs não saem da sua máquina.
+Tudo roda **localmente**: os dados financeiros, os PDFs e os extratos CSV não
+saem da sua máquina.
 Nenhuma informação é enviada pela internet. O estado do app (perfil, dívidas e
 rubricas — v2.4) fica num banco SQLite local em
 `%APPDATA%\HelperFinanceiro\dados.db`, no seu perfil de usuário.
