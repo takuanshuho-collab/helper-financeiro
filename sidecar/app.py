@@ -17,6 +17,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException
 
 from agent.agente import analisar
+from agent.classificacao import Classificador, classificar_grupos
 from agent.config import ConfigAgente, carregar_config
 from agent.exibicao import ROTULOS_EXTRACAO, campos_para_formulario, preparar_exibicao
 from agent.extracao import Extrator, confirmar_extracao, iniciar_extracao
@@ -29,6 +30,7 @@ from core.estrategias import (
     gerar_recomendacoes,
     oportunidades_portabilidade,
 )
+from core.extrato import decodificar_csv, ler_extrato_csv
 from core.extrator_pdf import extrair_texto_pdf_bytes, parsear_campos
 from core.models import (
     ComposicaoRenda,
@@ -54,6 +56,7 @@ from .persistencia import Repositorio
 from .schemas import (
     AnaliseIaIn,
     AnaliseIn,
+    AplicarImportacaoIn,
     ArquivarMesIn,
     CartaIn,
     CompararMesesIn,
@@ -64,6 +67,7 @@ from .schemas import (
     ExportarCartaIn,
     ExportarPlanilhaIn,
     ExportarRelatorioIn,
+    ImportarCsvIn,
     PerfilIn,
     RubricaEditIn,
     RubricaIn,
@@ -328,6 +332,103 @@ def rubrica_remover(rubrica_id: int,
         raise HTTPException(status_code=404, detail="Rubrica desconhecida.")
     return {"ok": True, "rubricas": repo.listar_rubricas(),
             "perfil": _perfil_apos_mutacao(repo)}
+
+
+# ------------------------------------- importação de CSV (T-1302, ADR-0014)
+def contexto_classificacao() -> tuple[ConfigAgente | None, Classificador | None]:
+    """Dependência da classificação (sobrescrita nos testes).
+
+    Em produção devolve (None, None): a classificação usa a config real
+    (local-only, H2) e o dialeto do provider. Os testes injetam um
+    `FakeClassificador` determinístico.
+    """
+    return None, None
+
+
+@app.post("/importar/csv", dependencies=[Depends(exigir_token)])
+def importar_csv(
+    entrada: ImportarCsvIn,
+    ctx: tuple[ConfigAgente | None, Classificador | None] = Depends(
+        contexto_classificacao),
+) -> dict:
+    """Lê o extrato CSV e devolve os grupos classificados PARA REVISÃO.
+
+    Nada é persistido aqui: o usuário confere (e corrige) no painel e só o
+    `/importar/aplicar` grava. O parse é 100% determinístico (`core/extrato`);
+    a LLM local SÓ rotula grupos — recebe nomes normalizados, sem valores e
+    sem datas (H1/H2, ADR-0014). Sem LLM, `modo` degrada para "manual" com os
+    motivos (P8) e todos os grupos voltam sem rótulo.
+    """
+    cfg, classificador = ctx
+    try:
+        dados = base64.b64decode(entrada.csv_base64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(status_code=422,
+                            detail="CSV inválido (base64).") from e
+
+    extrato = ler_extrato_csv(decodificar_csv(dados))
+    pares = [(g.nome, g.natureza) for g in extrato.grupos]
+    resultado = classificar_grupos(pares, cfg=cfg, classificador=classificador)
+
+    grupos = []
+    for i, g in enumerate(extrato.grupos):
+        rotulo = resultado.por_indice.get(i)
+        grupos.append({
+            "indice": i, "nome": g.nome, "total": g.total,
+            "quantidade": g.quantidade, "natureza": g.natureza,
+            "categoria": rotulo[0] if rotulo else None,
+            "campo_pai": rotulo[1] if rotulo else None,
+        })
+    if not grupos:
+        modo = "vazio"
+    elif resultado.motivos:
+        modo = "manual"
+    else:
+        modo = "ia"
+    return {"modo": modo, "grupos": grupos,
+            "competencia_sugerida": extrato.competencia_sugerida,
+            "avisos": list(extrato.avisos),
+            "descartes": resultado.descartes,
+            "motivos": resultado.motivos, "llm": _diag_llm(cfg)}
+
+
+@app.post("/importar/aplicar", dependencies=[Depends(exigir_token)])
+def importar_aplicar(entrada: AplicarImportacaoIn,
+                     repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+    """Grava os itens revisados como rubricas no destino escolhido.
+
+    `mes` None → orçamento vivo (fluxo normal do ADR-0012: roll-up na
+    escrita). `mes` 'AAAA-MM' → as rubricas nascem na competência e o
+    snapshot do perfil é recalculado (base = snapshot existente, ou perfil
+    zerado se a competência é nova). A importação ACRESCENTA, nunca apaga
+    (ADR-0014).
+    """
+    if not entrada.itens:
+        raise HTTPException(status_code=422, detail="Nada a importar.")
+    for item in entrada.itens:
+        try:
+            validar_rubrica(item.categoria, item.campo_pai, item.nome)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+
+    if entrada.mes is None:
+        for item in entrada.itens:
+            repo.criar_rubrica(item.categoria, item.campo_pai,
+                               item.nome.strip(), item.valor)
+        return {"ok": True, "mes": None, "rubricas": repo.listar_rubricas(),
+                "perfil": _perfil_apos_mutacao(repo)}
+
+    _mes_valido_ou_422(entrada.mes)
+    base = repo.carregar_mes(entrada.mes) or PerfilIn().model_dump()
+    for item in entrada.itens:
+        repo.criar_rubrica(item.categoria, item.campo_pai, item.nome.strip(),
+                           item.valor, mes=entrada.mes)
+    rubricas_mes = repo.rubricas_do_mes(entrada.mes)
+    somas = somas_por_campo([Rubrica(**r) for r in rubricas_mes])
+    perfil = PerfilIn(**aplicar_somas(base, somas)).model_dump()
+    repo.salvar_perfil_do_mes(entrada.mes, perfil)
+    return {"ok": True, "mes": entrada.mes, "meses": repo.listar_meses(),
+            "rubricas": rubricas_mes, "perfil": perfil}
 
 
 @app.post("/estrategias", dependencies=[Depends(exigir_token)])

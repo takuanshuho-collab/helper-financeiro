@@ -205,7 +205,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-1301 | ADR-0014 + bump 2.6.0 + core: parser CSV determinístico (`core/extrato.py` — separador/encoding, colunas por cabeçalho ou conteúdo, valores BR/US, agrupamento por estabelecimento, competência sugerida) + `serie_evolucao` + testes | REQ-F-021/022 | — | ✅ |
-| T-1302 | Classificação LLM local (`índice → campo`, valor NUNCA vem do modelo; sem LLM degrada p/ manual — P8) + endpoints de importação no sidecar + aplicação como rubricas na competência escolhida + testes | REQ-F-021 | T-1301 | ⬜ |
+| T-1302 | Classificação LLM local (`índice → campo`, valor NUNCA vem do modelo; sem LLM degrada p/ manual — P8) + endpoints de importação no sidecar + aplicação como rubricas na competência escolhida + testes | REQ-F-021 | T-1301 | ✅ |
 | T-1303 | GUI importação: drop-zone CSV, painel de revisão (grupo + dropdown de campo + seletor de competência), aplicar → rubricas + E2E | REQ-F-021 | T-1302 | ⬜ |
 | T-1304 | Gráfico de evolução: `GET /historico/evolucao` + SVG próprio na Planilha (totais por seção + zoom por campo, tema claro/escuro) + E2E | REQ-F-022 | T-1301 | ⬜ |
 | T-1305 | Histórico no `.xlsx`: aba "Evolução mensal" (campos × competências, totais =SUM, gráfico nativo) + Gate B + SPEC/PARIDADE/HARNESS sincronizados | REQ-F-023 | T-1301 | ⬜ |
@@ -233,8 +233,22 @@ Trip"; sinais mistos = extrato de conta, sinal único = fatura; competência
 sugerida pela moda das datas; linha ilegível vira AVISO, nunca exceção) e
 `core.rubricas.serie_evolucao` (séries por seção + por campo, alinhadas a
 `meses`, campo todo zerado fora, seção sempre presente). 14 testes novos
-(233 passed). Próximo: **T-1302** (classificação LLM local `índice → campo`
-+ endpoints de importação no sidecar).
+(233 passed). **T-1302 ✅**: `agent/classificacao.py` — a LLM local SÓ rotula
+(`ClassificacaoExtrato`: itens `índice → categoria/campo_pai`; prompt vê
+apenas nomes normalizados + natureza, sem valores/datas) com travas
+determinísticas reimostas em código (índice existe e não repete, campo
+existe em `CAMPOS_POR_CATEGORIA`, natureza coerente: crédito→renda,
+débito→fixas/variáveis — item que viola é descartado e o grupo volta "não
+classificado"); fábrica local-only (H2, mesmo racional da extração:
+Ollama nativo vs OpenAI-compatible) e degradação p/ classificação manual
+com motivo (P8, 2 tentativas). Sidecar: `POST /importar/csv` (base64 →
+`core/extrato` → classificação → grupos PARA REVISÃO, nada persistido;
+`modo` ia/manual/vazio) e `POST /importar/aplicar` (itens revisados →
+rubricas no vivo com roll-up do ADR-0012, ou na competência com snapshot
+recalculado sobre a base existente/zerada — a importação ACRESCENTA, nunca
+apaga); `criar_rubrica(mes=...)` e `salvar_perfil_do_mes` no repositório.
+16 testes novos (249 passed). Próximo: **T-1303** (GUI: drop-zone + painel
+de revisão + E2E).
 
 ### Histórico do ciclo v2.5 (fechado)
 

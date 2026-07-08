@@ -95,6 +95,34 @@ class CompararMesesIn(BaseModel):
     mes_b: str | None = None
 
 
+class ImportarCsvIn(BaseModel):
+    """Extrato/fatura CSV (base64) para importação classificada (REQ-F-021).
+
+    Base64 do ARQUIVO cru (não texto): a decodificação de encoding
+    (UTF-8/cp1252) é do core. Viaja só na loopback; nada é persistido até o
+    usuário revisar e aplicar (ADR-0014).
+    """
+
+    csv_base64: str
+    nome: str = ""
+
+
+class ItemImportacaoIn(BaseModel):
+    """Um grupo revisado pelo usuário, pronto para virar rubrica."""
+
+    categoria: str   # 'renda' | 'fixas' | 'variaveis'
+    campo_pai: str   # ex.: 'mercado'
+    nome: str
+    valor: float = 0.0
+
+
+class AplicarImportacaoIn(BaseModel):
+    """Aplica a importação revisada; `mes` None = orçamento vivo."""
+
+    mes: str | None = None
+    itens: list[ItemImportacaoIn] = Field(default_factory=list)
+
+
 class EstrategiasIn(BaseModel):
     """Perfil + pagamento extra mensal para simular a quitação."""
 

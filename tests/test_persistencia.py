@@ -231,6 +231,21 @@ def test_mes_sem_snapshot(tmp_path):
     repo.fechar()
 
 
+def test_criar_rubrica_direto_na_competencia(tmp_path):
+    # Importação de CSV (ADR-0014): a rubrica nasce no snapshot, não no vivo.
+    repo = Repositorio(tmp_path / "dados.db")
+    repo.criar_rubrica("variaveis", "mercado", "Mercado Bom Preço", 800.87,
+                       mes="2026-06")
+    assert repo.listar_rubricas() == []
+    assert [r["nome"] for r in repo.rubricas_do_mes("2026-06")] == [
+        "Mercado Bom Preço"]
+
+    repo.salvar_perfil_do_mes("2026-06", {"v": 1})
+    assert repo.carregar_mes("2026-06") == {"v": 1}
+    assert repo.listar_meses() == ["2026-06"]
+    repo.fechar()
+
+
 def test_escritas_concorrentes_nao_se_corrompem(tmp_path):
     repo = Repositorio(tmp_path / "dados.db")
 

@@ -140,12 +140,18 @@ class Repositorio:
         return [dict(linha) for linha in linhas]
 
     def criar_rubrica(self, categoria: str, campo_pai: str, nome: str,
-                      valor: float = 0.0, ordem: int = 0) -> dict:
+                      valor: float = 0.0, ordem: int = 0,
+                      mes: str | None = None) -> dict:
+        """Insere um lançamento; `mes` NULL = orçamento vivo (padrão).
+
+        `mes` preenchido entra numa competência arquivada — a importação de
+        CSV (ADR-0014) acrescenta rubricas direto no snapshot.
+        """
         with self._lock, self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO rubrica (categoria, campo_pai, nome, valor, ordem) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (categoria, campo_pai, nome, valor, ordem),
+                "INSERT INTO rubrica (categoria, campo_pai, nome, valor, ordem, mes) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (categoria, campo_pai, nome, valor, ordem, mes),
             )
         return {"id": cursor.lastrowid, "categoria": categoria,
                 "campo_pai": campo_pai, "nome": nome, "valor": valor,
@@ -212,6 +218,14 @@ class Repositorio:
 
     def carregar_mes(self, mes: str) -> dict | None:
         return self.carregar_estado(f"perfil:{mes}")
+
+    def salvar_perfil_do_mes(self, mes: str, perfil: dict) -> None:
+        """Grava/substitui só o perfil do snapshot (sem tocar nas rubricas).
+
+        Usado pela importação de CSV (ADR-0014) para recalcular o snapshot
+        depois de acrescentar rubricas à competência.
+        """
+        self.salvar_estado(f"perfil:{mes}", perfil)
 
     def rubricas_do_mes(self, mes: str) -> list[dict]:
         with self._lock:

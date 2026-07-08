@@ -14,10 +14,22 @@ from fastapi.testclient import TestClient
 
 from agent.config import ConfigAgente
 from agent.provider import FakeProvider
-from contracts import AnaliseAgente, FatosFinanceiros
-from sidecar.app import app, contexto_analise, contexto_extracao, repositorio
+from contracts import (
+    AnaliseAgente,
+    ClassificacaoExtrato,
+    FatosFinanceiros,
+    ItemClassificado,
+)
+from sidecar.app import (
+    app,
+    contexto_analise,
+    contexto_classificacao,
+    contexto_extracao,
+    repositorio,
+)
 from sidecar.persistencia import Repositorio
 from sidecar.security import VAR_TOKEN
+from tests.test_classificacao import FakeClassificador
 from tests.test_extracao import CFG_TESTE, DOC_CONTRATO, FakeExtrator
 
 TOKEN = "token-de-teste"
@@ -857,3 +869,147 @@ def test_historico_mes_invalido_422_e_sem_snapshot_404(repo_tmp):
     assert cliente.post("/historico/comparar",
                         json={"mes_a": "2026-01"},
                         headers=CABECALHO).status_code == 404
+
+
+# --- Importação de CSV (T-1302, REQ-F-021 / ADR-0014) --------------------------
+
+# Grupos resultantes (ordenados por total decrescente pelo core):
+# 0 = Salário Acme Ltda (crédito, 3500) · 1 = Conta de luz Enel (débito,
+# 180,50) · 2 = Uber Trip (débito, 137,40 em 2 lançamentos).
+CSV_EXTRATO = (
+    "Data,Descrição,Valor\n"
+    "05/06/2026,Conta de luz Enel,-180.50\n"
+    "07/06/2026,UBER *TRIP 8291,-92.30\n"
+    "15/06/2026,UBER *TRIP 4415,-45.10\n"
+    "30/06/2026,Salário Acme Ltda,3500.00\n"
+)
+CSV_B64 = base64.b64encode(CSV_EXTRATO.encode("utf-8")).decode()
+
+
+def _importar_csv(fake, csv_b64=CSV_B64):
+    cliente.app.dependency_overrides[contexto_classificacao] = (
+        lambda: (CFG_TESTE, fake))
+    try:
+        return cliente.post("/importar/csv", json={"csv_base64": csv_b64},
+                            headers=CABECALHO)
+    finally:
+        del cliente.app.dependency_overrides[contexto_classificacao]
+
+
+def test_importar_csv_classifica_para_revisao(repo_tmp):
+    fake = FakeClassificador(ClassificacaoExtrato(itens=[
+        ItemClassificado(indice=0, categoria="renda",
+                         campo_pai="salario_liquido"),
+        ItemClassificado(indice=1, categoria="fixas", campo_pai="contas_casa"),
+        ItemClassificado(indice=2, categoria="fixas", campo_pai="transporte"),
+    ]))
+    resp = _importar_csv(fake)
+    assert resp.status_code == 200
+    dados = resp.json()
+    assert dados["modo"] == "ia"
+    assert dados["competencia_sugerida"] == "2026-06"
+    # Todo número vem do parser determinístico — a LLM só pôs os rótulos.
+    salario, luz, uber = dados["grupos"]
+    assert (salario["nome"], salario["total"], salario["quantidade"]) == (
+        "Salário Acme Ltda", 3500.0, 1)
+    assert salario["natureza"] == "credito"
+    assert (salario["categoria"], salario["campo_pai"]) == (
+        "renda", "salario_liquido")
+    assert (uber["nome"], uber["total"], uber["quantidade"]) == (
+        "Uber Trip", 137.4, 2)
+    assert (uber["categoria"], uber["campo_pai"]) == ("fixas", "transporte")
+    assert luz["campo_pai"] == "contas_casa"
+    # E NADA foi persistido: a revisão humana vem antes de aplicar.
+    assert cliente.get("/rubricas", headers=CABECALHO).json()["rubricas"] == []
+
+
+def test_importar_csv_sem_llm_degrada_para_manual(repo_tmp):
+    fake = FakeClassificador(erro=ValueError("porta fechada"))
+    dados = _importar_csv(fake).json()
+    assert dados["modo"] == "manual"
+    assert dados["motivos"] == ["ERRO_PROVIDER:ValueError"]
+    # Os grupos chegam do mesmo jeito (parse determinístico) — sem rótulo.
+    assert len(dados["grupos"]) == 3
+    assert all(g["categoria"] is None for g in dados["grupos"])
+
+
+def test_importar_csv_rotulo_invalido_e_descartado(repo_tmp):
+    # Crédito (salário) classificado como despesa: a trava derruba o item.
+    fake = FakeClassificador(ClassificacaoExtrato(itens=[
+        ItemClassificado(indice=0, categoria="variaveis", campo_pai="lazer"),
+        ItemClassificado(indice=2, categoria="variaveis", campo_pai="lazer"),
+    ]))
+    dados = _importar_csv(fake).json()
+    assert dados["descartes"] == ["0:NATUREZA:credito"]
+    assert dados["grupos"][0]["categoria"] is None
+    assert dados["grupos"][2]["campo_pai"] == "lazer"
+
+
+def test_importar_csv_base64_invalido_422(repo_tmp):
+    fake = FakeClassificador()
+    assert _importar_csv(fake, csv_b64="###").status_code == 422
+    assert fake.chamadas == 0
+
+
+def test_importar_aplicar_no_vivo_faz_roll_up(repo_tmp):
+    resp = cliente.post("/importar/aplicar", json={"mes": None, "itens": [
+        {"categoria": "fixas", "campo_pai": "transporte",
+         "nome": "Uber Trip", "valor": 137.40},
+        {"categoria": "fixas", "campo_pai": "contas_casa",
+         "nome": "Conta de luz Enel", "valor": 180.50},
+    ]}, headers=CABECALHO)
+    assert resp.status_code == 200
+    dados = resp.json()
+    assert dados["mes"] is None
+    # Fluxo normal do ADR-0012: rubricas no vivo + roll-up na escrita.
+    assert dados["perfil"]["fixas"]["transporte"] == 137.40
+    assert dados["perfil"]["fixas"]["contas_casa"] == 180.50
+    assert [r["nome"] for r in dados["rubricas"]] == [
+        "Conta de luz Enel", "Uber Trip"]
+
+
+def test_importar_aplicar_em_competencia_nova(repo_tmp):
+    resp = cliente.post("/importar/aplicar", json={"mes": "2026-06", "itens": [
+        {"categoria": "variaveis", "campo_pai": "mercado",
+         "nome": "Mercado Bom Preço", "valor": 800.87},
+    ]}, headers=CABECALHO)
+    assert resp.status_code == 200
+    assert resp.json()["meses"] == ["2026-06"]
+
+    # O snapshot nasceu com o perfil recalculado (base zerada + soma).
+    snap = cliente.get("/historico/2026-06", headers=CABECALHO).json()
+    assert snap["perfil"]["variaveis"]["mercado"] == 800.87
+    assert [r["nome"] for r in snap["rubricas"]] == ["Mercado Bom Preço"]
+    # O orçamento VIVO não foi tocado.
+    assert cliente.get("/rubricas", headers=CABECALHO).json()["rubricas"] == []
+    assert cliente.get("/estado", headers=CABECALHO).json()["perfil"] is None
+
+
+def test_importar_aplicar_acrescenta_sem_apagar(repo_tmp):
+    # Competência já arquivada com uma rubrica viva copiada.
+    cliente.post("/estado", json={"variaveis": {"mercado": 100.0}},
+                 headers=CABECALHO)
+    _criar_rubrica("Feira", 100.0, campo="mercado", categoria="variaveis")
+    cliente.post("/historico/arquivar", json={"mes": "2026-06"},
+                 headers=CABECALHO)
+
+    # Importar o cartão do mesmo mês ACRESCENTA ao snapshot (ADR-0014).
+    cliente.post("/importar/aplicar", json={"mes": "2026-06", "itens": [
+        {"categoria": "variaveis", "campo_pai": "mercado",
+         "nome": "Mercado Bom Preço", "valor": 800.87},
+    ]}, headers=CABECALHO)
+    snap = cliente.get("/historico/2026-06", headers=CABECALHO).json()
+    assert [r["nome"] for r in snap["rubricas"]] == [
+        "Feira", "Mercado Bom Preço"]
+    assert snap["perfil"]["variaveis"]["mercado"] == 900.87
+
+
+def test_importar_aplicar_validacoes_422(repo_tmp):
+    assert cliente.post("/importar/aplicar", json={"itens": []},
+                        headers=CABECALHO).status_code == 422
+    assert cliente.post("/importar/aplicar", json={"itens": [
+        {"categoria": "fixas", "campo_pai": "acoes", "nome": "X"},
+    ]}, headers=CABECALHO).status_code == 422
+    assert cliente.post("/importar/aplicar", json={"mes": "junho", "itens": [
+        {"categoria": "fixas", "campo_pai": "moradia", "nome": "Aluguel"},
+    ]}, headers=CABECALHO).status_code == 422

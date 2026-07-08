@@ -106,6 +106,21 @@ class ExtracaoVerificada(BaseModel):
     inconsistencias: list[str] = Field(default_factory=list)  # "CRUZADA_PRICE:parcela"
 
 
+# ------------------- Classificação de extrato CSV (ADR-0014) ------------------
+# O modelo SÓ ROTULA: recebe os grupos numerados (nomes de estabelecimento,
+# sem valores) e devolve `índice → campo do orçamento`. Nenhum número passa
+# por aqui — valores e contagens vêm do parser determinístico (H1).
+class ItemClassificado(BaseModel):
+    indice: int                      # posição do grupo na lista enviada
+    categoria: str                   # 'renda' | 'fixas' | 'variaveis'
+    campo_pai: str                   # ex.: 'contas_casa'
+
+
+class ClassificacaoExtrato(BaseModel):
+    """Rótulos sugeridos pela LLM; itens inválidos são descartados no código."""
+    itens: list[ItemClassificado] = Field(default_factory=list)
+
+
 # ----------------------------- Exibição local (M3) ----------------------------
 # Estrutura pronta para as cascas (GUI e .docx) renderizarem a seção de IA.
 # Aqui os nomes REAIS já foram restaurados: a desanonimização acontece só na
