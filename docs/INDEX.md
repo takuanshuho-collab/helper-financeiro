@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0012) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0013) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
@@ -70,7 +70,15 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   hidratação no boot e auto-save — o app lembra o usuário entre sessões
   (REQ-F-017/018). Só na GUI web (tkinter = fallback congelado do v2.3,
   `PARIDADE.md` §7).
-- **Mudanças nos artefatos congelados (v2.4.0) exigem nova ADR + incremento de
+- **Ciclo v2.5 FECHADO (`FREEZE.md` v2.5.0, ADR-0013):** o orçamento ganhou a
+  dimensão TEMPO — **"Arquivar mês"** grava a competência (`AAAA-MM`:
+  snapshot do perfil + rubricas; rearquivar substitui) e a Planilha compara
+  competências (ou competência vs orçamento vivo) com deltas e variações %
+  calculados no `core` ("seu mercado subiu 12,5%", cor semântica: renda
+  subir = verde, despesa subir = vermelho). Bônus: **sugestões de nome de
+  rubrica** por campo via `datalist` local (REQ-F-019/020). Sem migração de
+  schema: a coluna `mes` já estava reservada desde o v2.4.
+- **Mudanças nos artefatos congelados (v2.5.0) exigem nova ADR + incremento de
   versão + nova ata.**
 
 ## Rodar

@@ -1,29 +1,29 @@
-# FREEZE — Ata de Congelamento v2.4.0
+# FREEZE — Ata de Congelamento v2.5.0
 
 - **Data:** 2026-07-07
 - **Versão da Constituição:** 2.0.0
-- **Escopo congelado:** ciclo **v2.4** (ADR-0012): milestone **M11** —
-  **orçamento detalhado com rubricas** (subcampos criados pelo usuário por
-  campo do Perfil; roll-up determinístico no `core`: campo detalhado = soma,
-  somente-leitura na GUI com selo "detalhado ▸"; tela **Planilha de
-  orçamento** com grade editável; rubricas na aba "Orçamento detalhado" do
-  `.xlsx`, subtotais `=SUM`) e **persistência local** do estado do usuário
-  (SQLite `sqlite3` stdlib gerido pelo sidecar em
-  `%APPDATA%\HelperFinanceiro\dados.db`, override `HF_DB_PATH`; hidratação
-  no boot + auto-save; schema v1 versionado, coluna `mes` reservada ao
-  histórico mensal futuro) — REQ-F-017/REQ-F-018. Recursos do ciclo existem
-  só na GUI web; tkinter permanece fallback congelado do v2.3
-  (`PARIDADE.md` §7).
+- **Escopo congelado:** ciclo **v2.5** (ADR-0013): milestone **M12** —
+  **histórico mensal do orçamento**: "Arquivar mês" grava a competência
+  `AAAA-MM` (snapshot do perfil em `estado['perfil:AAAA-MM']` + cópia das
+  rubricas vivas com `mes` preenchido; rearquivar substitui), o `core` compara
+  competências (`comparar_orcamentos`: deltas + variação % por campo/seção) e
+  a Planilha exibe a comparação com cor semântica (renda subir = verde,
+  despesa subir = vermelho — o front só formata, REQ-NF-005). Bônus:
+  **sugestões de nome de rubrica** por campo via `datalist` nativo (lista
+  estática local, sem rede) — REQ-F-019/REQ-F-020. Sem migração de schema
+  (coluna `mes` reservada desde o v2.4). Recursos do ciclo existem só na GUI
+  web; tkinter permanece fallback congelado do v2.3 (`PARIDADE.md` §7).
 - **Regra:** qualquer alteração nos artefatos abaixo exige nova ADR,
   incremento de versão e nova ata.
-- **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04, M1..M6) e v2.3.0
-  (2026-07-07, M7..M10) — substituídas por esta.
+- **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04, M1..M6), v2.3.0 e v2.4.0
+  (2026-07-07, M7..M11) — substituídas por esta.
 
-> A lista congelada cobre todo o código de primeira parte (incluindo os
-> artefatos novos do ciclo: `core/rubricas.py`, `sidecar/persistencia.py`,
-> `gui_web/src/screens/Planilha.tsx`, `gui_web/src/lib/orcamento.ts`) e o
-> harness. `docs/INDEX.md` (mapa navegável) e este `FREEZE.md` não se
-> auto-hasheiam.
+> A lista congelada cobre todo o código de primeira parte e o harness.
+> Correção de processo nesta ata: o smoke do pacote
+> (`gui_web/e2e/empacotado.spec.ts`) agora roda com **banco isolado** por
+> `HF_DB_PATH` — desde a persistência (v2.4) ele lia e reescrevia o banco
+> REAL do usuário em `%APPDATA%`. `docs/INDEX.md` (mapa navegável) e este
+> `FREEZE.md` não se auto-hasheiam.
 
 ## Checksums SHA-256 dos artefatos
 
@@ -33,14 +33,14 @@
 |---|---|
 | `docs/CONSTITUTION.md` | `77b11451303e2d378a631ec420f95802e7c4799a21762fac7704f93f2fffefec` |
 | `docs/PRD.md` | `7a0d731b4bf65918084da884ed70655afe0fc3d4595d268aa5c5f7c0840d7ff3` |
-| `docs/SPEC.md` | `38e38e382f4424f6199d703e936c3fa34d0b88cdcbd0f29dc7ddd76b381e25b3` |
+| `docs/SPEC.md` | `f7293f98b298e42048f26a817315bbea40e8e76fca1bf183fb9669c57b577202` |
 | `docs/PLAN.md` | `c5929e1bee472e40a5ad3f9debbf043812e29acdfdba5281e144ffbe5728a4ac` |
-| `docs/TASKS.md` | `036652a2f1b044983d7306370f80ce367cc5d4e2a92bab6cc73622583cafe078` |
-| `docs/HARNESS.md` | `2e65c8e41436ed29e63dd68bddafcffe5cc6e8f92a5b9d6853e003212e7e4c38` |
+| `docs/TASKS.md` | `5447be9542fd808e16a9e344b7899752f0806721487e6bf166ef7e1eaf03a092` |
+| `docs/HARNESS.md` | `66a3de6c7e4108c0da09e54ed464fb401a0591c278ab3f188985b688c5aa802c` |
 | `docs/AGENT.md` | `742de4d9d5bd1a16768f64bbf4dbcb74a39a5b01fa7d9d1e6995ea6952c0e842` |
 | `docs/REVISAO-SEGURANCA.md` | `ec6923ac3abbe8e4235db73c8b1472558be1336d6d4d6b621b3cb91512ed4a2b` |
 | `docs/SEGURANCA-SHELL.md` | `e59baca3c3023bb318dd231bce712fd6612524794fa9c5054f592ce772c19fd6` |
-| `docs/PARIDADE.md` | `743a56d11e33044d4c15558ba3f8a576c59e6209264a5db0f9dff99282497c2c` |
+| `docs/PARIDADE.md` | `90a596edb1009dcccfc1d58b6999df9db56a6bd85f2ed0b329a9feb8e74f13a3` |
 | `AGENTS.md` | `678a2473998cab86146a1b4b4fd8d6dda40bbc38d4a6d56a3c85d49c52e7e1f0` |
 
 ### Decisões de arquitetura (ADR)
@@ -59,6 +59,7 @@
 | `docs/adr/ADR-0010-extracao-markdown-e-llm-local-openai.md` | `f43edc306796e066f8a11d121fb13783d958390732a2d070b7361641cbb01dba` |
 | `docs/adr/ADR-0011-recuperacao-com-feedback-e-redacao-deterministica.md` | `e0aba289f6766663f9c42119ed3618297c6aaa4679308febe37683410db3c258` |
 | `docs/adr/ADR-0012-rubricas-e-persistencia-sqlite.md` | `314ed8ce7259f10ae0089510587a5684db3f76dd596088f665a7158757c907c4` |
+| `docs/adr/ADR-0013-historico-mensal-do-orcamento.md` | `b660a37592e73eb25f1988d47723d15c054753ce8f93864c636cc0d6d493c82e` |
 
 ### Contratos de dados
 
@@ -77,7 +78,7 @@
 | `core/estrategias.py` | `e46a4c078af1b37cabe79770481aee7f51f2384674afd5e17b27a13cbc8b04be` |
 | `core/extrator_pdf.py` | `bbfb0481a779d8dfd3a16bbcccd08c542c32112164ffef31216ad7f9dd706e13` |
 | `core/models.py` | `12315f3f20bf24b5d7d42606c912d88bf9796c60d4553d4da4d526a9a6e787d3` |
-| `core/rubricas.py` | `7f8b3d2a4ffca5b500a99178e427323c4b7d0e94a27f7b4a8fe1d2ff9dd846fa` |
+| `core/rubricas.py` | `3de212b1c695e0c346d9b3c4acbbc6bd7bf7e0e379e3d2f4e03f2cf4169a999e` |
 | `core/utils.py` | `f0f2e49d0f0ad59daed14ba63a39ee6aad49f9ce1bb1bffa341e05fa73c32cc1` |
 
 ### Agente sob guardrails (agent)
@@ -120,9 +121,9 @@
 |---|---|
 | `sidecar/__init__.py` | `0f55c31161b81aad9355fe5ad58fae8064defe1a7a7cfd238ed17e59073e5aad` |
 | `sidecar/__main__.py` | `69a09e86fd31bf4f18019b0438e1a05d7db8141e945c8787b4325e00878a48d4` |
-| `sidecar/app.py` | `cbb0039f5e6f078c52a1cbbdc6d67eae375648d62038302a7408840dacc5b399` |
-| `sidecar/persistencia.py` | `79615b7693d1ad7b82cf3c485bf625c3619293749361c484f6edb38eea58e13c` |
-| `sidecar/schemas.py` | `14be0da86e0cefc7f2ecf37099db2f49a9ed29b2cee9a032e4e8a95bd788664e` |
+| `sidecar/app.py` | `6f731390180e8bce6d96f41e88565730eb77e96f3a09d7426ce31a1abd3b2823` |
+| `sidecar/persistencia.py` | `1dc48eeec2602bfc8664febd23925b701aec95aabae278652011fb2239059938` |
+| `sidecar/schemas.py` | `3bd2fe4c4a6de5dbd9adb7b77e317d100078911f475f461ca46405bf74311abd` |
 | `sidecar/security.py` | `1a6396f0e09140f6e0a599613071cb80ffe0508fc0c223241d1046993d68081b` |
 
 ### GUI clássica (gui — fallback)
@@ -136,7 +137,7 @@
 
 | Artefato | SHA-256 |
 |---|---|
-| `gui_web/package.json` | `6d88d43d79afccbefb7b61973317f99359ea03e681b2d59aa833c3869d492336` |
+| `gui_web/package.json` | `1b3105a43676061f5b6f354be28a929696ded12c3182d91b871b3a6c33a6ddba` |
 | `gui_web/index.html` | `65d438e190c6a2eb076894d03bc2690dc7bc842d8ee58691c81690fb64555d8d` |
 | `gui_web/vite.config.ts` | `babedaf0e48959bea2faf692583ca7d63bd97739572284ca11c982c02c3816e3` |
 | `gui_web/playwright.config.ts` | `1fc12157bfc5c21d51f9f2ab7f237108a550501b387bcd7c3033081bb741ea29` |
@@ -146,30 +147,30 @@
 | `gui_web/src/components/CampoMoeda.tsx` | `a90bbe9a2dc1031299e31fa5f1c8fb5776484ab1fff4523be8cf43093b691d42` |
 | `gui_web/src/components/CampoPercent.tsx` | `08a26bc4de92e4c6b6c7eba76c1a2f3e8bc3e62aef591c57ac0a7ef2c0bb83c3` |
 | `gui_web/src/components/Icones.tsx` | `3c3e67df79b4a9f7323fe7589d2cf2fda34adf5323884e0b17c83b0a121d949d` |
-| `gui_web/src/hf/client.ts` | `76f6a5ef7fe322842449691bc9308bc41a996d378f66eb2584408671702c60bb` |
-| `gui_web/src/hf/contract.ts` | `0dc2085aa5803df1477ae2c7b3a13893a14308648a32916ac48c3e39f71dd168` |
+| `gui_web/src/hf/client.ts` | `211b60c0e0aaaf2a4f9916de770e2b818748acb8591412e29850d868a716ec87` |
+| `gui_web/src/hf/contract.ts` | `cb5c658b295ee959105fcc095327497c7b3a031ba4cc6c389717645992576ec2` |
 | `gui_web/src/hf/useAnalise.ts` | `96cceff3430ea2f151383a6820902c9b3cf7bf66a50a2c0c977fb9fec608782e` |
 | `gui_web/src/lib/format.ts` | `ea47dd440e7437ab296b0dc772d347c5dd7a689de4bf8ea1a8a49363116e9b2e` |
-| `gui_web/src/lib/orcamento.ts` | `e383f6224a1d9f2fca12087d5a6694a5eeee42fbdf014b566e3ca5a60791902d` |
+| `gui_web/src/lib/orcamento.ts` | `d5d082919ec4c408e7670250fe45ec638246d24883e23ef2df1b27b44b5988ba` |
 | `gui_web/src/main.tsx` | `908e625518862c14c075ebc584fd1e40a6390b908206f685f3d7d865361c887c` |
 | `gui_web/src/screens/Analise.tsx` | `2975630873fe0b2a17152b9d6052c17fd2e2e854bb008bd910ba28e7858a4d34` |
 | `gui_web/src/screens/Carta.tsx` | `dfe11757da61e7fdf8a3c8c2274d8d0acf2c64f467a4cf7882eeb710725d42c9` |
 | `gui_web/src/screens/Contrato.tsx` | `c8c45722217fccbd1f2d854479b9ba6b39852d349bf58be91e22bc578e5150e8` |
 | `gui_web/src/screens/Dividas.tsx` | `e5531e9041823be6d1a8a211266700e169f43825ba6b84c51ac1bcc15c838216` |
 | `gui_web/src/screens/Perfil.tsx` | `84a95595c2f30f84a0a6240ed77a17e9f53b6d3ae8e3dc1f3885670760e99834` |
-| `gui_web/src/screens/Planilha.tsx` | `e42f54c05028b5c7ae4980dfd7a125d7af82f981ef13fe59fc5ca6881b60df68` |
+| `gui_web/src/screens/Planilha.tsx` | `b0c3c6e1282866d352e3a22b7a6f293fb7cdd4f523e21e41345601f0dece5a90` |
 | `gui_web/src/screens/VisaoGeral.tsx` | `cabe2c56e24693bddf2c9b53c20d6644ffa7c8c083d29b509257a30fa7dc3140` |
 | `gui_web/src/vite-env.d.ts` | `7c5a44be51ba4f0e4c8e32b0d5cfee9657fca6092b1f6e00d99736b26f22b94f` |
-| `gui_web/src/styles.css` | `154db8c6296761611fd46d370ef8886708e59c54718dd5be41446d9bfbbfeb69` |
-| `gui_web/e2e/app.spec.ts` | `429b663a27e88897b27a0fb928199248c56df5508bdb099d513073c53e6bc258` |
-| `gui_web/e2e/empacotado.spec.ts` | `4f7fa119b141da58d21b1af5e1cee97ba60c2e78635a047102b8c0712bd43029` |
+| `gui_web/src/styles.css` | `712f02ab14e95819b79fed7f6536bb07356296fb5f8f3866ed1a126d4ec8f53c` |
+| `gui_web/e2e/app.spec.ts` | `283f04c19636ebf46a9c5262fe302ebcc6db18685d5504f75028916982832160` |
+| `gui_web/e2e/empacotado.spec.ts` | `d30f10d95bd0429c3793f0d9aba024090514e08dc9a3316e6cc399d96d2c5783` |
 
 ### Entrypoint, build e empacotamento
 
 | Artefato | SHA-256 |
 |---|---|
 | `main.py` | `a979656c100f6d12b02e0d625f6197a6b792769aab885f328631faedc019a448` |
-| `pyproject.toml` | `abfc31a267f263ec8350a7543e7913a0bc5ce9bf2996c19282f9665e3d0bcb79` |
+| `pyproject.toml` | `4a3d7ea150b5c19111f654cbfb97f107d0bb7a3d8cb911198edcbc90d7565d85` |
 | `SidecarHF.spec` | `481ffa76c037852d4323a21ee3f181de59ba899ee2bb6f6e965b2b1a34146b01` |
 | `scripts/sidecar_entry.py` | `c63c53e315cd42423f06832d120ab66c4ff66965bf038bfcf3012d638acae3d9` |
 
@@ -192,22 +193,22 @@
 | `tests/test_ollama_real.py` | `f916616d2aa130ff87a1cd91ac92ca8c56cf56c6b501d2ffea1bd1f3d9952fc0` |
 | `tests/test_orcamento.py` | `608b5e0afa36db0d573f23663971157dce42d7130fac3ebe42591f260f7c6fbe` |
 | `tests/test_outputs.py` | `009dc31f321d55083151d02f889715a4710bce747a06b2498256dd1e56afc6ff` |
-| `tests/test_persistencia.py` | `70bedbbe91b1decdf696ca2aa3f2b7aff75c31b081d48189ebc30684b190c650` |
+| `tests/test_persistencia.py` | `96357cde131dd5ffcea5dd6a333f23eadcbe33c180deefe699ae201de91665db` |
 | `tests/test_pii.py` | `9e0b052158b1f1af14f89c80bfcedc4be4c33d0e49bd40cebb29790d235c9dbc` |
 | `tests/test_propriedades.py` | `a3dceb73aa42df79840b9b44925e8c2d3a736faf9df697146e82029035dcb358` |
 | `tests/test_providers.py` | `35d28d15b8c3b1dc9bffe388c019ebbd4144a7a680feddd00061b00945e1e941` |
 | `tests/test_recuperacao.py` | `94129e9a3fcf8bca1d180bcc61ea23010107ffeedc15659db961565f666d15c9` |
-| `tests/test_rubricas.py` | `f3986fef30b5f3b1e02be8ec752510a36f696941c733352abf889c9570c3dd06` |
-| `tests/test_sidecar.py` | `487a48c55c16e72d6fd3aad7145ddbef90b5a1b830eeba48481689d3b0fdcca0` |
+| `tests/test_rubricas.py` | `924d721e22a126e3c2c90bb841f2ba3bea5655abd30bffbb71543c8cf255fb94` |
+| `tests/test_sidecar.py` | `ad55ecd6d0d4e706c4ffba25f91857216ad90dfca0d56f75d7206a98b7706b59` |
 | `tests/test_telemetria.py` | `f5750e70fe314e187d25f464ea0c5871c2a807e518821cb1a41a4ec1580bdbe8` |
 | `tests/test_validacao_texto.py` | `4c9482f0ea98fc9af46a3ea89d4f2262eda6a207e54da9d5ed322ecebdfce3e7` |
 
-## Binários empacotados (rebuild do T-1106, nesta data)
+## Binários empacotados (rebuild do T-1204, nesta data)
 
 | Artefato | SHA-256 | Tamanho |
 |---|---|---|
-| `gui_web/release/Helper Financeiro Setup 2.4.0.exe` | `45bb1de78dd01faa24782e1755ff7ef4303dd20b16fcc042c8906cd216cb006c` | 172,0 MB |
-| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `e1b6b392961ecb65db6ddb8d248985beb0ae07aae3cc95ddb9bb7dd645e66349` | 35,0 MB |
+| `gui_web/release/Helper Financeiro Setup 2.5.0.exe` | `6502103f9684fbfba77c220ff80f4f252957ba52dda2a36b1eb0eebeb74d746c` | 172,0 MB |
+| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `831add5fb2fa22a66945f5a8c7b45fe02e122afa79d43c55f98bea510c09be03` | 35,0 MB |
 
 > Os binários não são versionados no git (`dist/` e `gui_web/release/` no
 > `.gitignore`); os hashes identificam o build desta ata (PyInstaller 6.x +
@@ -215,15 +216,16 @@
 > `SEGURANCA-SHELL.md`). Rebuild em outra máquina/data produz hash diferente —
 > regenere com `uv run --group build pyinstaller SidecarHF.spec --noconfirm` e
 > `npm run dist`, e registre em nova ata. Validado pelo smoke
-> `e2e/empacotado.spec.ts` (app real abre e exibe o diagnóstico).
+> `e2e/empacotado.spec.ts` (app real abre e exibe o diagnóstico; banco
+> isolado por `HF_DB_PATH`).
 
 ## Estado do harness no congelamento
 
 ```text
-207 passed, 3 deselected (suíte offline — Gate A)
-Cobertura: 96,4% (piso de 90% no CI)
-E2E Playwright: 9 passed (8 cenários no app dev + 1 smoke do pacote real),
-banco isolado por HF_DB_PATH
+219 passed, 3 deselected (suíte offline — Gate A)
+Cobertura: 96,5% (piso de 90% no CI)
+E2E Playwright: 11 passed (10 cenários no app dev + 1 smoke do pacote real),
+banco isolado por HF_DB_PATH — inclusive no smoke do pacote
 Gate Front (CI): ESLint + tsc + build Vite verdes
 ```
 

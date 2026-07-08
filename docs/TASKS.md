@@ -193,7 +193,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1201 | ADR-0013 + bump 2.5.0 + core `comparar_orcamentos` + snapshot no repositório (arquivar/listar/carregar competência) + testes | REQ-F-019 | — | ✅ |
 | T-1202 | Endpoints `/historico` no sidecar (arquivar, listar, snapshot, comparar vs mês ou vs vivo) + testes de contrato | REQ-F-019 | T-1201 | ✅ |
 | T-1203 | GUI: botão "Arquivar mês" + painel de histórico/comparação na Planilha; sugestões de rubrica via `datalist` + E2E | REQ-F-019/020 | T-1202 | ✅ |
-| T-1204 | Fechamento do ciclo: gates, ata `FREEZE.md` v2.5.0 e docs sincronizados | Processo | todos | ⬜ |
+| T-1204 | Fechamento do ciclo: gates, ata `FREEZE.md` v2.5.0 e docs sincronizados | Processo | todos | ✅ |
 
 ---
 
@@ -203,6 +203,37 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
+**Ciclo v2.5 FECHADO E CONGELADO (`FREEZE.md` v2.5.0, ADR-0013)** — o
+orçamento ganhou a dimensão TEMPO. **T-1201 ✅**: ADR-0013 + bump 2.5.0;
+`core/rubricas.py` ganhou `validar_mes` (competência `AAAA-MM`) e
+`comparar_orcamentos` (deltas + variação % por campo/seção, arredondamento no
+core); `sidecar/persistencia.py` ganhou snapshot por competência
+(`arquivar_mes` — perfil em `estado['perfil:AAAA-MM']` + cópia das rubricas
+vivas com `mes` preenchido, rearquivar substitui; `listar_meses`,
+`carregar_mes`, `rubricas_do_mes`), sem migração de schema (a coluna `mes`
+estava reservada desde o v2.4). **T-1202 ✅**: endpoints `/historico` no
+sidecar (arquivar, listar, snapshot por mês com 404 sem competência, comparar
+mês vs mês ou mês vs orçamento vivo) + testes de contrato ("mercado subiu
+12,5%"). **T-1203 ✅**: seção **Histórico mensal** na Planilha (arquivar a
+competência atual, dois seletores de comparação, deltas com cor semântica:
+renda subir = verde, despesa subir = vermelho — tudo formatação, números do
+core) e **sugestões de nome de rubrica** por campo via `datalist` nativo
+(lista estática local, sem rede); E2E ganhou os cenários "histórico" e
+"sugestões" (10 passed no app dev). **T-1204 ✅ — CICLO v2.5 FECHADO**: gates
+verdes (219 passed, cobertura 96,5%; gate-front ok; E2E 11 passed incluindo o
+smoke do pacote real — que agora roda com **banco isolado** por `HF_DB_PATH`:
+desde a persistência v2.4 ele lia o banco REAL do usuário em `%APPDATA%`),
+binários reconstruídos (sidecar PyInstaller + instalador NSIS 2.5.0), docs
+sincronizados (SPEC REQ-F-019/020, HARNESS 2.5.0, PARIDADE §7, INDEX, README)
+e nova ata **`FREEZE.md` v2.5.0** com SHA-256 de todos os artefatos e dos
+binários. Qualquer mudança nos artefatos congelados exige nova ADR +
+incremento de versão + nova ata. Candidatos ao próximo ciclo: code signing
+(exige certificado do mantenedor), OCR para PDF escaneado, importação CSV
+classificada pela LLM, gráfico de evolução por categoria, histórico no
+`.xlsx`.
+
+### Histórico do ciclo v2.4 (fechado)
+
 **Ciclo v2.4 ABERTO (ADR-0012)** — rubricas do orçamento (subcampos criados
 pelo usuário, roll-up no core) + persistência local SQLite no sidecar
 (`%APPDATA%\HelperFinanceiro\dados.db`, `HF_DB_PATH` p/ testes). Decisões do

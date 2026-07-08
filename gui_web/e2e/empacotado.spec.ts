@@ -8,6 +8,7 @@
  * de distribuição.
  */
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { _electron as electron, expect, test } from '@playwright/test'
@@ -26,7 +27,17 @@ test.skip(
 )
 
 test('app empacotado sobe o sidecar congelado e mostra o diagnóstico', async () => {
-  const app = await electron.launch({ executablePath: EXE, args: [] })
+  // Banco ISOLADO (T-1204): desde a persistência (v2.4) o app hidrata o
+  // estado salvo — sem HF_DB_PATH o smoke leria (e reescreveria) o banco
+  // REAL do usuário em %APPDATA%, e as asserções do seed não valeriam.
+  const app = await electron.launch({
+    executablePath: EXE,
+    args: [],
+    env: {
+      ...process.env,
+      HF_DB_PATH: path.join(os.tmpdir(), `hf-e2e-pacote-${Date.now()}.db`),
+    },
+  })
   try {
     const win = await app.firstWindow()
     // O hero só aparece quando o sidecar (exe PyInstaller) respondeu.

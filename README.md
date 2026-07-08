@@ -9,6 +9,9 @@ React) falando com o núcleo Python por um **sidecar local**; a janela tkinter
 clássica segue como fallback (`--tkinter`). O ciclo v2.4 (ADR-0012) trouxe o
 **orçamento detalhado por rubricas** (planilha editável dentro do app) e a
 **persistência local**: perfil, dívidas e rubricas ficam salvos entre sessões.
+O ciclo v2.5 (ADR-0013) adicionou o **histórico mensal**: arquive a
+competência e compare os meses ("seu mercado subiu 12,5%"), com sugestões de
+nomes ao criar rubricas.
 
 ---
 

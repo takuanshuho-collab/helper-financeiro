@@ -95,6 +95,14 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   rubricas) DEVE ser **persistido localmente** (SQLite gerido pelo sidecar em
   `%APPDATA%\HelperFinanceiro\dados.db`; `HF_DB_PATH` sobrescreve p/ testes),
   com hidratação no boot e auto-save — o app lembra o usuário entre sessões.
+- **REQ-F-019 (v2.5, ADR-0013)** — O usuário PODE **arquivar a competência**
+  (`AAAA-MM`): snapshot imutável do perfil + rubricas (rearquivar substitui);
+  o sistema DEVE **comparar competências** (ou uma competência com o
+  orçamento vivo) campo a campo — valor anterior, atual, delta e variação
+  percentual calculados no `core`.
+- **REQ-F-020 (v2.5, ADR-0013)** — Ao nomear uma rubrica, a GUI DEVE oferecer
+  **sugestões locais** de nomes comuns por campo (autocompletar nativo, sem
+  rede).
 
 ## 2. Requisitos do Agente (LLM)
 

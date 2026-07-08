@@ -1,6 +1,6 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.4.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.5.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
@@ -116,4 +116,6 @@ ruff → mypy → pytest com piso de cobertura de **90%** (catraca: só sobe).
 | REQ-F-010..016 (6 telas, paridade tkinter↔web — T-905) | `gui_web/e2e/app.spec.ts` (+ `docs/PARIDADE.md`) |
 | REQ-F-017 (rubricas: roll-up no core, CRUD, aba no .xlsx — v2.4/ADR-0012) | `tests/test_rubricas.py`, `tests/test_sidecar.py::test_rubrica_*`, `tests/test_outputs.py::test_planilha_com_rubricas_ganha_aba_orcamento`, E2E "planilha" |
 | REQ-F-018 (persistência local SQLite: hidratação + auto-save — v2.4/ADR-0012) | `tests/test_persistencia.py`, `tests/test_sidecar.py::test_estado_*`, E2E "persistência" |
+| REQ-F-019 (histórico mensal: arquivar competência + comparar — v2.5/ADR-0013) | `tests/test_rubricas.py::test_comparar_*`, `tests/test_persistencia.py::test_arquivar_*`, `tests/test_sidecar.py::test_historico_*`, E2E "histórico" |
+| REQ-F-020 (sugestões de nome de rubrica via datalist — v2.5/ADR-0013) | E2E "sugestões" (conveniência de front, sem número) |
 | T-1001 (pacote real: Electron + sidecar congelado) | `gui_web/e2e/empacotado.spec.ts` (`HF_E2E_PACOTE=1`) |

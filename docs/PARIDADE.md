@@ -81,6 +81,8 @@ Legenda: ✅ paridade plena · ✨ web supera o tkinter · Δ mudou de lugar (se
 | Persistência local (perfil + dívidas + rubricas em SQLite; hidratação + auto-save) | Sidecar (`/estado`) + `App.tsx` | ✨ | E2E "persistência" + `tests/test_persistencia.py` + `test_estado_*` |
 | Rubricas por campo do orçamento (roll-up no core; campo detalhado somente-leitura com selo) | Planilha de orçamento (sub-tela do Perfil) | ✨ | E2E "planilha" + `tests/test_rubricas.py` + `test_rubrica_*` |
 | Rubricas no export `.xlsx` (aba "Orçamento detalhado", subtotais =SUM) | `outputs/planilha.py` | ✨ | `test_planilha_com_rubricas_ganha_aba_orcamento` + `test_exportar_planilha_inclui_rubricas_salvas` |
+| Histórico mensal: arquivar competência + comparação com deltas/% do core (v2.5, ADR-0013) | Planilha, seção "Histórico mensal" | ✨ | E2E "histórico" + `test_historico_*` |
+| Sugestões de nome de rubrica (datalist local, v2.5) | Planilha, linhas de rubrica | ✨ | E2E "sugestões" |
 
 ## Limitações conhecidas do E2E
 
