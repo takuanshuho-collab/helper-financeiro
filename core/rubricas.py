@@ -13,7 +13,7 @@ demais endpoints seguem recebendo o perfil simples, já consistente.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, fields
 
 from .models import ComposicaoRenda, DespesasFixas, DespesasVariaveis
@@ -165,6 +165,48 @@ def comparar_orcamentos(antes: dict, depois: dict) -> dict:
             "campos": linhas,
         })
     return {"secoes": secoes}
+
+
+def serie_evolucao(snapshots: Sequence[tuple[str, dict]]) -> dict:
+    """Competências arquivadas → séries prontas para o gráfico (REQ-F-022).
+
+    Recebe pares (competência, perfil) e devolve, já em ordem cronológica
+    (o 'AAAA-MM' ordena lexicograficamente):
+
+    {"meses": [...], "secoes": [{categoria, rotulo, totais: [...],
+      campos: [{campo, rotulo, valores: [...]}]}]}
+
+    O total da seção sai sempre (eixo estável do gráfico macro); campo
+    zerado em TODOS os meses fica de fora (ruído no zoom). Toda posição das
+    listas casa com `meses` — a GUI só desenha (REQ-NF-005).
+    """
+    ordenados = sorted(snapshots, key=lambda par: par[0])
+    for mes, _ in ordenados:
+        validar_mes(mes)
+    meses = [mes for mes, _ in ordenados]
+    secoes = []
+    for categoria, campos in CAMPOS_POR_CATEGORIA.items():
+        totais = [0.0] * len(ordenados)
+        linhas = []
+        for campo in campos:
+            valores = []
+            for i, (_, perfil) in enumerate(ordenados):
+                valor = float((perfil.get(categoria) or {}).get(campo) or 0.0)
+                totais[i] += valor
+                valores.append(round(valor, 2))
+            if any(valores):
+                linhas.append({
+                    "campo": campo,
+                    "rotulo": ROTULO_CAMPO[categoria][campo],
+                    "valores": valores,
+                })
+        secoes.append({
+            "categoria": categoria,
+            "rotulo": ROTULO_CATEGORIA[categoria],
+            "totais": [round(total, 2) for total in totais],
+            "campos": linhas,
+        })
+    return {"meses": meses, "secoes": secoes}
 
 
 def aplicar_somas(perfil: dict, somas: dict[str, dict[str, float]]) -> dict:

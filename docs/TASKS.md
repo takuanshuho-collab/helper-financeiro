@@ -195,6 +195,22 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1203 | GUI: botão "Arquivar mês" + painel de histórico/comparação na Planilha; sugestões de rubrica via `datalist` + E2E | REQ-F-019/020 | T-1202 | ✅ |
 | T-1204 | Fechamento do ciclo: gates, ata `FREEZE.md` v2.5.0 e docs sincronizados | Processo | todos | ✅ |
 
+## Milestone M13 — Importação de CSV, evolução e histórico no .xlsx (v2.6, ADR-0014)
+
+> Primeira mudança pós-freeze v2.5.0, autorizada pela ADR-0014. O caminho
+> CSV → rubricas (parse determinístico no core + LLM local SÓ rotulando +
+> revisão humana), o gráfico de evolução das competências arquivadas e a
+> aba de histórico no export `.xlsx`.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1301 | ADR-0014 + bump 2.6.0 + core: parser CSV determinístico (`core/extrato.py` — separador/encoding, colunas por cabeçalho ou conteúdo, valores BR/US, agrupamento por estabelecimento, competência sugerida) + `serie_evolucao` + testes | REQ-F-021/022 | — | ✅ |
+| T-1302 | Classificação LLM local (`índice → campo`, valor NUNCA vem do modelo; sem LLM degrada p/ manual — P8) + endpoints de importação no sidecar + aplicação como rubricas na competência escolhida + testes | REQ-F-021 | T-1301 | ⬜ |
+| T-1303 | GUI importação: drop-zone CSV, painel de revisão (grupo + dropdown de campo + seletor de competência), aplicar → rubricas + E2E | REQ-F-021 | T-1302 | ⬜ |
+| T-1304 | Gráfico de evolução: `GET /historico/evolucao` + SVG próprio na Planilha (totais por seção + zoom por campo, tema claro/escuro) + E2E | REQ-F-022 | T-1301 | ⬜ |
+| T-1305 | Histórico no `.xlsx`: aba "Evolução mensal" (campos × competências, totais =SUM, gráfico nativo) + Gate B + SPEC/PARIDADE/HARNESS sincronizados | REQ-F-023 | T-1301 | ⬜ |
+| T-1306 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.6.0 e docs sincronizados | Processo | todos | ⬜ |
+
 ---
 
 ## Definição de Pronto (DoD)
@@ -203,6 +219,25 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
+**Ciclo v2.6 ABERTO (ADR-0014, M13)** — importação de CSV classificada por
+LLM local, gráfico de evolução e histórico no `.xlsx`. Decisões do
+mantenedor: lançamentos **agrupados por estabelecimento**, destino com
+**escolha da competência** (sugerida pelas datas), **degradação para
+classificação manual** sem LLM (P8), gráfico com **totais por seção + zoom
+por campo**. **T-1301 ✅**: ADR-0014 + bump 2.6.0 (pyproject, sidecar,
+gui_web); `core/extrato.py` nasce como fonte única do parse
+(`ler_extrato_csv`: separador `,`/`;`/tab, colunas por cabeçalho pt/en ou
+inferidas pelo conteúdo, valores BR e internacionais, datas BR/ISO;
+`normalizar_estabelecimento` agrupa "UBER *TRIP 8291"+"...4415" → "Uber
+Trip"; sinais mistos = extrato de conta, sinal único = fatura; competência
+sugerida pela moda das datas; linha ilegível vira AVISO, nunca exceção) e
+`core.rubricas.serie_evolucao` (séries por seção + por campo, alinhadas a
+`meses`, campo todo zerado fora, seção sempre presente). 14 testes novos
+(233 passed). Próximo: **T-1302** (classificação LLM local `índice → campo`
++ endpoints de importação no sidecar).
+
+### Histórico do ciclo v2.5 (fechado)
+
 **Ciclo v2.5 FECHADO E CONGELADO (`FREEZE.md` v2.5.0, ADR-0013)** — o
 orçamento ganhou a dimensão TEMPO. **T-1201 ✅**: ADR-0013 + bump 2.5.0;
 `core/rubricas.py` ganhou `validar_mes` (competência `AAAA-MM`) e

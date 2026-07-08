@@ -12,6 +12,7 @@ from core.rubricas import (
     Rubrica,
     aplicar_somas,
     comparar_orcamentos,
+    serie_evolucao,
     somas_por_campo,
     validar_mes,
     validar_rubrica,
@@ -157,3 +158,56 @@ def test_comparar_orcamentos_omite_campos_zerados():
     # As 3 seções sempre existem (mesmo vazias), para a GUI ser estável.
     assert [s["categoria"] for s in comp["secoes"]] == [
         "renda", "fixas", "variaveis"]
+
+
+# ------------------------------------------ evolução (ADR-0014, REQ-F-022)
+def test_serie_evolucao_ordena_e_alinha_com_os_meses():
+    # Entrada FORA de ordem: a série sai cronológica ('AAAA-MM' ordena só).
+    serie = serie_evolucao([
+        ("2026-07", {"variaveis": {"mercado": 900.0}}),
+        ("2026-05", {"variaveis": {"mercado": 750.0}}),
+        ("2026-06", {"variaveis": {"mercado": 800.0}}),
+    ])
+    assert serie["meses"] == ["2026-05", "2026-06", "2026-07"]
+    variaveis = next(
+        s for s in serie["secoes"] if s["categoria"] == "variaveis")
+    mercado = next(c for c in variaveis["campos"] if c["campo"] == "mercado")
+    assert mercado["valores"] == [750.0, 800.0, 900.0]
+    assert mercado["rotulo"] == "Mercado"
+    # O total da seção acompanha (aqui só há um campo).
+    assert variaveis["totais"] == [750.0, 800.0, 900.0]
+
+
+def test_serie_evolucao_total_soma_os_campos_da_secao():
+    serie = serie_evolucao([
+        ("2026-06", {"fixas": {"moradia": 1400.0, "contas_casa": 300.5}}),
+        ("2026-07", {"fixas": {"moradia": 1400.0, "contas_casa": 349.5}}),
+    ])
+    fixas = next(s for s in serie["secoes"] if s["categoria"] == "fixas")
+    assert fixas["totais"] == [1700.5, 1749.5]
+
+
+def test_serie_evolucao_omite_campo_zerado_mas_mantem_secao():
+    # Campo zerado em todos os meses fica fora do zoom; a seção sai sempre
+    # (mesmo com total 0) para o eixo do gráfico macro ser estável.
+    serie = serie_evolucao([("2026-07", {"fixas": {"moradia": 1400.0}})])
+    fixas = next(s for s in serie["secoes"] if s["categoria"] == "fixas")
+    assert [c["campo"] for c in fixas["campos"]] == ["moradia"]
+    renda = next(s for s in serie["secoes"] if s["categoria"] == "renda")
+    assert renda["campos"] == []
+    assert renda["totais"] == [0.0]
+    assert [s["categoria"] for s in serie["secoes"]] == [
+        "renda", "fixas", "variaveis"]
+
+
+def test_serie_evolucao_vazia_e_mes_invalido():
+    assert serie_evolucao([]) == {"meses": [], "secoes": [
+        {"categoria": "renda", "rotulo": "Renda líquida mensal",
+         "totais": [], "campos": []},
+        {"categoria": "fixas", "rotulo": "Despesas fixas",
+         "totais": [], "campos": []},
+        {"categoria": "variaveis", "rotulo": "Despesas variáveis",
+         "totais": [], "campos": []},
+    ]}
+    with pytest.raises(ValueError, match="Competência inválida"):
+        serie_evolucao([("julho", {})])
