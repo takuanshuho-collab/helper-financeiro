@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import re
 import threading
 from typing import Annotated
@@ -22,9 +23,11 @@ from agent.config import ConfigAgente, carregar_config
 from agent.exibicao import ROTULOS_EXTRACAO, campos_para_formulario, preparar_exibicao
 from agent.extracao import Extrator, confirmar_extracao, iniciar_extracao
 from agent.ingestao import preparar_contexto
+from agent.ocr import Motor, OCRIndisponivel, obter_motor, ocr_documento
 from agent.provider import LLMProvider
 from contracts import SecaoIA
 from core.diagnostico import resumo_diagnostico
+from core.documento import FonteDocumento, fonte_por_extensao
 from core.estrategias import (
     comparar_estrategias,
     gerar_recomendacoes,
@@ -80,10 +83,16 @@ app = FastAPI(title="Helper Financeiro — sidecar", version="2.7.0")
 # Chaves do resumo que carregam objetos `Divida` (precisam de serialização).
 _CHAVES_OBJETO = ("divida_mais_cara", "ranking")
 
+log = logging.getLogger("helper_financeiro.sidecar")
+
 # Documento sem texto selecionável (provável digitalização/imagem).
 AVISO_PDF_SEM_TEXTO = (
     "O PDF parece não conter texto selecionável (provavelmente é uma imagem/"
     "digitalização). Preencha os campos manualmente na aba Dívidas."
+)
+AVISO_OCR_INDISPONIVEL = (
+    "Não foi possível ler o documento escaneado: o motor de OCR não está "
+    "disponível. Preencha os campos manualmente na aba Dívidas."
 )
 
 
@@ -634,6 +643,34 @@ def contexto_extracao() -> tuple[ConfigAgente | None, Extrator | None]:
     return None, None
 
 
+def contexto_ocr() -> Motor | None:
+    """Dependência do motor de OCR (sobrescrita nos testes).
+
+    Produção devolve `None`: o motor real é construído **sob demanda** por
+    `_motor_ocr_singleton` (só quando há um scan de verdade — carregar os modelos
+    PP-OCRv6 é caro), nunca no DI. Os testes injetam um motor falso.
+    """
+    return None
+
+
+_motor_ocr: Motor | None = None
+_motor_ocr_tentado = False
+
+
+def _motor_ocr_singleton() -> Motor | None:
+    """Singleton preguiçoso do RapidOCR: cria uma vez, reusa entre requisições.
+    Devolve `None` se o motor não puder ser criado (o endpoint degrada, P8)."""
+    global _motor_ocr, _motor_ocr_tentado
+    if not _motor_ocr_tentado:
+        _motor_ocr_tentado = True
+        try:
+            _motor_ocr = obter_motor()
+        except OCRIndisponivel as e:
+            log.warning("Motor de OCR indisponível: %s", e)
+            _motor_ocr = None
+    return _motor_ocr
+
+
 def _campo(valor: object) -> dict:
     """Adapta um valor do parse clássico ao formato de `campos_para_formulario`."""
     return {"valor": valor, "trecho_fonte": "", "confianca": 0.0}
@@ -741,31 +778,57 @@ def _diag_llm(cfg: ConfigAgente | None) -> dict:
 def contrato_extrair(
     entrada: ContratoIn,
     ctx: tuple[ConfigAgente | None, Extrator | None] = Depends(contexto_extracao),
+    motor_ocr: Annotated[Motor | None, Depends(contexto_ocr)] = None,
 ) -> dict:
-    """Extrai os campos de um contrato PDF LOCALMENTE, com citação (REQ-F-014).
+    """Extrai os campos de um contrato LOCALMENTE, com citação (REQ-F-014/024).
 
-    O PDF (com PII) é decodificado em memória e nunca sai da máquina (H2).
-    Tenta a extração assistida por IA local — quote-check + checagem cruzada +
-    `interrupt` para confirmação humana; se indisponível, cai na extração
-    clássica por regex (determinística, sem citação). O texto cru nunca vira
-    fato: só campos tipados e confirmados alimentam o perfil (REQ-GRD-005).
+    O documento (com PII) é decodificado em memória e nunca sai da máquina (H2).
+    PDF com texto: lê direto. **PDF escaneado ou imagem**: OCR local (RapidOCR +
+    PP-OCRv6, ADR-0015) — se o motor faltar, degrada para preenchimento manual
+    (P8). Depois tenta a extração assistida por IA local — quote-check tolerante
+    ao ruído de glifo do OCR + checagem cruzada + `interrupt` para confirmação
+    humana; senão, extração clássica por regex. O texto cru nunca vira fato: só
+    campos tipados e confirmados alimentam o perfil (REQ-GRD-005).
     """
     cfg, extrator = ctx
     llm = _diag_llm(cfg)
     try:
         dados = base64.b64decode(entrada.pdf_base64, validate=True)
     except (binascii.Error, ValueError) as e:
-        raise HTTPException(status_code=422, detail="PDF invalido (base64).") from e
+        raise HTTPException(status_code=422, detail="Documento invalido (base64).") from e
 
-    texto_plano = extrair_texto_pdf_bytes(dados)
-    if len(texto_plano.strip()) < 40:
+    # Fonte do documento (ADR-0015, detecção determinística): imagem pela
+    # extensão; PDF sem camada de texto (< 40 chars) = escaneado. Ambos ⇒ OCR.
+    eh_imagem = fonte_por_extensao(entrada.nome) is FonteDocumento.IMAGEM
+    texto_plano = "" if eh_imagem else extrair_texto_pdf_bytes(dados)
+    ocr_usado = False
+    if eh_imagem or len(texto_plano.strip()) < 40:
+        motor = motor_ocr if motor_ocr is not None else _motor_ocr_singleton()
+        if motor is None:  # documento escaneado, mas sem motor de OCR ⇒ P8
+            return {"modo": "vazio", "thread_id": None, "campos": [],
+                    "descartados": [], "inconsistencias": [],
+                    "motivos": ["OCR_INDISPONIVEL"], "aviso": AVISO_OCR_INDISPONIVEL,
+                    "ocr": False, "llm": llm}
+        try:
+            texto_plano = ocr_documento(dados, entrada.nome, motor=motor).texto
+        except Exception as e:  # noqa: BLE001 — documento ilegível ⇒ P8, nunca 500
+            log.warning("Falha no OCR de %r: %s", entrada.nome, e)
+            return {"modo": "vazio", "thread_id": None, "campos": [],
+                    "descartados": [], "inconsistencias": [],
+                    "motivos": [f"OCR_FALHOU:{type(e).__name__}"],
+                    "aviso": AVISO_OCR_INDISPONIVEL, "ocr": False, "llm": llm}
+        ocr_usado = True
+
+    if len(texto_plano.strip()) < 40:  # nem OCR achou texto legível
         return {"modo": "vazio", "thread_id": None, "campos": [],
                 "descartados": [], "inconsistencias": [], "motivos": [],
-                "aviso": AVISO_PDF_SEM_TEXTO, "llm": llm}
+                "aviso": AVISO_PDF_SEM_TEXTO, "ocr": ocr_usado, "llm": llm}
 
     # Texto plano (não Markdown) para a LLM: prompt mais enxuto e citações limpas
-    # (sem `#`/`**`), decisivo em modelos locais lentos. O mesmo texto plano
-    # alimenta o regex clássico. Ver ADR-0010 (refinamento).
+    # (sem `#`/`**`), decisivo em modelos locais lentos. O texto CRU vira o
+    # `documento` do quote-check e alimenta o regex clássico; a pré-marcação por
+    # tipo (REQ-F-025) é aplicada só no PROMPT, dentro de `montar_prompt_extracao`
+    # (não pode entrar no quote-check — a tag partiria a citação). Ver ADR-0010/0015.
     contexto = _contexto_seguro(texto_plano, cfg)
     _tid, estado = iniciar_extracao(contexto, cfg=cfg, extrator=extrator)
     if "__interrupt__" in estado:  # o grafo pausou para a confirmação humana
@@ -779,7 +842,7 @@ def contrato_extrair(
                 "campos": _form_para_lista(form),
                 "descartados": payload["descartados"],
                 "inconsistencias": payload["inconsistencias"], "motivos": [],
-                "aviso": "", "llm": llm}
+                "aviso": "", "ocr": ocr_usado, "llm": llm}
 
     # IA local indisponível ⇒ extração clássica (regex, sem citação verificável).
     # `motivos` diz POR QUE a IA não rodou (ex.: ERRO_PROVIDER:URLError = servidor
@@ -787,7 +850,7 @@ def contrato_extrair(
     form = campos_para_formulario(_classico_para_campos(parsear_campos(texto_plano)))
     return {"modo": "classico", "thread_id": None, "campos": _form_para_lista(form),
             "descartados": [], "inconsistencias": [],
-            "motivos": estado.get("motivos") or [], "aviso": "", "llm": llm}
+            "motivos": estado.get("motivos") or [], "aviso": "", "ocr": ocr_usado, "llm": llm}
 
 
 @app.post("/contrato/confirmar", dependencies=[Depends(exigir_token)])

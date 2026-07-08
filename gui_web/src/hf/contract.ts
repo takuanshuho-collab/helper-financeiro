@@ -360,6 +360,7 @@ export interface ContratoExtraidoOut {
   inconsistencias: string[] // ["CRUZADA_PRICE:parcela", ...]
   motivos: string[] // por que a IA não rodou (ex.: "ERRO_PROVIDER:URLError")
   aviso: string
+  ocr: boolean // documento escaneado/imagem lido por OCR local (ADR-0015)
   llm: DiagLlm // alvo efetivo da LLM (para diagnóstico)
 }
 

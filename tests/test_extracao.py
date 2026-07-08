@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from agent.config import ConfigAgente
 from agent.extracao import (
+    _desglifar_numeros,
     confirmar_extracao,
     iniciar_extracao,
     verificar_extracao,
@@ -147,6 +148,58 @@ def test_quote_check_ainda_pega_alucinacao_com_normalizacao_tolerante():
     v = verificar_extracao(extracao, DOC_CONTRATO)
     assert v.extracao.taxa_mensal is None
     assert "taxa_mensal:SEM_FONTE" in v.descartados
+
+
+# ---------------------------------------- trave de citação tolerante a OCR (ADR-0015)
+# OCR leu o dígito 0 como a letra O na linha da parcela; o resto veio limpo.
+DOC_OCR = DOC_CONTRATO.replace("R$ 945,60", "R$ 945,6O")
+
+
+def test_desglifar_so_afeta_tokens_numericos():
+    """Colapsa glifo de OCR DENTRO de número; palavras ficam intactas (sem
+    manufaturar dígitos a partir de 'Banco'/'juros')."""
+    assert _desglifar_numeros("R$ 6OO,OO") == "R$ 600,00"
+    assert _desglifar_numeros("1.OOO,OO") == "1.000,00"
+    assert _desglifar_numeros("Banco Alfa S.A.") == "Banco Alfa S.A."
+    assert _desglifar_numeros("juros") == "juros"
+
+
+def test_valor_lido_com_glifo_de_ocr_confere():
+    """Parcela lida como 'R$ 945,6O' (letra O) ainda casa com o valor 945,60."""
+    extracao = extracao_fiel()
+    assert extracao.parcela is not None
+    extracao.parcela.trecho_fonte = "Valor da parcela mensal: R$ 945,6O"
+    v = verificar_extracao(extracao, DOC_OCR)
+    assert v.extracao.parcela is not None
+    assert not any(d.startswith("parcela:") for d in v.descartados)
+
+
+def test_glifo_de_ocr_nao_afrouxa_h1():
+    """A tolerância a glifo NÃO pode sustentar um valor inexistente (H1)."""
+    extracao = extracao_fiel()
+    assert extracao.parcela is not None
+    extracao.parcela.valor = 111.0  # trecho lido diz 945,6O
+    extracao.parcela.trecho_fonte = "Valor da parcela mensal: R$ 945,6O"
+    v = verificar_extracao(extracao, DOC_OCR)
+    assert v.extracao.parcela is None
+    assert "parcela:VALOR_DIVERGE_DA_FONTE" in v.descartados
+
+
+def test_prompt_marca_candidatos_por_tipo():
+    """REQ-F-025: o PROMPT recebe a pré-marcação por tipo (ajuda em OCR ruidoso)."""
+    prompt = montar_prompt_extracao(DOC_CONTRATO)
+    assert "<valor>R$ 10.000,00</valor>" in prompt
+    assert "<percentual>2,00%</percentual>" in prompt
+
+
+def test_quote_check_ignora_tags_ecoadas_na_citacao():
+    """Se o modelo copiar as tags no trecho, o quote-check ainda casa (doc cru)."""
+    extracao = extracao_fiel()
+    assert extracao.saldo_devedor is not None
+    extracao.saldo_devedor.trecho_fonte = "Saldo devedor atual: <valor>R$ 10.000,00</valor>"
+    v = verificar_extracao(extracao, DOC_CONTRATO)
+    assert v.extracao.saldo_devedor is not None
+    assert not any(d.startswith("saldo_devedor:") for d in v.descartados)
 
 
 # ------------------------------------------------------------- grafo (interrupt)

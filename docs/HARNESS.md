@@ -121,8 +121,8 @@ ruff → mypy → pytest com piso de cobertura de **90%** (catraca: só sobe).
 | REQ-F-021 (importação CSV: parse determinístico, LLM só rotula, travas, degradação p/ manual — v2.6/ADR-0014) | `tests/test_extrato.py`, `tests/test_classificacao.py`, `tests/test_sidecar.py::test_importar_*`, E2E "importação" |
 | REQ-F-022 (gráfico de evolução: séries do core — v2.6/ADR-0014) | `tests/test_rubricas.py::test_serie_evolucao_*`, `tests/test_sidecar.py::test_historico_evolucao_*`, E2E "evolução" |
 | REQ-F-023 (histórico no .xlsx: aba "Evolução mensal", Gate B — v2.6/ADR-0014) | `tests/test_outputs.py::test_planilha_com_historico_ganha_aba_evolucao`, `tests/test_sidecar.py::test_exportar_planilha_inclui_historico_arquivado` |
-| REQ-F-024 (detecção determinística de fonte + bifurcação p/ OCR — v2.7/ADR-0015) | `tests/test_documento.py` (detector), `tests/test_ocr.py` (motor — T-1402) |
-| REQ-F-025 (pré-marcação por tipo + citação normalizada de OCR — v2.7/ADR-0015) | `tests/test_documento.py::test_anotar_*`, `tests/test_extracao.py` (citação normalizada — T-1403) |
+| REQ-F-024 (detecção determinística de fonte + bifurcação p/ OCR — v2.7/ADR-0015) | `tests/test_documento.py` (detector), `tests/test_ocr.py` (motor), `tests/test_sidecar.py::test_contrato_imagem_ocr_extrai` / `::test_contrato_pdf_escaneado_sem_ocr_degrada`, E2E "contrato: aceita imagem" |
+| REQ-F-025 (pré-marcação por tipo + citação normalizada de OCR — v2.7/ADR-0015) | `tests/test_documento.py::test_anotar_*`, `tests/test_extracao.py::test_desglifar_*` / `::test_*glifo*` / `::test_prompt_marca_candidatos_por_tipo` / `::test_quote_check_ignora_tags_ecoadas_na_citacao` |
 | REQ-F-026 (comprovante escaneado → importação — v2.7/ADR-0015) | `tests/test_sidecar.py::test_importar_ocr_*` (T-1405), E2E "importação por OCR" |
 | REQ-NF-006 (OCR local-only, modelos empacotados, sem rede — v2.7/ADR-0015) | `tests/test_ocr.py` (T-1402), `gui_web/e2e/empacotado.spec.ts` (smoke que OCRiza — T-1404) |
 | T-1001 (pacote real: Electron + sidecar congelado) | `gui_web/e2e/empacotado.spec.ts` (`HF_E2E_PACOTE=1`) |

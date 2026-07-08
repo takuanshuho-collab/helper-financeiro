@@ -138,12 +138,38 @@ def obter_extrator(cfg: ConfigAgente) -> Extrator:
 # de existir no documento (ADR-0010).
 _RE_SO_ESSENCIAL = re.compile(r"[^0-9a-z%\s]")
 
+# Confusões clássicas de glifo do OCR (ADR-0015), mapeadas para o dígito
+# canônico. Aplicadas SÓ dentro de um token numérico (com ao menos um dígito de
+# verdade) — nunca em palavras: "6OO,OO" → "600,00", mas "juros"/"bis" ficam
+# intactos. É determinístico e simétrico (documento e citação passam pela mesma
+# canonicalização), então não afrouxa H1: o número segue tendo de existir e
+# bater com o valor extraído.
+_GLIFOS_OCR = {"o": "0", "l": "1", "i": "1", "s": "5", "b": "8"}
+_RE_TOKEN_NUMERICO = re.compile(r"[0-9olisb][0-9olisb.,]*", re.IGNORECASE)
+
+# Marcação de tipo da pré-anotação (ADR-0015/REQ-F-025). Só o prompt a recebe,
+# mas o modelo pode ecoá-la na citação — removemos aqui para o quote-check casar
+# contra o documento CRU (sem tags).
+_RE_TAG_TIPO = re.compile(r"</?(?:valor|data|percentual)>", re.IGNORECASE)
+
+
+def _desglifar_numeros(texto: str) -> str:
+    def corrige(m: re.Match[str]) -> str:
+        token = m.group(0)
+        if not any(c.isdigit() for c in token):
+            return token  # sem dígito real ⇒ é palavra, não número de OCR
+        return "".join(_GLIFOS_OCR.get(c.lower(), c) for c in token)
+
+    return _RE_TOKEN_NUMERICO.sub(corrige, texto)
+
 
 def _normalizar(texto: str) -> str:
-    """Sem acentos, sem ruído de formatação, espaços colapsados, casefold."""
-    sem_acentos = "".join(c for c in unicodedata.normalize("NFKD", texto)
+    """Sem tags de tipo, sem acentos, sem ruído de formatação/glifo, colapsado."""
+    sem_tags = _RE_TAG_TIPO.sub(" ", texto)
+    sem_acentos = "".join(c for c in unicodedata.normalize("NFKD", sem_tags)
                           if not unicodedata.combining(c))
-    so_essencial = _RE_SO_ESSENCIAL.sub(" ", sem_acentos.casefold())
+    base = _desglifar_numeros(sem_acentos.casefold())
+    so_essencial = _RE_SO_ESSENCIAL.sub(" ", base)
     return re.sub(r"\s+", " ", so_essencial).strip()
 
 
@@ -151,9 +177,13 @@ _RE_NUMERO = re.compile(r"\d[\d.,]*")
 
 
 def _numeros_do_trecho(trecho: str) -> list[float]:
-    """Números do trecho nas DUAS interpretações (pt-BR 1.234,56 e en 1,234.56)."""
+    """Números do trecho nas DUAS interpretações (pt-BR 1.234,56 e en 1,234.56).
+
+    Desglifa antes: um valor lido pelo OCR como "6OO,OO" (letra O) volta a
+    parsear como 600,00 (ADR-0015).
+    """
     numeros: list[float] = []
-    for m in _RE_NUMERO.finditer(trecho):
+    for m in _RE_NUMERO.finditer(_desglifar_numeros(trecho)):
         bruto = m.group(0).strip(".,")
         for candidato in (bruto.replace(".", "").replace(",", "."),
                           bruto.replace(",", "")):

@@ -16,6 +16,24 @@ type Fase =
     }
   | { tipo: 'erro'; msg: string }
 
+// PDF (com ou sem texto) e imagens de digitalização/foto; escaneados passam
+// pelo OCR local no sidecar (ADR-0015).
+const EXTENSOES_ACEITAS = [
+  '.pdf',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.bmp',
+  '.tif',
+  '.tiff',
+]
+
+function ehAceito(nome: string): boolean {
+  const n = nome.toLowerCase()
+  return EXTENSOES_ACEITAS.some((ext) => n.endsWith(ext))
+}
+
 function montarDivida(valores: Record<string, string>): DividaIn {
   return {
     credor: valores.credor?.trim() || 'Contrato importado',
@@ -41,8 +59,8 @@ export default function Contrato({
 
   async function processar(file: File | null | undefined) {
     if (!file) return
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setFase({ tipo: 'erro', msg: 'Selecione um arquivo PDF.' })
+    if (!ehAceito(file.name)) {
+      setFase({ tipo: 'erro', msg: 'Selecione um PDF ou uma imagem (JPG/PNG).' })
       return
     }
     setFase({ tipo: 'processando', nome: file.name })
@@ -83,11 +101,12 @@ export default function Contrato({
 
   return (
     <>
-      <h1 className="titulo">Contrato PDF</h1>
+      <h1 className="titulo">Contrato (PDF ou imagem)</h1>
       <p className="sub">
         Selecione um contrato — a leitura e a extração acontecem{' '}
-        <strong>localmente</strong>. O documento nunca sai da sua máquina; nada
-        entra sem a sua confirmação.
+        <strong>localmente</strong>. PDF digital, PDF escaneado ou foto (JPG/PNG):
+        o texto de documentos escaneados é lido por <strong>OCR na sua máquina</strong>.
+        O documento nunca sai do computador; nada entra sem a sua confirmação.
       </p>
 
       {fase.tipo === 'ocioso' && (
@@ -123,11 +142,11 @@ export default function Contrato({
             </svg>
           </div>
           <div className="dz-titulo">Arraste o contrato aqui ou clique para escolher</div>
-          <div className="dz-hint">PDF com texto selecionável · extração local com citação da fonte</div>
+          <div className="dz-hint">PDF ou imagem (escaneado = OCR local) · extração com citação da fonte</div>
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,image/*,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff"
             hidden
             onChange={(e) => {
               void processar(e.target.files?.[0])
@@ -211,6 +230,13 @@ function Revisao({
           </>
         )}
       </div>
+
+      {resultado.ocr && (
+        <div className="extr-ocr">
+          📷 Documento escaneado lido por <strong>OCR local</strong> — o texto
+          pode conter pequenos erros de leitura; confira os valores com atenção.
+        </div>
+      )}
 
       <div className="card-titulo">Campos de “{nome}”</div>
 

@@ -383,3 +383,28 @@ test('evolução: gráfico das competências arquivadas com zoom por campo', asy
   await expect(win.locator('.evo-valor')).toContainText('800,00')
   await expect(win.locator('.evo-legenda')).toContainText('Mercado')
 })
+
+test('contrato: aceita imagem e passa pelo OCR local (ADR-0015)', async () => {
+  await aba('Contrato').click()
+  await expect(win.locator('.titulo')).toHaveText('Contrato (PDF ou imagem)')
+
+  // PNG mínimo (sem texto legível): o objetivo é provar que a imagem é ACEITA e
+  // roteada ao OCR local — o desfecho é o aviso de "preencha manualmente", não a
+  // rejeição por tipo de arquivo. A leitura real de texto é coberta pelo smoke
+  // do pacote (T-1404) e por tests/test_ocr.py (HF_OCR_REAL=1).
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC',
+    'base64',
+  )
+  await win.locator('.dropzone input[type="file"]').setInputFiles({
+    name: 'contrato-escaneado.png',
+    mimeType: 'image/png',
+    buffer: png,
+  })
+
+  // Carregar os modelos PP-OCRv6 + OCRizar leva alguns segundos na 1ª vez.
+  const aviso = win.locator('.aviso-erro')
+  await expect(aviso).toBeVisible({ timeout: 60_000 })
+  await expect(aviso).toContainText('manual') // vazio/OCR ⇒ preencha manualmente
+  await expect(aviso).not.toContainText('Selecione') // NÃO rejeitada por tipo
+})

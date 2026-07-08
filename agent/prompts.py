@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 
 from contracts import FatosFinanceiros
+from core.documento import anotar_por_tipo
 
 SYSTEM_PROMPT = """\
 Você é um analista financeiro SÊNIOR especializado em endividamento de pessoa \
@@ -94,8 +95,13 @@ def montar_prompt_extracao(texto_documento: str) -> str:
         "como está escrita, sem o parágrafo inteiro.\n"
         "Exemplo — se o documento tiver 'Saldo devedor atual: R$ 3.500,00', "
         "então saldo_devedor = {\"valor\": 3500.0, \"trecho_fonte\": "
-        "\"Saldo devedor atual: R$ 3.500,00\"}.\n\n"
-        "<DOCUMENTO>\n" + texto_documento + "\n</DOCUMENTO>"
+        "\"Saldo devedor atual: R$ 3.500,00\"}.\n"
+        "As marcações <valor>, <data> e <percentual> apenas destacam candidatos "
+        "(úteis em texto de OCR) — NÃO as copie para trecho_fonte.\n\n"
+        # Pré-marcação por tipo (REQ-F-025/ADR-0015): ajuda o modelo a localizar
+        # candidatos sobre texto ruidoso de OCR. Só o PROMPT recebe as tags; o
+        # quote-check usa o texto cru (a marcação é removida na normalização).
+        "<DOCUMENTO>\n" + anotar_por_tipo(texto_documento) + "\n</DOCUMENTO>"
     )
 
 

@@ -1086,6 +1086,15 @@ body {
   margin-bottom: 10px;
 }
 
+.extr-ocr {
+  background: rgba(240, 173, 78, 0.12);
+  border: 1px solid rgba(240, 173, 78, 0.4);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  margin-bottom: 10px;
+}
+
 .extr-campos {
   display: grid;
   grid-template-columns: 1fr 1fr;

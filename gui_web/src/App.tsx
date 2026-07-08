@@ -22,7 +22,7 @@ const ABAS = [
   'Visão geral',
   'Perfil',
   'Dívidas',
-  'Contrato PDF',
+  'Contrato',
   'Análise',
   'Carta ao credor',
 ] as const

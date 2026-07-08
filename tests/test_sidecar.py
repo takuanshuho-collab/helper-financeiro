@@ -25,12 +25,14 @@ from sidecar.app import (
     contexto_analise,
     contexto_classificacao,
     contexto_extracao,
+    contexto_ocr,
     repositorio,
 )
 from sidecar.persistencia import Repositorio
 from sidecar.security import VAR_TOKEN
 from tests.test_classificacao import FakeClassificador
 from tests.test_extracao import CFG_TESTE, DOC_CONTRATO, FakeExtrator
+from tests.test_ocr import MotorFalso, _linha
 
 TOKEN = "token-de-teste"
 CABECALHO = {"X-HF-Token": TOKEN}
@@ -643,17 +645,44 @@ def test_exportar_caminho_invalido_400(repo_tmp):
     assert "salvar" in resp.json()["detail"]
 
 
-def test_contrato_pdf_sem_texto(monkeypatch):
-    """PDF escaneado (sem texto) ⇒ aviso, sem consultar o modelo."""
+def test_contrato_pdf_escaneado_sem_ocr_degrada(monkeypatch):
+    """PDF escaneado (sem texto) + motor de OCR indisponível ⇒ aviso (P8)."""
     monkeypatch.setattr("sidecar.app.extrair_texto_pdf_bytes", lambda _b: "   ")
+    monkeypatch.setattr("sidecar.app._motor_ocr_singleton", lambda: None)
     resp = cliente.post(
         "/contrato/extrair", json={"pdf_base64": PDF_B64}, headers=CABECALHO
     )
     assert resp.status_code == 200
     dados = resp.json()
     assert dados["modo"] == "vazio"
-    assert dados["aviso"]
+    assert dados["ocr"] is False
+    assert "OCR_INDISPONIVEL" in dados["motivos"]
     assert dados["campos"] == []
+
+
+def test_contrato_imagem_ocr_extrai(monkeypatch):
+    """Imagem (JPG) ⇒ OCR local produz o texto, que segue para a extração (REQ-F-024)."""
+    fake = FakeExtrator()
+    # O motor de OCR falso devolve o texto do contrato (ignora os bytes da imagem).
+    motor = MotorFalso([_linha(DOC_CONTRATO, topo=10, esquerda=10)])
+    cliente.app.dependency_overrides[contexto_extracao] = lambda: (CFG_TESTE, fake)
+    cliente.app.dependency_overrides[contexto_ocr] = lambda: motor
+    try:
+        resp = cliente.post(
+            "/contrato/extrair",
+            json={"pdf_base64": PDF_B64, "nome": "contrato.jpg"},
+            headers=CABECALHO,
+        )
+        assert resp.status_code == 200
+        dados = resp.json()
+        assert dados["ocr"] is True
+        assert dados["modo"] == "ia"
+        assert motor.chamadas == 1
+        # O texto do OCR realimenta a extração: os campos citados foram achados.
+        campos = {c["chave"] for c in dados["campos"]}
+        assert {"saldo", "taxa", "parcela"} <= campos
+    finally:
+        cliente.app.dependency_overrides.clear()
 
 
 # --- Estado persistido (T-1102, REQ-F-018 / ADR-0012) -------------------------
