@@ -89,7 +89,17 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   `/historico/evolucao`; totais por seção + zoom por campo) e aba **"Evolução
   mensal"** no `.xlsx` (totais `=SUM` + gráfico nativo, Gate B) —
   REQ-F-021/022/023. Sem migração de schema.
-- **Mudanças nos artefatos congelados (v2.6.0) exigem nova ADR + incremento de
+- **Ciclo v2.7 FECHADO (`FREEZE.md` v2.7.0, ADR-0015):** **OCR local** de
+  documento escaneado/imagem (RapidOCR + PP-OCRv6 medium em ONNX, 100% na
+  máquina; modelos **embarcados** no pacote — zero rede, REQ-NF-006). A aba
+  **Contrato** aceita PDF e imagem: detecção determinística da fonte
+  (`core/documento.py`), motor `agent/ocr.py`, pré-marcação por **tipo** e trave
+  de citação tolerante ao **ruído de glifo** do OCR sem afrouxar H1. E o
+  **comprovante/extrato escaneado** desemboca na importação do v2.6
+  (`core.extrato.ler_extrato_ocr` → mesmos grupos/revisão/aplicação do CSV) —
+  REQ-F-024/025/026. O instalador cresce p/ ~330 MB (modelos OCR). Sem migração
+  de schema.
+- **Mudanças nos artefatos congelados (v2.7.0) exigem nova ADR + incremento de
   versão + nova ata.**
 
 ## Rodar

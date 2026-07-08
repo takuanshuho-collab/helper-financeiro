@@ -15,7 +15,10 @@ nomes ao criar rubricas. O ciclo v2.6 (ADR-0014) fechou o circuito do dado:
 **importe o extrato/fatura CSV** do banco (a IA local só sugere a
 classificação — você revisa antes de aplicar), acompanhe o **gráfico de
 evolução** por categoria e leve o histórico para o `.xlsx` (aba "Evolução
-mensal").
+mensal"). O ciclo v2.7 (ADR-0015) trouxe o **OCR local**: contrato, comprovante
+ou extrato **escaneado** (foto/PDF sem texto) é lido por OCR **na sua máquina**
+(RapidOCR + PP-OCRv6 medium, modelos embarcados — sem rede) e alimenta a mesma
+extração do Contrato e a mesma importação do CSV.
 
 ---
 
