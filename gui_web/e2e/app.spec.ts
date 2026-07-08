@@ -311,3 +311,49 @@ test('planilha: sugestões de nome de rubrica via datalist', async () => {
   await grupo.locator('.btn-remover').first().click()
   await expect(grupo.locator('.plan-linha')).toHaveCount(0)
 })
+
+test('importação: CSV do extrato vira rubricas após revisão', async () => {
+  // Continuamos na planilha. Sobe um CSV pelo input escondido da seção —
+  // dois lançamentos de débito, agrupáveis por estabelecimento.
+  await win.locator('.imp input[type="file"]').setInputFiles({
+    name: 'extrato.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      'Data,Descrição,Valor\n' +
+        '05/06/2026,Conta de luz Enel,-180.50\n' +
+        '12/06/2026,PADARIA SAO JOAO,-45.00\n',
+    ),
+  })
+
+  // Com HF_MODO_DEGRADADO=1 não há LLM: o painel degrada para a
+  // classificação manual (P8) — os grupos chegam do parser do core.
+  await expect(win.locator('.imp-banner')).toContainText(
+    'classificação manual',
+    { timeout: 10_000 },
+  )
+  await expect(win.locator('.imp-linha')).toHaveCount(2)
+  const linha = win.locator('.imp-linha', { hasText: 'Conta de luz Enel' })
+  await expect(linha).toContainText('180,50') // total vem do core, formatado
+
+  // Classifica só a luz (a padaria fica "não importar") e grava no vivo.
+  await linha.locator('.imp-sel').selectOption('fixas/contas_casa')
+  await win.locator('.imp-destino').selectOption('vivo')
+  await win.locator('.imp .btn-add', { hasText: 'Importar' }).click()
+  await expect(win.locator('.imp-feito')).toContainText('1 rubrica(s)', {
+    timeout: 5_000,
+  })
+
+  // A rubrica entrou e o campo passou a valer a soma (roll-up do core).
+  const grupo = win.locator('.plan-grupo', { hasText: 'Contas da casa' })
+  await expect(grupo.locator('.plan-grupo-total')).toContainText('180,50')
+  await expect(grupo.locator('.plan-chip')).toContainText('1 rubrica')
+
+  // Limpeza: remove a rubrica importada e restaura o seed (500).
+  const topo = grupo.locator('.plan-grupo-topo')
+  if ((await topo.getAttribute('aria-expanded')) !== 'true') await topo.click()
+  await grupo.locator('.btn-remover').first().click()
+  await expect(grupo.locator('.plan-linha')).toHaveCount(0)
+  await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
+  await preencher('Contas da casa', '500')
+  await win.waitForTimeout(1_500)
+})

@@ -11,6 +11,7 @@ import type {
   CartaCamposIn,
   CartaPreviaOut,
   ContratoExtraidoOut,
+  CsvImportadoOut,
   DiagnosticoOut,
   EstadoOut,
   EstrategiasOut,
@@ -19,6 +20,8 @@ import type {
   HistoricoOut,
   IaJobOut,
   IaStatusOut,
+  ImportacaoAplicadaOut,
+  ItemImportacaoIn,
   PerfilIn,
   RubricaMutOut,
   RubricaNovaIn,
@@ -79,6 +82,15 @@ export const hf = {
     mesB: string | null = null,
   ): Promise<HistoricoComparadoOut> =>
     chamar('/historico/comparar', { mes_a: mesA, mes_b: mesB }),
+  /** Importação de CSV (T-1303): parse + rótulos PARA REVISÃO, nada persiste. */
+  importarCsv: (csvBase64: string, nome: string): Promise<CsvImportadoOut> =>
+    chamar('/importar/csv', { csv_base64: csvBase64, nome }),
+  /** Grava os itens revisados; `mes` null = orçamento vivo. */
+  importarAplicar: (
+    mes: string | null,
+    itens: ItemImportacaoIn[],
+  ): Promise<ImportacaoAplicadaOut> =>
+    chamar('/importar/aplicar', { mes, itens }),
   diagnostico: (perfil: PerfilIn): Promise<DiagnosticoOut> =>
     chamar('/diagnostico', perfil),
   estrategias: (perfil: PerfilIn, extra = 0): Promise<EstrategiasOut> =>

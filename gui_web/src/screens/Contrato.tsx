@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 
 import { hf } from '../hf/client'
 import type { ContratoExtraidoOut, DividaIn } from '../hf/contract'
+import { arquivoParaBase64 } from '../lib/arquivo'
 import { parseBR, parsePct } from '../lib/format'
 
 type Fase =
@@ -14,17 +15,6 @@ type Fase =
       valores: Record<string, string>
     }
   | { tipo: 'erro'; msg: string }
-
-/** Lê o arquivo e devolve o conteúdo em base64 (em blocos, sem estourar a pilha). */
-async function arquivoParaBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  let binario = ''
-  const BLOCO = 0x8000
-  for (let i = 0; i < bytes.length; i += BLOCO) {
-    binario += String.fromCharCode(...bytes.subarray(i, i + BLOCO))
-  }
-  return btoa(binario)
-}
 
 function montarDivida(valores: Record<string, string>): DividaIn {
   return {

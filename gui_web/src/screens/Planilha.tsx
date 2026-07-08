@@ -21,6 +21,7 @@ import {
   rubricasDoCampo,
   type CampoOrcamento,
 } from '../lib/orcamento'
+import ImportarCsv from './ImportarCsv'
 
 /**
  * Planilha de orçamento (T-1104, REQ-F-017): grade editável de rubricas.
@@ -42,6 +43,9 @@ export default function Planilha({
   aoVoltar: () => void
 }) {
   const [erro, setErro] = useState('')
+  // Incrementado quando uma importação grava numa competência: o Histórico
+  // recarrega a lista de meses sem remontar a tela.
+  const [histVersao, setHistVersao] = useState(0)
 
   const mutar = (p: Promise<RubricaMutOut>) =>
     p.then((r) => {
@@ -89,7 +93,12 @@ export default function Planilha({
         ))}
       </div>
 
-      <Historico aoErro={setErro} />
+      <ImportarCsv
+        aoMutar={aoMutar}
+        aoImportarNoMes={() => setHistVersao((v) => v + 1)}
+      />
+
+      <Historico aoErro={setErro} versao={histVersao} />
     </>
   )
 }
@@ -104,7 +113,13 @@ function mesAtual(): string {
  * meses. Toda a aritmética (deltas e %) vem pronta do core via
  * `/historico/comparar` — aqui só se formata.
  */
-function Historico({ aoErro }: { aoErro: (m: string) => void }) {
+function Historico({
+  aoErro,
+  versao,
+}: {
+  aoErro: (m: string) => void
+  versao: number
+}) {
   const [meses, setMeses] = useState<string[]>([])
   const [mes, setMes] = useState(mesAtual)
   const [mesA, setMesA] = useState('')
@@ -115,7 +130,7 @@ function Historico({ aoErro }: { aoErro: (m: string) => void }) {
     hf.historicoListar()
       .then((h) => setMeses(h.meses))
       .catch(() => {}) // fora do Electron/primeiro uso: seção fica vazia
-  }, [])
+  }, [versao]) // versao muda quando a importação grava numa competência
 
   const comparar = (a: string, b: string) => {
     if (!a) {

@@ -109,6 +109,14 @@ def test_sem_grupos_nao_chama_o_modelo():
     assert fake.chamadas == 0
 
 
+def test_modo_degradado_pula_o_llm_sem_tentar_rede():
+    # HF_MODO_DEGRADADO=1 (P8 explícito): direto para a classificação manual.
+    cfg = ConfigAgente(provider="local", modo_degradado=True)
+    resultado = classificar_grupos(GRUPOS, cfg=cfg)
+    assert resultado.por_indice == {}
+    assert resultado.motivos == ["HF_MODO_DEGRADADO"]
+
+
 def test_fabrica_exige_endpoint_local_h2():
     # Extrato bancário nunca sai da máquina: endpoint remoto é recusado.
     remota = ConfigAgente(provider="openai_compat",

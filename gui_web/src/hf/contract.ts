@@ -185,6 +185,49 @@ export interface HistoricoComparadoOut {
   comparacao: ComparacaoOut
 }
 
+// --- Importação de CSV (T-1303, REQ-F-021 / ADR-0014) ---------------------------
+
+/** Lançamentos do mesmo estabelecimento somados pelo core — candidato a rubrica. */
+export interface GrupoImportadoOut {
+  indice: number
+  nome: string
+  /** Soma absoluta calculada no parser determinístico (nunca pela LLM). */
+  total: number
+  quantidade: number
+  natureza: 'credito' | 'debito'
+  /** Rótulo sugerido pela LLM local; null = não classificado (revisão manual). */
+  categoria: Categoria | null
+  campo_pai: string | null
+}
+
+export interface CsvImportadoOut {
+  /** 'ia' = classificado; 'manual' = LLM indisponível (P8); 'vazio' = sem grupos. */
+  modo: 'ia' | 'manual' | 'vazio'
+  grupos: GrupoImportadoOut[]
+  /** 'AAAA-MM' detectada pela moda das datas do CSV; null sem datas. */
+  competencia_sugerida: string | null
+  avisos: string[]
+  descartes: string[]
+  motivos: string[]
+  llm: DiagLlm
+}
+
+export interface ItemImportacaoIn {
+  categoria: Categoria
+  campo_pai: string
+  nome: string
+  valor: number
+}
+
+export interface ImportacaoAplicadaOut {
+  ok: boolean
+  /** null = aplicado no orçamento vivo; 'AAAA-MM' = na competência. */
+  mes: string | null
+  meses?: string[]
+  rubricas: RubricaOut[]
+  perfil: PerfilIn
+}
+
 // --- Tela Análise (T-902, REQ-F-015) ------------------------------------------
 
 export interface OportunidadeOut {

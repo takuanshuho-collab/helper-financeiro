@@ -195,8 +195,11 @@ def classificar_grupos(grupos: Sequence[tuple[str, str]],
     if not grupos:
         return ResultadoClassificacao()
     if classificador is None:
+        conf = cfg or carregar_config()
+        if conf.modo_degradado:  # P8 explícito: pula o LLM sem tentar rede
+            return ResultadoClassificacao(motivos=["HF_MODO_DEGRADADO"])
         try:
-            classificador = obter_classificador(cfg or carregar_config())
+            classificador = obter_classificador(conf)
         except Exception as e:  # noqa: BLE001 — P8: sem LLM ⇒ classificação manual
             return ResultadoClassificacao(
                 motivos=[f"ERRO_CONFIG:{type(e).__name__}"])

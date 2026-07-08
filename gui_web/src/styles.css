@@ -1868,3 +1868,85 @@ body {
   color: var(--muted);
   font-weight: 500;
 }
+
+/* ---- Importação de CSV (T-1303, REQ-F-021 / ADR-0014) ---- */
+
+.imp {
+  grid-column: 1 / -1;
+}
+
+.plan-grid + .imp {
+  margin-top: 0;
+}
+
+.imp-banner {
+  border-radius: var(--r-chip);
+  padding: 10px 12px;
+  font-size: 13px;
+  margin: 6px 0 10px;
+}
+
+.imp-banner.ia {
+  background: rgba(46, 174, 110, 0.1);
+  border: 1px solid rgba(46, 174, 110, 0.35);
+}
+
+.imp-banner.manual {
+  background: rgba(240, 173, 78, 0.12);
+  border: 1px solid rgba(240, 173, 78, 0.4);
+}
+
+.imp-linhas {
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+}
+
+.imp-linha {
+  display: grid;
+  grid-template-columns: 1fr auto minmax(190px, 230px);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--divisor);
+  font-size: 13px;
+}
+
+.imp-nome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.imp-total {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.imp-total.credito {
+  color: var(--green);
+}
+
+.imp-sel {
+  width: 100%;
+}
+
+.imp-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.imp-feito {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--green);
+  margin: 8px 0 4px;
+}
