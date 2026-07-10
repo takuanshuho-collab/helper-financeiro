@@ -26,10 +26,13 @@ from sidecar.app import (
     contexto_classificacao,
     contexto_extracao,
     contexto_ocr,
-    repositorio,
+    exigir_cofre,
+    sessao_dependencia,
 )
+from sidecar.auth import Cofre
 from sidecar.persistencia import Repositorio
 from sidecar.security import VAR_TOKEN
+from sidecar.sessao import SessaoCofre
 from tests.test_classificacao import FakeClassificador
 from tests.test_extracao import CFG_TESTE, DOC_CONTRATO, FakeExtrator
 from tests.test_ocr import MotorFalso, _linha
@@ -44,6 +47,23 @@ PDF_B64 = base64.b64encode(b"%PDF-1.4 fake").decode()
 
 def setup_module(_module):
     os.environ[VAR_TOKEN] = TOKEN
+
+
+# --- Sessão do cofre (T-1603): janela de onboarding por padrão ---------------
+# Todo teste deste módulo, por padrão, roda "sem cofre cadastrado" — o mesmo
+# comportamento de antes do T-1603 (endpoints de negócio abertos). Os testes
+# do cofre em si (tests/test_sessao.py) sobrescrevem `sessao_dependencia` com
+# uma sessão própria (cadastrada/bloqueada/desbloqueada conforme o cenário).
+@pytest.fixture(autouse=True)
+def _sessao_sem_cofre(tmp_path):
+    sess = SessaoCofre(
+        cofre=Cofre(tmp_path / "_autouse_auth.json"),
+        caminho_db=tmp_path / "_autouse_dados.db",
+    )
+    app.dependency_overrides[sessao_dependencia] = lambda: sess
+    yield sess
+    app.dependency_overrides.pop(sessao_dependencia, None)
+    sess.fechar()
 
 
 # --- Autenticação (REQ-SEC-004) ----------------------------------------------
@@ -690,11 +710,17 @@ def test_contrato_imagem_ocr_extrai(monkeypatch):
 
 @pytest.fixture()
 def repo_tmp(tmp_path):
-    """Banco isolado por teste — a dependência real nunca toca o do usuário."""
+    """Banco isolado por teste — a dependência real nunca toca o do usuário.
+
+    Sobrescreve `exigir_cofre` diretamente (não `sessao_dependencia`): os
+    testes deste banco não querem saber de cofre/sessão, só do repositório —
+    mesmo padrão de antes do T-1603, só que o alvo do override passou de
+    `repositorio` para `exigir_cofre` (o gate 423 agora mora ali).
+    """
     repo = Repositorio(tmp_path / "dados.db")
-    app.dependency_overrides[repositorio] = lambda: repo
+    app.dependency_overrides[exigir_cofre] = lambda: repo
     yield repo
-    del app.dependency_overrides[repositorio]
+    del app.dependency_overrides[exigir_cofre]
     repo.fechar()
 
 
@@ -1053,7 +1079,7 @@ OCR_EXTRATO_TXT = (
 
 def _importar_ocr(fake, motor, arquivo_b64=IMG_B64, nome="extrato.jpg"):
     # Deletes pontuais (não .clear()): o fixture repo_tmp instala o override do
-    # `repositorio` e faz `del` dele no teardown — um clear() aqui o derrubaria.
+    # `exigir_cofre` e faz `del` dele no teardown — um clear() aqui o derrubaria.
     cliente.app.dependency_overrides[contexto_classificacao] = (
         lambda: (CFG_TESTE, fake))
     cliente.app.dependency_overrides[contexto_ocr] = lambda: motor

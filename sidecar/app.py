@@ -10,12 +10,14 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
+import math
 import re
 import threading
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 
 from agent.agente import analisar
 from agent.classificacao import Classificador, classificar_grupos
@@ -56,12 +58,22 @@ from outputs.planilha import gerar_planilha
 from outputs.proposta import gerar_proposta, montar_carta
 from outputs.relatorio import gerar_relatorio
 
-from .persistencia import Repositorio
+from .auth import (
+    AguardeCofre,
+    CodigoRecuperacaoInvalido,
+    CofreJaCadastrado,
+    CofreNaoCadastrado,
+    SenhaFraca,
+    SenhaIncorreta,
+    TotpIncorreto,
+)
+from .persistencia import ChaveInvalida, Repositorio
 from .schemas import (
     AnaliseIaIn,
     AnaliseIn,
     AplicarImportacaoIn,
     ArquivarMesIn,
+    CadastrarCofreIn,
     CartaIn,
     CompararMesesIn,
     ConfirmarContratoIn,
@@ -73,11 +85,16 @@ from .schemas import (
     ExportarRelatorioIn,
     ImportarCsvIn,
     ImportarOcrIn,
+    LoginCofreIn,
     PerfilIn,
+    RecuperarCofreIn,
     RubricaEditIn,
     RubricaIn,
+    TrocarSenhaCofreIn,
 )
 from .security import exigir_token
+from .sessao import SessaoBloqueada, SessaoCofre
+from .sessao import sessao as sessao_processo
 
 app = FastAPI(title="Helper Financeiro — sidecar", version="2.8.0")
 
@@ -144,7 +161,148 @@ def health() -> dict:
     return {"status": "ok", "servico": "helper-financeiro-sidecar"}
 
 
-@app.post("/diagnostico", dependencies=[Depends(exigir_token)])
+# --------------------------------------------------- sessão do cofre (T-1603)
+# O token (`exigir_token`) autentica o PROCESSO Electron; esta sessão
+# autentica o USUÁRIO. Ver a docstring de `sidecar/sessao.py` para o modo de
+# transição onboarding→cofre e o racional do auto-lock preguiçoso.
+def sessao_dependencia() -> SessaoCofre:
+    """Dependência da sessão do cofre (sobrescrita nos testes com tmp_path).
+
+    Mesmo padrão de singleton preguiçoso que o antigo `repositorio()` tinha
+    para o `Repositorio`: em produção devolve a sessão única do processo; os
+    testes trocam por uma sessão isolada via `app.dependency_overrides`.
+    """
+    return sessao_processo()
+
+
+def exigir_cofre(
+    sess: Annotated[SessaoCofre, Depends(sessao_dependencia)],
+) -> Repositorio:
+    """Gate `423 Locked` de TODO endpoint de negócio, ao lado de `exigir_token`.
+
+    Devolve o repositório correto da sessão corrente: legado em claro na
+    janela de onboarding (sem cofre cadastrado) ou o cofre cifrado depois do
+    login — os endpoints não assumem mais um repositório global fixo. O
+    auto-lock preguiçoso é verificado dentro de `repositorio_ativo`.
+    """
+    try:
+        return sess.repositorio_ativo()
+    except SessaoBloqueada as e:
+        raise HTTPException(status_code=423, detail="cofre bloqueado") from e
+
+
+@app.exception_handler(AguardeCofre)
+def _tratar_aguarde_cofre(_request: object, exc: AguardeCofre) -> JSONResponse:
+    """Anti-brute-force (T-1603): `429` com `aguarde_s` no CORPO (a GUI usa
+    para o contador) e `Retry-After` no HEADER (o padrão HTTP). Handler
+    global — cobre `/auth/login`, `/auth/recuperar` e `/auth/trocar-senha`
+    igual, sem repetir o `try/except` em cada endpoint."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": str(exc), "aguarde_s": exc.segundos},
+        headers={"Retry-After": str(math.ceil(exc.segundos))},
+    )
+
+
+@app.get("/auth/status", dependencies=[Depends(exigir_token)])
+def auth_status(sess: Annotated[SessaoCofre, Depends(sessao_dependencia)]) -> dict:
+    """`{cadastrado, desbloqueado, aguarde_s}` — o front decide a tela."""
+    return sess.status()
+
+
+@app.post("/auth/cadastrar", dependencies=[Depends(exigir_token)])
+def auth_cadastrar(
+    entrada: CadastrarCofreIn,
+    sess: Annotated[SessaoCofre, Depends(sessao_dependencia)],
+) -> dict:
+    """Cria o cofre e migra o banco NA HORA; a sessão continua bloqueada — o
+    primeiro `/auth/login` confirma que o autenticador foi configurado de
+    verdade (ADR-0016 §D). Os segredos (URI do TOTP + códigos) só saem aqui."""
+    try:
+        resultado = sess.cadastrar(entrada.senha)
+    except CofreJaCadastrado as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except SenhaFraca as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ChaveInvalida as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível preparar o cofre (banco corrompido?)."
+        ) from e
+    return {"totp_uri": resultado.totp_uri,
+            "codigos_recuperacao": resultado.codigos_recuperacao}
+
+
+@app.post("/auth/login", dependencies=[Depends(exigir_token)])
+def auth_login(
+    entrada: LoginCofreIn,
+    sess: Annotated[SessaoCofre, Depends(sessao_dependencia)],
+) -> dict:
+    """Desbloqueia a sessão com senha (1º fator) + TOTP (2º fator)."""
+    try:
+        sess.login(entrada.senha, entrada.codigo_totp)
+    except (SenhaIncorreta, TotpIncorreto) as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except CofreNaoCadastrado as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ChaveInvalida as e:
+        raise HTTPException(
+            status_code=500, detail="Não foi possível abrir o cofre (banco corrompido?)."
+        ) from e
+    return {"ok": True}
+
+
+@app.post("/auth/bloquear", dependencies=[Depends(exigir_token)])
+def auth_bloquear(sess: Annotated[SessaoCofre, Depends(sessao_dependencia)]) -> dict:
+    """Bloqueio manual — idempotente (bloquear já bloqueado é no-op)."""
+    sess.bloquear()
+    return {"ok": True}
+
+
+@app.post("/auth/recuperar", dependencies=[Depends(exigir_token)])
+def auth_recuperar(
+    entrada: RecuperarCofreIn,
+    sess: Annotated[SessaoCofre, Depends(sessao_dependencia)],
+) -> dict:
+    """Redefine a senha por um código de recuperação de uso único e desbloqueia
+    a sessão — o código É o fator de posse; TOTP não é exigido aqui, por
+    design da ADR-0016 §A (perder a senha não perde os dados enquanto restar
+    um código)."""
+    try:
+        sess.recuperar(entrada.codigo, entrada.nova_senha)
+    except CodigoRecuperacaoInvalido as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except SenhaFraca as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except CofreNaoCadastrado as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ChaveInvalida as e:
+        raise HTTPException(
+            status_code=500, detail="Não foi possível abrir o cofre (banco corrompido?)."
+        ) from e
+    return {"ok": True}
+
+
+@app.post("/auth/trocar-senha",
+         dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def auth_trocar_senha(
+    entrada: TrocarSenhaCofreIn,
+    sess: Annotated[SessaoCofre, Depends(sessao_dependencia)],
+) -> dict:
+    """Troca a senha; exige sessão desbloqueada (`423` via `exigir_cofre`) e
+    os 2 fatores atuais — `Cofre.trocar_senha` os confere de novo."""
+    try:
+        sess.trocar_senha(entrada.senha_atual, entrada.codigo_totp, entrada.nova_senha)
+    except SessaoBloqueada as e:  # corrida rara com o auto-lock entre o gate e aqui
+        raise HTTPException(status_code=423, detail="cofre bloqueado") from e
+    except (SenhaIncorreta, TotpIncorreto) as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except SenhaFraca as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"ok": True}
+
+
+@app.post("/diagnostico", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def diagnostico(perfil_in: PerfilIn) -> dict:
     """Diagnóstico determinístico a partir do orçamento + dívidas."""
     perfil = _para_perfil(perfil_in)
@@ -163,22 +321,9 @@ def diagnostico(perfil_in: PerfilIn) -> dict:
 # ------------------------------------------------ estado persistido (T-1102)
 # O perfil completo (orçamento + dívidas) é salvo como documento único: o
 # auto-save da GUI manda o estado inteiro com debounce, e a hidratação no boot
-# devolve exatamente o que foi salvo (REQ-F-018, ADR-0012).
+# devolve exatamente o que foi salvo (REQ-F-018, ADR-0012). O repositório em
+# si vem do gate `exigir_cofre` (T-1603) — não há mais singleton próprio aqui.
 CHAVE_PERFIL = "perfil"
-
-_REPO: Repositorio | None = None
-
-
-def repositorio() -> Repositorio:
-    """Dependência do banco local (sobrescrita nos testes com um tmp_path).
-
-    Criado sob demanda na primeira chamada — assim os testes que sobrescrevem
-    a dependência nunca tocam o banco real do usuário.
-    """
-    global _REPO
-    if _REPO is None:
-        _REPO = Repositorio()
-    return _REPO
 
 
 def _rubricas_do_banco(repo: Repositorio) -> list[Rubrica]:
@@ -206,7 +351,7 @@ def _perfil_apos_mutacao(repo: Repositorio) -> dict:
 
 
 @app.get("/estado", dependencies=[Depends(exigir_token)])
-def estado_carregar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+def estado_carregar(repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Estado salvo do usuário; `perfil` é None na primeira execução.
 
     As rubricas vêm junto: a GUI precisa delas para a planilha e para saber
@@ -218,7 +363,7 @@ def estado_carregar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
 
 @app.post("/estado", dependencies=[Depends(exigir_token)])
 def estado_salvar(perfil_in: PerfilIn,
-                  repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                  repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Salva o perfil completo (auto-save da GUI).
 
     O payload passa pela validação do `PerfilIn` antes de ir ao banco — o que
@@ -245,7 +390,7 @@ def _perfil_vivo(repo: Repositorio) -> dict:
 
 @app.post("/historico/arquivar", dependencies=[Depends(exigir_token)])
 def historico_arquivar(entrada: ArquivarMesIn,
-                       repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                       repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Arquiva a competência: snapshot do perfil vivo + cópia das rubricas.
 
     Rearquivar a mesma competência substitui o snapshot (ADR-0013).
@@ -256,12 +401,12 @@ def historico_arquivar(entrada: ArquivarMesIn,
 
 
 @app.get("/historico", dependencies=[Depends(exigir_token)])
-def historico_listar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+def historico_listar(repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     return {"meses": repo.listar_meses()}
 
 
 @app.get("/historico/evolucao", dependencies=[Depends(exigir_token)])
-def historico_evolucao(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+def historico_evolucao(repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Séries de evolução das competências arquivadas (REQ-F-022, ADR-0014).
 
     Totais por seção + série por campo, prontos do core (`serie_evolucao`) —
@@ -275,7 +420,7 @@ def historico_evolucao(repo: Annotated[Repositorio, Depends(repositorio)]) -> di
 
 @app.get("/historico/{mes}", dependencies=[Depends(exigir_token)])
 def historico_snapshot(mes: str,
-                       repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                       repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Snapshot completo da competência (perfil + rubricas arquivadas)."""
     _mes_valido_ou_422(mes)
     perfil = repo.carregar_mes(mes)
@@ -286,7 +431,7 @@ def historico_snapshot(mes: str,
 
 @app.post("/historico/comparar", dependencies=[Depends(exigir_token)])
 def historico_comparar(entrada: CompararMesesIn,
-                       repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                       repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Variação campo a campo entre `mes_a` e `mes_b` (None = orçamento vivo).
 
     A aritmética inteira vem de `core.rubricas.comparar_orcamentos`
@@ -313,13 +458,13 @@ def historico_comparar(entrada: CompararMesesIn,
 # Toda mutação devolve a lista atualizada E o perfil recalculado: a GUI
 # hidrata os dois estados numa resposta só, sem janela de inconsistência.
 @app.get("/rubricas", dependencies=[Depends(exigir_token)])
-def rubricas_listar(repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+def rubricas_listar(repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     return {"rubricas": repo.listar_rubricas()}
 
 
 @app.post("/rubricas", dependencies=[Depends(exigir_token)])
 def rubrica_criar(entrada: RubricaIn,
-                  repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                  repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Cria um lançamento; a ancoragem é validada contra o modelo do core."""
     try:
         validar_rubrica(entrada.categoria, entrada.campo_pai, entrada.nome)
@@ -334,7 +479,7 @@ def rubrica_criar(entrada: RubricaIn,
 
 @app.post("/rubricas/{rubrica_id}", dependencies=[Depends(exigir_token)])
 def rubrica_editar(rubrica_id: int, entrada: RubricaEditIn,
-                   repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                   repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Edita nome/valor/ordem. Mover de grupo é remover + criar."""
     if not entrada.nome.strip():
         raise HTTPException(status_code=422,
@@ -349,7 +494,7 @@ def rubrica_editar(rubrica_id: int, entrada: RubricaEditIn,
 
 @app.post("/rubricas/{rubrica_id}/remover", dependencies=[Depends(exigir_token)])
 def rubrica_remover(rubrica_id: int,
-                    repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                    repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Remove o lançamento. O campo-pai fica com a última soma e volta a ser
     editável quando perde a última rubrica (decisão do ADR-0012)."""
     if not repo.remover_rubrica(rubrica_id):
@@ -405,7 +550,7 @@ def _resposta_importacao(
             "motivos": resultado.motivos, "llm": _diag_llm(cfg)}
 
 
-@app.post("/importar/csv", dependencies=[Depends(exigir_token)])
+@app.post("/importar/csv", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def importar_csv(
     entrada: ImportarCsvIn,
     ctx: tuple[ConfigAgente | None, Classificador | None] = Depends(
@@ -433,7 +578,7 @@ def importar_csv(
 
 @app.post("/importar/aplicar", dependencies=[Depends(exigir_token)])
 def importar_aplicar(entrada: AplicarImportacaoIn,
-                     repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                     repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Grava os itens revisados como rubricas no destino escolhido.
 
     `mes` None → orçamento vivo (fluxo normal do ADR-0012: roll-up na
@@ -470,7 +615,7 @@ def importar_aplicar(entrada: AplicarImportacaoIn,
             "rubricas": rubricas_mes, "perfil": perfil}
 
 
-@app.post("/estrategias", dependencies=[Depends(exigir_token)])
+@app.post("/estrategias", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def estrategias(entrada: EstrategiasIn) -> dict:
     """Compara avalanche vs. bola de neve para o pagamento extra informado."""
     perfil = _para_perfil(entrada.perfil)
@@ -478,7 +623,7 @@ def estrategias(entrada: EstrategiasIn) -> dict:
 
 
 # ------------------------------------------------------------ análise (T-902)
-@app.post("/analise", dependencies=[Depends(exigir_token)])
+@app.post("/analise", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def analise(entrada: AnaliseIn) -> dict:
     """Pacote determinístico da tela Análise (REQ-F-015).
 
@@ -538,7 +683,7 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
         _JOBS_IA[job_id] = estado
 
 
-@app.post("/analise/ia", dependencies=[Depends(exigir_token)])
+@app.post("/analise/ia", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def analise_ia_iniciar(
     entrada: AnaliseIaIn,
     ctx: tuple[ConfigAgente | None, LLMProvider | None] = Depends(contexto_analise),
@@ -560,7 +705,7 @@ def analise_ia_iniciar(
     return {"job_id": job_id}
 
 
-@app.get("/analise/ia/{job_id}", dependencies=[Depends(exigir_token)])
+@app.get("/analise/ia/{job_id}", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def analise_ia_status(job_id: str) -> dict:
     """Estado do job: rodando | pronto (com a seção) | erro. 404 se desconhecido."""
     with _JOBS_IA_LOCK:
@@ -575,7 +720,7 @@ def analise_ia_status(job_id: str) -> dict:
 # ------------------------------------------------------- exportações (T-902)
 @app.post("/exportar/planilha", dependencies=[Depends(exigir_token)])
 def exportar_planilha(entrada: ExportarPlanilhaIn,
-                      repo: Annotated[Repositorio, Depends(repositorio)]) -> dict:
+                      repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
     """Gera o .xlsx no caminho escolhido pelo usuário (diálogo do Electron).
 
     As rubricas salvas entram na aba "Orçamento detalhado" (T-1105) e as
@@ -595,7 +740,7 @@ def exportar_planilha(entrada: ExportarPlanilhaIn,
     return {"caminho": caminho}
 
 
-@app.post("/exportar/relatorio", dependencies=[Depends(exigir_token)])
+@app.post("/exportar/relatorio", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def exportar_relatorio(entrada: ExportarRelatorioIn) -> dict:
     """Gera o .docx; inclui a última análise sênior quando a tela a enviar."""
     perfil = _para_perfil(entrada.perfil)
@@ -622,7 +767,7 @@ def _dados_carta(entrada: CartaIn) -> dict:
     }
 
 
-@app.post("/carta/previa", dependencies=[Depends(exigir_token)])
+@app.post("/carta/previa", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def carta_previa(entrada: CartaIn) -> dict:
     """Pré-visualização ao vivo da carta (REQ-F-016).
 
@@ -635,7 +780,7 @@ def carta_previa(entrada: CartaIn) -> dict:
                         cpf=entrada.cpf, contrato=entrada.contrato)
 
 
-@app.post("/exportar/carta", dependencies=[Depends(exigir_token)])
+@app.post("/exportar/carta", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def exportar_carta(entrada: ExportarCartaIn) -> dict:
     """Gera a carta .docx no caminho escolhido pelo usuário."""
     try:
@@ -687,7 +832,7 @@ def _motor_ocr_singleton() -> Motor | None:
     return _motor_ocr
 
 
-@app.post("/importar/ocr", dependencies=[Depends(exigir_token)])
+@app.post("/importar/ocr", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def importar_ocr(
     entrada: ImportarOcrIn,
     ctx: tuple[ConfigAgente | None, Classificador | None] = Depends(
@@ -832,7 +977,7 @@ def _diag_llm(cfg: ConfigAgente | None) -> dict:
             "model": conf.model, "endpoint_local": conf.endpoint_local}
 
 
-@app.post("/contrato/extrair", dependencies=[Depends(exigir_token)])
+@app.post("/contrato/extrair", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def contrato_extrair(
     entrada: ContratoIn,
     ctx: tuple[ConfigAgente | None, Extrator | None] = Depends(contexto_extracao),
@@ -911,7 +1056,7 @@ def contrato_extrair(
             "motivos": estado.get("motivos") or [], "aviso": "", "ocr": ocr_usado, "llm": llm}
 
 
-@app.post("/contrato/confirmar", dependencies=[Depends(exigir_token)])
+@app.post("/contrato/confirmar", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def contrato_confirmar(
     entrada: ConfirmarContratoIn,
     ctx: tuple[ConfigAgente | None, Extrator | None] = Depends(contexto_extracao),

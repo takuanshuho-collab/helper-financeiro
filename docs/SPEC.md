@@ -199,9 +199,13 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   updater DEVE usar pacote **assinado**; nenhum deles DEVE transmitir PII.
 - **REQ-SEC-005 (v2.8, ADR-0016)** — O acesso aos dados DEVE exigir **login
   local**: senha mestra + **TOTP** (segundo fator offline, app autenticador).
-  Endpoints de negócio DEVEM responder `423 Locked` até o cofre ser
-  desbloqueado; o sistema DEVE aplicar **anti-brute-force** (atraso exponencial
-  persistido) e **auto-lock** por inatividade (configurável) + bloqueio manual.
+  ENQUANTO houver cofre cadastrado, endpoints de negócio DEVEM responder
+  `423 Locked` até o desbloqueio; **sem cofre cadastrado** o sistema opera na
+  **janela de onboarding** (comportamento pré-v2.8, dados ainda em claro — sem
+  regressão) e a GUI DEVE forçar o cadastro antes de qualquer tela de negócio
+  (T-1604). O sistema DEVE aplicar **anti-brute-force** (atraso exponencial
+  persistido) e **auto-lock** por inatividade (configurável, lazy) + bloqueio
+  manual.
 - **REQ-SEC-006 (v2.8, ADR-0016)** — Os dados em repouso DEVEM ser cifrados:
   banco **SQLCipher (AES-256)** com chave **DEK** aleatória, envelopada
   (AES-GCM) por **KEK derivada da senha via Argon2id**. A DEK DEVE existir em

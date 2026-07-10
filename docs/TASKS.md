@@ -247,7 +247,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 |----|------|-----|---------|--------|
 | T-1601 | ADR-0016 + bump 2.8.0 + `sidecar/auth.py`: Argon2id (KEK) + DEK envelopada (AES-GCM) + TOTP (pyotp) + 10 códigos de recuperação (hash + envelope da DEK) + anti-brute-force com atraso exponencial; metadados em `auth.json` fora do cofre; testes | REQ-SEC-005/006/007 | — | ✅ |
 | T-1602 | Banco cifrado: `sidecar/persistencia.py` abre via SQLCipher (`PRAGMA key` = DEK) + migração atômica do `dados.db` em claro (exporta → verifica → remove) + testes | REQ-SEC-006 | T-1601 | ✅ |
-| T-1603 | Sessão de cofre no sidecar: endpoints de negócio exigem desbloqueio (`423 Locked`), `POST /auth/*` (cadastro, login, logout, recuperação, trocar senha), auto-lock por inatividade + bloqueio manual; DEK só em memória; testes de contrato | REQ-SEC-005 | T-1601/1602 | ⬜ |
+| T-1603 | Sessão de cofre no sidecar: endpoints de negócio exigem desbloqueio (`423 Locked`), `POST /auth/*` (cadastro, login, logout, recuperação, trocar senha), auto-lock por inatividade + bloqueio manual; DEK só em memória; testes de contrato | REQ-SEC-005 | T-1601/1602 | ✅ |
 | T-1604 | GUI: assistente de cadastro (senha + QR do TOTP + códigos p/ guardar + aviso "sem backdoor"), tela de desbloqueio, "esqueci a senha" via código, indicador/botão de bloqueio + E2E | REQ-SEC-005/007 | T-1603 | ⬜ |
 
 ## Milestone M17 — LLM embarcada autogerida (v2.8, ADR-0016)
@@ -292,7 +292,19 @@ verifica integridade+contagens → `os.replace`; falha preserva o original);
 o T-1603: (1) o `Cofre` do auth.py não tem lock próprio — envolver num
 `threading.Lock` (padrão `Repositorio`); (2) chave errada faz o SQLCipher
 imprimir `hmac check failed` no stderr (não vaza a chave; decidir se filtra
-no log do sidecar). Próxima task: **T-1603** (sessão 423/login/lock). Depois
+no log do sidecar). **T-1603 ✅**: `sidecar/sessao.py` (`SessaoCofre` com um
+lock único serializando tudo — inclusive o `Cofre` sem lock próprio;
+auto-lock **preguiçoso** por `HF_AUTO_LOCK_MIN`, padrão 15 min, `0` desliga,
+`status()` não conta como atividade) + `/auth/*` no `app.py` (status,
+cadastrar — **migra o banco já no cadastro**, sessão segue bloqueada até o 1º
+login confirmar o TOTP —, login 401/429+`Retry-After` via exception handler
+global de `AguardeCofre`, bloquear, recuperar sem TOTP por design, trocar
+senha) + gate `exigir_cofre` em TODAS as 27 rotas de negócio (auditadas rota
+a rota; `/health` e `/auth/*` fora). **Janela de onboarding**: sem cofre
+cadastrado o app opera como pré-v2.8 (REQ-SEC-005 atualizado no SPEC) — o
+T-1604 força o cadastro na GUI. Decisão registrada: stderr do SQLCipher NÃO é
+filtrado (`ChaveInvalida` pós-login = corrupção real). 19 testes novos
+(365 passed). Próxima task: **T-1604** (GUI onboarding/login + E2E). Depois
 T-1603 (sessão 423/login/lock no sidecar), T-1604 (GUI de
 onboarding/desbloqueio), T-1701/1702 (runtime embarcado + gestor de modelos),
 T-1703 (empacotamento com smoke real) e T-1704 (fechamento + ata v2.8.0).

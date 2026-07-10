@@ -217,3 +217,35 @@ class ConfirmarContratoIn(BaseModel):
 
     thread_id: str
     confirmacao: dict[str, Any] = Field(default_factory=dict)
+
+
+# ------------------------------------------------- cofre local (T-1603, ADR-0016)
+class CadastrarCofreIn(BaseModel):
+    """Cadastro do cofre: só a senha mestra — o TOTP nasce no servidor e o
+    URI/QR volta na resposta de `POST /auth/cadastrar`."""
+
+    senha: str
+
+
+class LoginCofreIn(BaseModel):
+    """Login do cofre: senha mestra (1º fator) + código TOTP (2º fator)."""
+
+    senha: str
+    codigo_totp: str
+
+
+class RecuperarCofreIn(BaseModel):
+    """Redefine a senha por um código de recuperação de uso único (o código É
+    o fator de posse; TOTP não é exigido aqui — ADR-0016 §A)."""
+
+    codigo: str
+    nova_senha: str
+
+
+class TrocarSenhaCofreIn(BaseModel):
+    """Troca de senha com o cofre já desbloqueado; exige os 2 fatores atuais
+    (o `Cofre` os confere de novo antes de re-envelopar a DEK)."""
+
+    senha_atual: str
+    codigo_totp: str
+    nova_senha: str
