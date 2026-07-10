@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0014) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0016) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
@@ -99,8 +99,17 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   (`core.extrato.ler_extrato_ocr` → mesmos grupos/revisão/aplicação do CSV) —
   REQ-F-024/025/026. O instalador cresce p/ ~330 MB (modelos OCR). Sem migração
   de schema.
+- **Ciclo v2.8 ABERTO (ADR-0016, M16+M17):** o app vira um **cofre** — login
+  local com senha mestra + **TOTP** e códigos de recuperação (sem backdoor),
+  banco **SQLCipher** com envelope DEK/KEK (**Argon2id**), sessão
+  bloqueada/desbloqueada no sidecar (`423 Locked`), anti-brute-force e
+  auto-lock (REQ-SEC-005/006/007) — e a **LLM local deixa de exigir
+  Ollama/LM Studio**: `llama-server` (llama.cpp) embarcado e gerido pelo
+  sidecar em loopback, modelo GGUF instalado pelo próprio app (catálogo com
+  SHA-256 travado, download opt-in — única exceção de rede, REQ-NF-007 — ou
+  `.gguf` local) — REQ-F-027/028.
 - **Mudanças nos artefatos congelados (v2.7.0) exigem nova ADR + incremento de
-  versão + nova ata.**
+  versão + nova ata** — esta ADR-0016 é a autorização do ciclo v2.8.
 
 ## Rodar
 ```bash

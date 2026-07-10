@@ -136,6 +136,18 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   lançamentos DEVEM ser reconstruídos por layout e seguir a **mesma**
   classificação, revisão humana e regra de acréscimo da importação de CSV
   (REQ-F-021).
+- **REQ-F-027 (v2.8, ADR-0016)** — O sistema DEVE embarcar e **gerir o próprio
+  runtime de LLM local** (`llama-server`/llama.cpp): iniciar sob demanda em
+  **loopback + porta efêmera**, monitorar a saúde e encerrar no shutdown —
+  **sem exigir ferramenta de terceiros** (Ollama/LM Studio). O provider
+  OpenAI-compatible existente consome o runtime sem mudança de contrato
+  (REQ-LLM-003 preservado: outros providers seguem configuráveis). SE não
+  houver modelo instalado, o sistema DEVE degradar (P8) com o motivo exibido.
+- **REQ-F-028 (v2.8, ADR-0016)** — O usuário PODE **instalar e trocar o modelo
+  pelo próprio app**: catálogo curado com URL fixa e **SHA-256 travados no
+  código** (download com progresso e verificação de hash obrigatória antes de
+  ativar) OU apontando um arquivo `.gguf` local já existente. Os pesos ficam
+  no perfil do usuário, fora do repositório e dos logs.
 
 ## 2. Requisitos do Agente (LLM)
 
@@ -185,6 +197,22 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   tracing (LangSmith) e o auto-updater são **opt-in via env**: o tracing DEVE
   apontar para endpoint **local/self-hosted** (não trafega a terceiros) e o
   updater DEVE usar pacote **assinado**; nenhum deles DEVE transmitir PII.
+- **REQ-SEC-005 (v2.8, ADR-0016)** — O acesso aos dados DEVE exigir **login
+  local**: senha mestra + **TOTP** (segundo fator offline, app autenticador).
+  Endpoints de negócio DEVEM responder `423 Locked` até o cofre ser
+  desbloqueado; o sistema DEVE aplicar **anti-brute-force** (atraso exponencial
+  persistido) e **auto-lock** por inatividade (configurável) + bloqueio manual.
+- **REQ-SEC-006 (v2.8, ADR-0016)** — Os dados em repouso DEVEM ser cifrados:
+  banco **SQLCipher (AES-256)** com chave **DEK** aleatória, envelopada
+  (AES-GCM) por **KEK derivada da senha via Argon2id**. A DEK DEVE existir em
+  claro apenas na memória do sidecar enquanto o cofre estiver aberto (extensão
+  do REQ-SEC-003). A migração do banco em claro pré-v2.8 DEVE ser atômica
+  (exporta, verifica, só então remove o original).
+- **REQ-SEC-007 (v2.8, ADR-0016)** — O cadastro DEVE emitir **códigos de
+  recuperação de uso único** (cada um envelopa uma cópia da DEK; guardados só
+  como hash) que permitem redefinir a senha sem perder os dados. NÃO DEVE
+  existir backdoor: perda de senha + códigos implica perda dos dados, e o
+  usuário DEVE ser avisado disso no cadastro.
 
 ## 5. Não-funcionais
 
@@ -202,6 +230,12 @@ Prefixos de `REQ-ID`: `F` funcional · `NF` não-funcional · `SEC` segurança/p
   usuário, com os modelos **empacotados** (sem download em execução) e **sem
   rede**; a imagem/PDF com PII nunca sai do computador (H2/H7). Sem o motor
   disponível, o sistema degrada (P8), nunca recorre a OCR na nuvem.
+- **REQ-NF-007 (v2.8, ADR-0016)** — O download de modelo GGUF (REQ-F-028) é a
+  **única exceção controlada** ao zero-rede: SOMENTE por ação explícita do
+  usuário, SOMENTE das URLs do catálogo curado, com **SHA-256 verificado**
+  antes de ativar — nunca em background, nunca com telemetria. O runtime LLM
+  embarcado DEVE escutar apenas em **loopback**; fora do download, a operação
+  permanece 100% offline (REQ-NF-002 preservado).
 
 ---
 

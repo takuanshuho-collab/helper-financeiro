@@ -1,6 +1,6 @@
 [project]
 name = "helper-financeiro"
-version = "2.7.0"
+version = "2.8.0"
 description = "Diagnóstico de dívidas com estratégias de quitação, saídas em xlsx/docx e agente financeiro (LLM) sob guardrails"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -19,6 +19,9 @@ dependencies = [
     "uvicorn>=0.50.0",
     "rapidocr>=3.9.1",   # OCR local: PaddleOCR PP-OCRv6 em ONNX (ADR-0015; H2/H7)
     "onnxruntime>=1.27.0",  # runtime de inferência do rapidocr (CPU, sem nuvem)
+    "argon2-cffi>=25.1.0",  # KDF Argon2id da KEK do cofre (ADR-0016, REQ-SEC-006)
+    "cryptography>=49.0.0",  # AES-GCM (envelope DEK/KEK) + HKDF (códigos de recuperação)
+    "pyotp>=2.10.0",  # TOTP offline (2º fator, REQ-SEC-005; QR renderizado só na GUI, T-1604)
 ]
 
 [dependency-groups]

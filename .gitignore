@@ -34,3 +34,6 @@ Thumbs.db
 # Segredos — nunca versionar (REQ-SEC-001)
 .env
 *.key
+
+# Orquestração local do Claude Code — não versionar (config da IDE, não artefato do produto)
+.claude/

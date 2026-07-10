@@ -87,6 +87,9 @@ variáveis (`capital`, `taxa`, `prazo`...), o código **verifica** e **calcula**
 | Orquestração | LangGraph (StateGraph + interrupt + InMemorySaver) | ADR-0006: fluxo rígido, pausa p/ humano |
 | Ingestão/RAG | LlamaIndex core (retriever-only) + embeddings via Ollama | ADR-0007: local, sem torch |
 | LLM local | Ollama (`/api/chat`) OU OpenAI-compatible local (LM Studio/llama.cpp, `/v1`) — loopback | ADR-0010: local por endpoint |
+| LLM embarcada | `llama-server` (llama.cpp, CPU + Vulkan) gerido pelo sidecar; modelo GGUF via catálogo curado (SHA-256 travado) ou arquivo local | ADR-0016: padrão de fábrica sem terceiros; OpenAI-compat |
+| Cofre (repouso) | SQLCipher (`sqlcipher3`) + Argon2id (`argon2-cffi`) + AES-GCM (`cryptography`) — envelope DEK/KEK | ADR-0016: dados cifrados em repouso |
+| MFA | TOTP (`pyotp`) + QR local (`qrcode`) + códigos de recuperação | ADR-0016: 2º fator offline, sem serviço |
 | Testes | pytest | harness |
 
 **Não entram (denylist):** frameworks web, ORMs, libs de telemetria, cálculo
@@ -179,3 +182,14 @@ financeiro dentro de prompts.
   Sem download em execução (REQ-NF-006) — validado no smoke do pacote que OCRiza
   de verdade (`e2e/empacotado.spec.ts`). Config validada em runtime: PP-OCRv6
   medium, `lang_type='pt'` (modelo multilíngue único; `lang_type` é string).
+- sqlcipher3 no PyInstaller (ADR-0016, M16) → binário nativo; hook/`collect_all`
+  no `SidecarHF.spec` + smoke do pacote que abre um cofre de verdade. A migração
+  do banco em claro é atômica (exporta → verifica → remove) — falha no meio não
+  pode corromper os dados do usuário.
+- `llama-server` embarcado (ADR-0016, M17) → binário llama.cpp como
+  *extraResource* (builds CPU e Vulkan); porta efêmera em loopback, health antes
+  de usar, kill no shutdown (mesma disciplina do sidecar). Sem modelo instalado
+  o app degrada (P8) com instrução na GUI; download de modelo só do catálogo com
+  SHA-256 travado (REQ-NF-007). VRAM alvo 4 GB ⇒ catálogo prioriza 3–4B Q4.
+- Cofre muda a UX de abertura (login) → auto-lock configurável; anti-brute-force
+  não pode travar o dono legítimo (atraso exponencial, não bloqueio permanente).

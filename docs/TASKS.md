@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.5.0 (ciclo aberto — ADR-0013) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.8.0 (ciclo aberto — ADR-0016) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -235,6 +235,35 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1405 | Comprovante escaneado → `Lancamento` (reconstrução de linhas por layout) reusando `agent/classificacao.py` e `/importar/*` do v2.6 + GUI + E2E | REQ-F-026 | T-1403 | ✅ |
 | T-1406 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.7.0 e docs sincronizados | Processo | todos | ✅ |
 
+## Milestone M16 — Cofre local: login + MFA + criptografia em repouso (v2.8, ADR-0016)
+
+> Primeira mudança pós-freeze v2.7.0, autorizada pela ADR-0016. O app vira um
+> **cofre**: senha mestra + TOTP abrem uma sessão; o banco inteiro passa a ser
+> SQLCipher com envelope DEK/KEK (Argon2id); códigos de recuperação de uso
+> único; sem backdoor. Modelo de ameaça: protege o dado em repouso (disco,
+> backup, outra conta) — malware na sessão aberta está fora do escopo.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1601 | ADR-0016 + bump 2.8.0 + `sidecar/auth.py`: Argon2id (KEK) + DEK envelopada (AES-GCM) + TOTP (pyotp) + 10 códigos de recuperação (hash + envelope da DEK) + anti-brute-force com atraso exponencial; metadados em `auth.json` fora do cofre; testes | REQ-SEC-005/006/007 | — | ✅ |
+| T-1602 | Banco cifrado: `sidecar/persistencia.py` abre via SQLCipher (`PRAGMA key` = DEK) + migração atômica do `dados.db` em claro (exporta → verifica → remove) + testes | REQ-SEC-006 | T-1601 | ⬜ |
+| T-1603 | Sessão de cofre no sidecar: endpoints de negócio exigem desbloqueio (`423 Locked`), `POST /auth/*` (cadastro, login, logout, recuperação, trocar senha), auto-lock por inatividade + bloqueio manual; DEK só em memória; testes de contrato | REQ-SEC-005 | T-1601/1602 | ⬜ |
+| T-1604 | GUI: assistente de cadastro (senha + QR do TOTP + códigos p/ guardar + aviso "sem backdoor"), tela de desbloqueio, "esqueci a senha" via código, indicador/botão de bloqueio + E2E | REQ-SEC-005/007 | T-1603 | ⬜ |
+
+## Milestone M17 — LLM embarcada autogerida (v2.8, ADR-0016)
+
+> Elimina a dependência de Ollama/LM Studio: o sidecar embarca e gerencia um
+> `llama-server` (llama.cpp) em loopback; o modelo GGUF é instalado pelo
+> próprio app (catálogo com SHA-256 travado — única exceção de rede, opt-in —
+> ou arquivo local). ADR-0002 preservada: outros providers seguem opcionais.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1701 | `sidecar/runtime_llm.py`: gerência do processo `llama-server` (start sob demanda, loopback + porta efêmera, health, shutdown), `OpenAICompatProvider` apontando p/ ele como padrão de fábrica; sem modelo ⇒ degrada com motivo (P8); testes | REQ-F-027, REQ-NF-007 | — | ⬜ |
+| T-1702 | Gestor de modelos: catálogo curado (URL + SHA-256 travados no código, licença comercial ok), download com progresso/retomada + verificação de hash obrigatória, opção de apontar `.gguf` local; tela de configuração da IA + E2E | REQ-F-028, REQ-NF-007 | T-1701 | ⬜ |
+| T-1703 | Empacotamento: `llama-server` (CPU + Vulkan) como *extraResource* + sqlcipher3 no `SidecarHF.spec`; smoke do pacote que abre cofre E gera análise com o runtime embarcado | Processo | T-1602/1701 | ⬜ |
+| T-1704 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.8.0 e docs sincronizados | Processo | todos | ⬜ |
+
 ---
 
 ## Definição de Pronto (DoD)
@@ -243,6 +272,25 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
+**Ciclo v2.8 ABERTO (ADR-0016, M16+M17)** — o app vira um **cofre** e a LLM
+deixa de exigir ferramenta de terceiros. Decisões do mantenedor (2026-07-10):
+runtime **llama.cpp embarcado** (`llama-server` gerido pelo sidecar), modelo
+por **download gerenciado no 1º uso** (catálogo com SHA-256 travado; `.gguf`
+local também aceito), cofre **SQLCipher + Argon2id** (envelope DEK/KEK) e MFA
+**TOTP + códigos de recuperação** (offline, sem backdoor). **T-1601 ✅**:
+`sidecar/auth.py` (classe `Cofre`: envelope DEK/KEK com nonce novo por
+cifragem, TOTP com anti-replay monotônico, códigos consumíveis via HKDF,
+atraso exponencial com relógio injetável; `auth.json` atômico via
+`os.replace`, parâmetros do KDF persistidos p/ recalibração) + 30 testes
+(339 passed). Atenção p/ o T-1603: o `Cofre` não tem lock próprio — envolver
+num `threading.Lock` no sidecar (padrão `Repositorio`). Próxima task:
+**T-1602** (banco cifrado + migração atômica). Depois
+T-1603 (sessão 423/login/lock no sidecar), T-1604 (GUI de
+onboarding/desbloqueio), T-1701/1702 (runtime embarcado + gestor de modelos),
+T-1703 (empacotamento com smoke real) e T-1704 (fechamento + ata v2.8.0).
+
+### Histórico do ciclo v2.7 (fechado)
+
 **Ciclo v2.7 FECHADO E CONGELADO (`FREEZE.md` v2.7.0, ADR-0015, M14+M15).** OCR
 local de documento escaneado, do Contrato à importação. **T-1401** deu a fundação
 (`core/documento.py`); **T-1402** o motor `agent/ocr.py` (RapidOCR + PP-OCRv6
