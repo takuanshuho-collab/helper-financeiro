@@ -246,7 +246,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-1601 | ADR-0016 + bump 2.8.0 + `sidecar/auth.py`: Argon2id (KEK) + DEK envelopada (AES-GCM) + TOTP (pyotp) + 10 códigos de recuperação (hash + envelope da DEK) + anti-brute-force com atraso exponencial; metadados em `auth.json` fora do cofre; testes | REQ-SEC-005/006/007 | — | ✅ |
-| T-1602 | Banco cifrado: `sidecar/persistencia.py` abre via SQLCipher (`PRAGMA key` = DEK) + migração atômica do `dados.db` em claro (exporta → verifica → remove) + testes | REQ-SEC-006 | T-1601 | ⬜ |
+| T-1602 | Banco cifrado: `sidecar/persistencia.py` abre via SQLCipher (`PRAGMA key` = DEK) + migração atômica do `dados.db` em claro (exporta → verifica → remove) + testes | REQ-SEC-006 | T-1601 | ✅ |
 | T-1603 | Sessão de cofre no sidecar: endpoints de negócio exigem desbloqueio (`423 Locked`), `POST /auth/*` (cadastro, login, logout, recuperação, trocar senha), auto-lock por inatividade + bloqueio manual; DEK só em memória; testes de contrato | REQ-SEC-005 | T-1601/1602 | ⬜ |
 | T-1604 | GUI: assistente de cadastro (senha + QR do TOTP + códigos p/ guardar + aviso "sem backdoor"), tela de desbloqueio, "esqueci a senha" via código, indicador/botão de bloqueio + E2E | REQ-SEC-005/007 | T-1603 | ⬜ |
 
@@ -282,9 +282,17 @@ local também aceito), cofre **SQLCipher + Argon2id** (envelope DEK/KEK) e MFA
 cifragem, TOTP com anti-replay monotônico, códigos consumíveis via HKDF,
 atraso exponencial com relógio injetável; `auth.json` atômico via
 `os.replace`, parâmetros do KDF persistidos p/ recalibração) + 30 testes
-(339 passed). Atenção p/ o T-1603: o `Cofre` não tem lock próprio — envolver
-num `threading.Lock` no sidecar (padrão `Repositorio`). Próxima task:
-**T-1602** (banco cifrado + migração atômica). Depois
+(339 passed). **T-1602 ✅**: banco cifrado — `sqlcipher3-wheels` (SQLCipher
+2.6.0), `Repositorio(dek=...)` com **raw key** `x'<hex>'` (pula o PBKDF2
+interno; o KDF forte é o Argon2id do T-1601) + leitura de sanidade pós-key
+(chave errada só falha na 1ª leitura → `ChaveInvalida`, sem vazar a chave);
+`migrar_para_cofre` atômica (exporta p/ `.novo` via `sqlcipher_export` →
+verifica integridade+contagens → `os.replace`; falha preserva o original);
+`dek=None` transitório até o T-1603; 9 testes novos (346 passed). Atenção p/
+o T-1603: (1) o `Cofre` do auth.py não tem lock próprio — envolver num
+`threading.Lock` (padrão `Repositorio`); (2) chave errada faz o SQLCipher
+imprimir `hmac check failed` no stderr (não vaza a chave; decidir se filtra
+no log do sidecar). Próxima task: **T-1603** (sessão 423/login/lock). Depois
 T-1603 (sessão 423/login/lock no sidecar), T-1604 (GUI de
 onboarding/desbloqueio), T-1701/1702 (runtime embarcado + gestor de modelos),
 T-1703 (empacotamento com smoke real) e T-1704 (fechamento + ata v2.8.0).

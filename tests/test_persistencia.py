@@ -8,17 +8,27 @@ sessões) e acesso concorrente (o sidecar atende em múltiplas threads).
 """
 from __future__ import annotations
 
+import secrets
 import sqlite3
 import threading
 from pathlib import Path
 
 import pytest
 
+from sidecar import persistencia
 from sidecar.persistencia import (
     VERSAO_ESQUEMA,
+    ChaveInvalida,
+    ErroMigracao,
     Repositorio,
+    arquivo_em_claro,
     caminho_banco,
+    migrar_para_cofre,
 )
+
+# DEK fixa do teste (nunca vai a %APPDATA% real — sempre sob tmp_path).
+_DEK = secrets.token_bytes(32)
+_HEADER_CLARO = b"SQLite format 3\x00"
 
 
 # ------------------------------------------------------- caminho do banco
@@ -261,3 +271,136 @@ def test_escritas_concorrentes_nao_se_corrompem(tmp_path):
     for i in range(16):
         assert repo.carregar_estado(f"chave_{i}") == {"i": i}
     repo.fechar()
+
+
+# ---------------------------------------------- cofre cifrado (T-1602, ADR-0016 §B)
+def _popular(repo: Repositorio) -> None:
+    """Grava um pouco de tudo (perfil, dívidas embutidas, rubricas) para os asserts."""
+    repo.salvar_estado("perfil", {
+        "renda": {"salario_liquido": 4200.0},
+        "dividas": [{"credor": "Banco São João", "saldo_devedor": 12000.0}],
+    })
+    repo.criar_rubrica("fixas", "contas_casa", "Conta de luz", 180.0)
+    repo.criar_rubrica("variaveis", "mercado", "Feira do produtor", 95.5)
+
+
+def test_cofre_roundtrip_com_dek(tmp_path):
+    caminho = tmp_path / "dados.db"
+    repo = Repositorio(caminho, dek=_DEK)
+    _popular(repo)
+    repo.fechar()
+
+    # Reabre com a MESMA DEK: tudo volta igual (dados sobrevivem à sessão).
+    repo2 = Repositorio(caminho, dek=_DEK)
+    assert repo2.versao_esquema() == VERSAO_ESQUEMA
+    perfil = repo2.carregar_estado("perfil")
+    assert perfil is not None
+    assert perfil["dividas"][0]["credor"] == "Banco São João"
+    assert [r["nome"] for r in repo2.listar_rubricas()] == ["Conta de luz", "Feira do produtor"]
+    repo2.fechar()
+
+
+def test_cofre_dek_errada_levanta_excecao_tipada(tmp_path):
+    caminho = tmp_path / "dados.db"
+    repo = Repositorio(caminho, dek=_DEK)
+    _popular(repo)
+    repo.fechar()
+
+    outra = secrets.token_bytes(32)
+    with pytest.raises(ChaveInvalida) as exc:
+        Repositorio(caminho, dek=outra)
+    # A mensagem NUNCA pode conter a chave (nem certa nem errada) — REQ-SEC-001.
+    texto = str(exc.value)
+    assert _DEK.hex() not in texto
+    assert outra.hex() not in texto
+
+
+def test_cofre_arquivo_nao_esta_em_claro(tmp_path):
+    caminho = tmp_path / "dados.db"
+    repo = Repositorio(caminho, dek=_DEK)
+    repo.criar_rubrica("fixas", "contas_casa", "Rubrica Secreta Xyz", 180.0)
+    repo.fechar()
+
+    bruto = caminho.read_bytes()
+    assert not bruto.startswith(_HEADER_CLARO)              # contêiner cifrado
+    assert b"Rubrica Secreta Xyz" not in bruto              # dado não em claro
+    assert b"contas_casa" not in bruto
+
+
+def test_arquivo_em_claro_detecta_os_tres_casos(tmp_path):
+    # 1) banco stdlib em claro → True
+    claro = tmp_path / "claro.db"
+    repo_claro = Repositorio(claro, dek=None)
+    repo_claro.fechar()
+    assert arquivo_em_claro(claro) is True
+
+    # 2) cofre cifrado → False
+    cofre = tmp_path / "cofre.db"
+    repo_cofre = Repositorio(cofre, dek=_DEK)
+    repo_cofre.fechar()
+    assert arquivo_em_claro(cofre) is False
+
+    # 3) inexistente → False
+    assert arquivo_em_claro(tmp_path / "nao_existe.db") is False
+
+
+def test_migracao_converte_banco_em_claro(tmp_path):
+    caminho = tmp_path / "dados.db"
+    # Popula o banco EM CLARO (caminho dek=None), como um dados.db pré-v2.8.
+    repo = Repositorio(caminho, dek=None)
+    _popular(repo)
+    repo.fechar()
+    assert arquivo_em_claro(caminho) is True
+
+    migrar_para_cofre(caminho, _DEK)
+
+    # Depois: cifrado, sem sobra de `.novo`, e os dados abrem com a DEK.
+    assert arquivo_em_claro(caminho) is False
+    assert not (tmp_path / "dados.db.novo").exists()
+    repo2 = Repositorio(caminho, dek=_DEK)
+    perfil = repo2.carregar_estado("perfil")
+    assert perfil is not None
+    assert perfil["renda"]["salario_liquido"] == 4200.0
+    assert [r["nome"] for r in repo2.listar_rubricas()] == ["Conta de luz", "Feira do produtor"]
+    repo2.fechar()
+
+
+def test_migracao_e_idempotente(tmp_path):
+    caminho = tmp_path / "dados.db"
+    repo = Repositorio(caminho, dek=None)
+    _popular(repo)
+    repo.fechar()
+
+    migrar_para_cofre(caminho, _DEK)          # migra de fato
+    antes = caminho.read_bytes()
+    migrar_para_cofre(caminho, _DEK)          # já cifrado → no-op
+    assert caminho.read_bytes() == antes      # não mexeu no arquivo
+
+    # Caminho inexistente → no-op silencioso (não cria nada).
+    inexistente = tmp_path / "fantasma.db"
+    migrar_para_cofre(inexistente, _DEK)
+    assert not inexistente.exists()
+
+
+def test_migracao_falha_na_verificacao_preserva_original(tmp_path, monkeypatch):
+    caminho = tmp_path / "dados.db"
+    repo = Repositorio(caminho, dek=None)
+    _popular(repo)
+    repo.fechar()
+    original = caminho.read_bytes()
+
+    # Simula falha na etapa de verificação (ex.: integridade/contagem).
+    def _boom(*_a, **_k):
+        raise ErroMigracao("verificação simulada falhou")
+
+    monkeypatch.setattr(persistencia, "_verificar_cofre", _boom)
+    with pytest.raises(ErroMigracao):
+        migrar_para_cofre(caminho, _DEK)
+
+    # O original em claro permanece intacto e legível; nenhum `.novo` sobra.
+    assert caminho.read_bytes() == original
+    assert arquivo_em_claro(caminho) is True
+    assert not (tmp_path / "dados.db.novo").exists()
+    repo2 = Repositorio(caminho, dek=None)
+    assert repo2.carregar_estado("perfil") is not None
+    repo2.fechar()

@@ -6,10 +6,35 @@ arquivo fica no perfil do usuário (`%APPDATA%\\HelperFinanceiro\\dados.db`),
 fora do repositório e fora de logs (REQ-SEC-001); o mapa de anonimização
 continua existindo apenas em memória (REQ-SEC-003) — nada daqui vai ao LLM.
 
-`sqlite3` da stdlib, conexão única + `threading.Lock` (o FastAPI atende em
-múltiplas threads), mesmo padrão do `_JOBS_IA`. A tabela `esquema` versiona o
-banco para migrações futuras; `rubrica` já nasce com a coluna `mes`
-(NULL = orçamento vivo) para o histórico mensal entrar sem migração dolorosa.
+Conexão única + `threading.Lock` (o FastAPI atende em múltiplas threads), mesmo
+padrão do `_JOBS_IA`. A tabela `esquema` versiona o banco para migrações
+futuras; `rubrica` já nasce com a coluna `mes` (NULL = orçamento vivo) para o
+histórico mensal entrar sem migração dolorosa.
+
+## Cofre cifrado (ADR-0016 §B, REQ-SEC-006) — T-1602
+
+O contêiner do banco passa a ser **SQLCipher** (AES-256): o `Repositorio` recebe
+a **DEK** (32 bytes, vinda do `auth.py`/T-1601) e a aplica por `PRAGMA key` antes
+de qualquer consulta. Detalhes de projeto (decididos na ADR):
+
+- **Raw key, sem KDF interno.** O PRAGMA usa a DEK como blob literal
+  (`x'<64 hex>'`), o que PULA o PBKDF2 interno do SQLCipher: o KDF forte já é o
+  Argon2id do cofre (T-1601) — empilhar dois KDFs só custaria latência. A DEK só
+  aparece na montagem local do PRAGMA/ATTACH; **nunca** em log, repr ou exceção.
+- **Sanidade pós-key.** Com chave errada o SQLCipher não falha no `PRAGMA key`,
+  só na PRIMEIRA leitura — por isso, logo após aplicar a chave, fazemos um
+  `SELECT count(*) FROM sqlite_master`; a falha vira `ChaveInvalida` (sem vazar
+  a chave), não um erro obscuro lá na frente.
+- **`dek=None` é transitório.** Mantém o comportamento antigo (sqlite3 da stdlib,
+  banco em claro): existe para o `app.py` seguir funcionando até o T-1603 ligar a
+  sessão do cofre, e para a migração conseguir LER o banco antigo em claro. O
+  T-1603 remove esse uso em produção.
+- **Migração atômica** (`migrar_para_cofre`): o schema lógico não muda
+  (`VERSAO_ESQUEMA` continua 1), muda o contêiner. Exportamos o `dados.db` em
+  claro para um `.novo` cifrado (`sqlcipher_export`), **verificamos** (integridade
+  + contagem de linhas) ANTES de tocar no original e só então trocamos por
+  `os.replace` (atômico). Qualquer falha antes disso remove o `.novo` e deixa o
+  original intacto — o usuário nunca perde dados no meio do caminho.
 """
 from __future__ import annotations
 
@@ -20,11 +45,21 @@ import threading
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
+
+import sqlcipher3  # driver do banco cifrado (ADR-0016 §B); em claro seguimos no sqlite3
 
 VERSAO_ESQUEMA = 1
 
 # Seções do orçamento que aceitam rubricas (ADR-0012: saldos ficam de fora).
 CATEGORIAS_RUBRICA = ("renda", "fixas", "variaveis")
+
+# Header mágico do SQLite em claro (16 bytes). O contêiner SQLCipher começa com
+# bytes aleatórios (o sal), então a presença deste header detecta "ainda em claro".
+_HEADER_SQLITE_CLARO = b"SQLite format 3\x00"
+
+# Tabelas conferidas na verificação da migração (contagem de linhas por tabela).
+_TABELAS_MIGRACAO = ("esquema", "estado", "rubrica")
 
 _DDL_V1 = """
 CREATE TABLE IF NOT EXISTS esquema (
@@ -48,6 +83,153 @@ CREATE INDEX IF NOT EXISTS idx_rubrica_campo ON rubrica (categoria, campo_pai);
 """
 
 
+# --------------------------------------------------------------- exceções
+class ChaveInvalida(Exception):
+    """A DEK não abre o cofre (chave errada ou arquivo corrompido).
+
+    A mensagem NUNCA contém a chave nem sua representação hex (REQ-SEC-001).
+    """
+
+
+class ErroMigracao(RuntimeError):
+    """A migração para o cofre falhou na verificação; o original em claro é preservado."""
+
+
+# --------------------------------------------------------- helpers de cofre
+def _blob_key(dek: bytes) -> str:
+    """Representa a DEK como blob literal SQL `x'<hex>'` — raw key, sem KDF interno.
+
+    Usada apenas para montar o `PRAGMA key`/`ATTACH ... KEY` localmente; o valor
+    é efêmero e nunca vai a log, repr ou exceção (ADR-0016 §B, REQ-SEC-006).
+    """
+    return f"x'{dek.hex()}'"
+
+
+def _conectar(caminho: Path, dek: bytes | None) -> sqlite3.Connection:
+    """Abre a conexão do repositório: em claro (`dek=None`) ou cifrada (SQLCipher).
+
+    Com DEK: aplica a raw key e faz uma leitura de sanidade — o SQLCipher só
+    acusa chave errada na PRIMEIRA leitura, não no `PRAGMA key` —, traduzindo a
+    falha em `ChaveInvalida` (sem vazar a chave). `check_same_thread=False`: quem
+    serializa o acesso é o lock do `Repositorio`, não o driver.
+    """
+    if dek is None:
+        con = sqlite3.connect(str(caminho), check_same_thread=False)
+        con.row_factory = sqlite3.Row
+        return con
+    cifrada = sqlcipher3.connect(str(caminho), check_same_thread=False)
+    cifrada.row_factory = sqlcipher3.Row
+    cifrada.execute(f'PRAGMA key = "{_blob_key(dek)}"')
+    try:
+        cifrada.execute("SELECT count(*) FROM sqlite_master").fetchone()
+    except sqlcipher3.DatabaseError:
+        cifrada.close()
+        # Sem detalhe com a chave: a exceção não pode virar vetor de vazamento.
+        raise ChaveInvalida("Não foi possível abrir o cofre com a chave fornecida.") from None
+    # sqlcipher3.Connection espelha a DBAPI do sqlite3; o cast diz "mesma interface".
+    return cast("sqlite3.Connection", cifrada)
+
+
+def arquivo_em_claro(caminho: Path) -> bool:
+    """`True` se o arquivo é um SQLite em claro (header mágico); `False` se cifrado.
+
+    Arquivo inexistente → `False` (nada a migrar). Determinístico: o SQLCipher
+    embaralha o começo do arquivo, então a ausência do header basta.
+    """
+    caminho = Path(caminho)
+    if not caminho.exists():
+        return False
+    with caminho.open("rb") as f:
+        return f.read(len(_HEADER_SQLITE_CLARO)) == _HEADER_SQLITE_CLARO
+
+
+def _contar_linhas_claro(caminho: Path) -> dict[str, int]:
+    """Contagem de linhas por tabela do banco EM CLARO (referência da verificação)."""
+    con = sqlite3.connect(str(caminho))
+    try:
+        return {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+                for t in _TABELAS_MIGRACAO}
+    finally:
+        con.close()
+
+
+def _exportar_para_cofre(origem: Path, destino: Path, dek: bytes) -> None:
+    """Copia o banco em claro `origem` para o cofre cifrado `destino` (`sqlcipher_export`).
+
+    Abre a origem em claro COM o driver sqlcipher3 (sem key), anexa o `destino`
+    com a DEK e usa `sqlcipher_export` — o jeito canônico e íntegro de recifrar.
+    O caminho do destino é passado como parâmetro ligado (escapa a barra/aspas do
+    Windows); a KEY é inline porque um blob literal (`x'...'`) não pode vir por
+    bind sem o SQLCipher tratá-lo como passphrase (o que reintroduziria o KDF).
+    `isolation_level=None` (autocommit): `sqlcipher_export` gere sua transação.
+    """
+    con = sqlcipher3.connect(str(origem), isolation_level=None)
+    try:
+        con.execute(f'ATTACH DATABASE ? AS cofre KEY "{_blob_key(dek)}"', (str(destino),))
+        con.execute("SELECT sqlcipher_export('cofre')").fetchall()
+        # Preserva o user_version (não usado hoje — versionamos pela tabela
+        # `esquema` — mas copiar é barato e à prova de futuro).
+        uv = con.execute("PRAGMA user_version").fetchone()[0]
+        con.execute(f"PRAGMA cofre.user_version = {int(uv)}")
+        con.execute("DETACH DATABASE cofre")
+    finally:
+        con.close()
+
+
+def _verificar_cofre(destino: Path, dek: bytes, contagens_esperadas: dict[str, int]) -> None:
+    """Confere o cofre recém-exportado ANTES de qualquer remoção do original.
+
+    Reabre `destino` com a DEK (chave errada ⇒ `ChaveInvalida`), roda
+    `PRAGMA integrity_check` e compara a contagem de linhas por tabela com a do
+    original. Qualquer divergência levanta `ErroMigracao` — o chamador então
+    descarta o `.novo` e mantém o banco em claro intacto. Função nomeada de
+    propósito: os testes de atomicidade a substituem (monkeypatch) para simular
+    falha de verificação sem corromper nada de verdade.
+    """
+    con = _conectar(destino, dek)
+    try:
+        integridade = con.execute("PRAGMA integrity_check").fetchone()[0]
+        if integridade != "ok":
+            raise ErroMigracao(f"integridade do cofre falhou: {integridade}")
+        for tabela, esperado in contagens_esperadas.items():
+            atual = con.execute(f"SELECT count(*) FROM {tabela}").fetchone()[0]
+            if atual != esperado:
+                raise ErroMigracao(
+                    f"contagem de '{tabela}' divergiu após a migração "
+                    f"({atual} != {esperado})"
+                )
+    finally:
+        con.close()
+
+
+def migrar_para_cofre(caminho: Path, dek: bytes) -> None:
+    """Migra o `dados.db` em claro para o cofre cifrado, de forma ATÔMICA (REQ-SEC-006).
+
+    Idempotente: se o arquivo não existe ou já está cifrado, é no-op. Caso
+    contrário exporta para `<caminho>.novo`, verifica (integridade + contagens) e
+    só então faz `os.replace` — troca atômica que apaga o arquivo em claro. Falha
+    em QUALQUER etapa anterior remove o `.novo` (se existir) e deixa o original
+    intacto; a exceção sobe para o chamador (T-1603) decidir o que exibir. O nome
+    do arquivo não muda — muda só o contêiner (`caminho_banco()` intocado).
+    """
+    caminho = Path(caminho)
+    if not arquivo_em_claro(caminho):
+        return
+    novo = caminho.with_name(caminho.name + ".novo")
+    try:
+        if novo.exists():
+            novo.unlink()
+        contagens = _contar_linhas_claro(caminho)
+        _exportar_para_cofre(caminho, novo, dek)
+        _verificar_cofre(novo, dek, contagens)
+    except BaseException:
+        # Nunca deixa lixo cifrado meio-pronto ao lado do original.
+        if novo.exists():
+            novo.unlink()
+        raise
+    os.replace(novo, caminho)
+
+
 def caminho_banco(ambiente: Mapping[str, str] | None = None) -> Path:
     """Resolve o caminho do banco: `HF_DB_PATH` (testes/E2E) > perfil do usuário."""
     env = os.environ if ambiente is None else ambiente
@@ -62,12 +244,20 @@ def caminho_banco(ambiente: Mapping[str, str] | None = None) -> Path:
 class Repositorio:
     """Fachada única de acesso ao banco (thread-safe por lock)."""
 
-    def __init__(self, caminho: Path | None = None) -> None:
+    def __init__(self, caminho: Path | None = None, dek: bytes | None = None) -> None:
+        """Abre o banco e aplica a migração de SCHEMA (`_migrar`). Com `dek`, o
+        contêiner é SQLCipher (ADR-0016 §B) — a migração de CONTÊINER é
+        `migrar_para_cofre`, chamada pelo T-1603 ANTES de instanciar isto.
+
+        `dek=None` é transitório: mantém o banco em claro (sqlite3 da stdlib) para
+        o `app.py` funcionar até o T-1603 ligar a sessão do cofre — e para a
+        migração conseguir ler o banco antigo. Em produção o T-1603 sempre passa a
+        DEK. Chave errada no modo cifrado levanta `ChaveInvalida` já na abertura.
+        """
         self._caminho = caminho if caminho is not None else caminho_banco()
         self._caminho.parent.mkdir(parents=True, exist_ok=True)
-        # check_same_thread=False: o lock (e não o sqlite) serializa o acesso.
-        self._conn = sqlite3.connect(str(self._caminho), check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        # check_same_thread=False: o lock (e não o driver) serializa o acesso.
+        self._conn = _conectar(self._caminho, dek)
         self._lock = threading.Lock()
         self._migrar()
 
