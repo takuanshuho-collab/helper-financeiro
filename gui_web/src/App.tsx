@@ -13,6 +13,7 @@ import type {
 import { useAnalise } from './hf/useAnalise'
 import Analise from './screens/Analise'
 import Carta from './screens/Carta'
+import ConfiguracaoIa from './screens/ConfiguracaoIa'
 import Contrato from './screens/Contrato'
 import Desbloqueio from './screens/Desbloqueio'
 import Dividas from './screens/Dividas'
@@ -20,7 +21,8 @@ import Onboarding from './screens/Onboarding'
 import Perfil from './screens/Perfil'
 import VisaoGeral from './screens/VisaoGeral'
 
-// As 6 telas do redesign "Clareza" (REQ-F-010..016).
+// As 6 telas do redesign "Clareza" (REQ-F-010..016) + Configuração da IA
+// (T-1702, ADR-0016 §F).
 const ABAS = [
   'Visão geral',
   'Perfil',
@@ -28,6 +30,7 @@ const ABAS = [
   'Contrato',
   'Análise',
   'Carta ao credor',
+  'Configuração da IA',
 ] as const
 
 // Perfil semente (M8): ponto de partida editável pelas telas Perfil (T-803) e
@@ -274,8 +277,10 @@ export default function App() {
             setSecaoIa={setSecaoIa}
           />
         )
-      default:
+      case 5:
         return <Carta perfil={perfil} />
+      default:
+        return <ConfiguracaoIa />
     }
   }
 

@@ -385,6 +385,64 @@ export interface AuthCadastroOut {
   codigos_recuperacao: string[]
 }
 
+// --- Gestor de modelos GGUF (T-1702, ADR-0016 §F, REQ-F-028) ------------------
+
+/** Motivo textual quando o runtime embarcado não está disponível — a tela
+ * traduz cada um numa instrução acionável (ver `ConfiguracaoIa.tsx`). */
+export type MotivoIndisponivelLlm = 'BINARIO_AUSENTE' | 'MODELO_AUSENTE' | string
+
+export interface LlmStatusOut {
+  /** true = `HF_BASE_URL` aponta pro servidor do usuário (Ollama/LM Studio). */
+  servidor_usuario: boolean
+  base_url: string
+  binario_presente: boolean
+  /** Caminho do `.gguf` ativo (env, llm.json ou catálogo baixado); null = nenhum. */
+  modelo_ativo: string | null
+  runtime_ativo: boolean
+  motivo_indisponivel: MotivoIndisponivelLlm | null
+}
+
+export type EstadoItemCatalogo = 'baixado' | 'baixando' | 'ausente'
+
+export interface CatalogoItemOut {
+  id: string
+  nome: string
+  descricao: string
+  licenca: string
+  tamanho_bytes: number
+  /** Nome do arquivo final no disco — casa `LlmStatusOut.modelo_ativo` com o item. */
+  arquivo: string
+  estado: EstadoItemCatalogo
+  /** Só presentes quando `estado === 'baixando'`. */
+  job_id?: string
+  bytes_baixados?: number
+  bytes_total?: number
+}
+
+export interface LlmCatalogoOut {
+  catalogo: CatalogoItemOut[]
+}
+
+export interface LlmJobOut {
+  job_id: string
+}
+
+export type StatusDownloadLlm = 'baixando' | 'pronto' | 'erro' | 'cancelado'
+
+export interface LlmBaixarStatusOut {
+  job_id: string
+  catalogo_id: string
+  status: StatusDownloadLlm
+  bytes_baixados: number
+  bytes_total: number
+  erro: string
+}
+
+export interface LlmModeloDefinidoOut {
+  ok: boolean
+  modelo_ativo: string
+}
+
 // --- Estado de uma chamada assíncrona (para as telas) ------------------------
 
 export type Estado<T> =

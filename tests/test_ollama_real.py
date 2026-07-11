@@ -51,6 +51,16 @@ pytestmark = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _servidor_do_usuario(monkeypatch):
+    """Estes testes exercitam o Ollama REAL do usuário — desde a ADR-0016 §E
+    (T-1701/1702), sem `HF_BASE_URL` as fábricas preferem o runtime EMBARCADO
+    (ausente neste ambiente ⇒ degradação, e o teste deixaria de testar o
+    Ollama sem ninguém notar). Definir a env restaura a precedência do
+    servidor do usuário, que é exatamente o cenário deste arquivo."""
+    monkeypatch.setenv("HF_BASE_URL", "http://127.0.0.1:11434")
+
+
 def _cfg() -> ConfigAgente:
     return ConfigAgente(provider="local", cache=False, model=_MODELO or "",
                         timeout_s=int(os.getenv("HF_TIMEOUT", "300")))

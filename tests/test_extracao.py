@@ -250,7 +250,7 @@ def test_extracao_remota_e_recusada():
     assert "ERRO_CONFIG:RuntimeError" in estado["motivos"]
 
 
-def test_obter_extrator_aceita_openai_compat_local():
+def test_obter_extrator_aceita_openai_compat_local(monkeypatch):
     """LM Studio em loopback é aceito; o dialeto segue o provider (ADR-0010)."""
     from agent.extracao import OllamaExtrator, OpenAICompatExtrator, obter_extrator
 
@@ -259,6 +259,9 @@ def test_obter_extrator_aceita_openai_compat_local():
     assert isinstance(ext, OpenAICompatExtrator)
     assert ext.url == "http://localhost:1234/v1/chat/completions"
     # Só "local"/"ollama" falam a API nativa; o resto é OpenAI-compatible.
+    # HF_BASE_URL fixado: servidor do usuário (Ollama de verdade) — sem ele,
+    # provider="local"/"ollama" cairia no runtime embarcado (T-1702).
+    monkeypatch.setenv("HF_BASE_URL", "http://localhost:11434/v1")
     assert isinstance(obter_extrator(ConfigAgente(provider="local")), OllamaExtrator)
     assert isinstance(obter_extrator(ConfigAgente(provider="ollama")), OllamaExtrator)
 
@@ -271,6 +274,21 @@ def test_obter_extrator_robusto_a_variacao_de_provider():
         ext = obter_extrator(ConfigAgente(provider=provider,
                                           base_url="http://localhost:1234/v1"))
         assert isinstance(ext, OpenAICompatExtrator), provider
+
+
+def test_obter_extrator_sem_hf_base_url_cai_no_runtime_embarcado(monkeypatch):
+    """Sem HF_BASE_URL, provider="local" usa o runtime embarcado — que fala
+    OpenAI-compatible (llama-server), não a API nativa do Ollama (T-1702,
+    ADR-0016 §E)."""
+    from agent import provider as provider_mod
+    from agent.extracao import OpenAICompatExtrator, obter_extrator
+
+    monkeypatch.delenv("HF_BASE_URL", raising=False)
+    monkeypatch.setattr(provider_mod, "base_url_runtime_embarcado",
+                        lambda: "http://127.0.0.1:5599/v1")
+    ext = obter_extrator(ConfigAgente(provider="local"))
+    assert isinstance(ext, OpenAICompatExtrator)
+    assert ext.url == "http://127.0.0.1:5599/v1/chat/completions"
 
 
 def test_openai_compat_extrator_usa_dialeto_v1(monkeypatch):

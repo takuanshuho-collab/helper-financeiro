@@ -260,7 +260,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
 | T-1701 | `sidecar/runtime_llm.py`: gerência do processo `llama-server` (start sob demanda, loopback + porta efêmera, health, shutdown), `OpenAICompatProvider` apontando p/ ele como padrão de fábrica; sem modelo ⇒ degrada com motivo (P8); testes | REQ-F-027, REQ-NF-007 | — | ✅ |
-| T-1702 | Gestor de modelos: catálogo curado (URL + SHA-256 travados no código, licença comercial ok), download com progresso/retomada + verificação de hash obrigatória, opção de apontar `.gguf` local; tela de configuração da IA + E2E | REQ-F-028, REQ-NF-007 | T-1701 | ⬜ |
+| T-1702 | Gestor de modelos: catálogo curado (URL + SHA-256 travados no código, licença comercial ok), download com progresso/retomada + verificação de hash obrigatória, opção de apontar `.gguf` local; tela de configuração da IA + E2E | REQ-F-028, REQ-NF-007 | T-1701 | ✅ |
 | T-1703 | Empacotamento: `llama-server` (CPU + Vulkan) como *extraResource* + sqlcipher3 no `SidecarHF.spec`; smoke do pacote que abre cofre E gera análise com o runtime embarcado | Processo | T-1602/1701 | ⬜ |
 | T-1704 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.8.0 e docs sincronizados | Processo | todos | ⬜ |
 
@@ -335,9 +335,31 @@ recuperação com prova de uso único) + os 14 existentes adaptados
 (`HF_AUTH_PATH` isolado, `HF_AUTO_LOCK_MIN=1440`) = **17 passed**. Sem porta
 dos fundos de dev, por decisão do mantenedor. `empacotado.spec.ts` adaptado
 mas só valida de verdade no T-1703 (pacote precisa embarcar
-qrcode/sqlcipher3). Próximas: **T-1702** (gestor de modelos; lembrar as
-pendências acima), T-1703 (empacotamento com smoke real) e T-1704
-(fechamento + ata v2.8.0).
+qrcode/sqlcipher3). **T-1702 ✅**: `sidecar/gestor_modelos.py` — catálogo
+curado travado no código (Phi-3.5 Mini Q4 MIT ~2,3 GB; Qwen2.5-1.5B Q4
+Apache-2.0 ~1,1 GB; Granite 3.1 2B Q4 Apache-2.0 ~1,5 GB; SHA-256 via
+`lfs.oid` da API do HF, conferidos NA REVISÃO contra a API — 3/3 batem;
+Ministral/Qwen2.5-3B fora por licença de pesquisa); download em `.parcial`
+com retomada `Range`, hash obrigatório antes do `os.replace`, cancelamento
+cooperativo; `llm.json` FORA do cofre (caminho de arquivo público) com
+resolução `HF_LLM_MODELO` > `llm.json`; endpoints `/llm/*` (status, catálogo,
+baixar como job async no padrão da análise, definir modelo) atrás de
+token+cofre; `encerrar_runtime()` no lifespan (pendência do T-1701 fechada);
+extração/classificação agora com a MESMA precedência `HF_BASE_URL` > runtime
+embarcado (dialeto muda junto: o `llama-server` fala OpenAI-compat); tela
+"Configuração da IA" (7ª aba) com progresso/cancelar/apontar `.gguf` via
+diálogo nativo; E2E com catálogo fake (`HF_CATALOGO_TESTE`) sem rede real.
+Correções da revisão: `/llm/baixar` idempotente por modelo (2 jobs no mesmo
+`.parcial` corromperiam o download) + teste; fixture `HF_BASE_URL` no
+`test_ollama_real.py` (a nova precedência tinha silenciado os 3 testes reais
+— voltaram a passar contra o Ollama do usuário). Suíte 409 passed / 95,8%;
+E2E 18 passed (1 flake do cenário "recuperação" em 1 de 3 rodadas, perfil do
+flake histórico: pós-rodada pesada, passa na reexecução — sem correção às
+cegas). Próximas: **T-1703** (empacotamento: llama-server extraResource
+CPU+Vulkan, sqlcipher3+qrcode/pypng no spec, smoke real cofre+download fake+
+análise; revalidar `empacotado.spec.ts`) e T-1704 (fechamento + ata v2.8.0;
+lembrar `scripts/preparar_ocr.py` antes do PyInstaller e TASKS.md finalizado
+antes de hashear).
 
 ### Histórico do ciclo v2.7 (fechado)
 

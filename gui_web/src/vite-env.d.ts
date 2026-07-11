@@ -8,6 +8,8 @@ interface HfBridge {
     filtroNome: string
     extensoes: string[]
   }): Promise<string | null>
+  /** Diálogo nativo de ABRIR (T-1702): aponta um `.gguf` já no disco. */
+  dialogoAbrir(opcoes: { filtroNome: string; extensoes: string[] }): Promise<string | null>
 }
 
 interface Window {

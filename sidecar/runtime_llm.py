@@ -125,14 +125,22 @@ def resolver_binario_llama(ambiente: Mapping[str, str] | None = None) -> Path | 
 def resolver_modelo(
     ambiente: Mapping[str, str] | None = None, modelo: str | os.PathLike[str] | None = None
 ) -> Path | None:
-    """Resolve o `.gguf` do modelo: parâmetro explícito > `HF_LLM_MODELO` > ausente.
+    """Resolve o `.gguf` do modelo: parâmetro explícito > `HF_LLM_MODELO` >
+    `llm.json` (T-1702, escolha do usuário na tela de Configuração da IA) >
+    ausente.
 
     Sem modelo configurado (ou apontando para arquivo inexistente) devolve
-    `None` — o runtime NÃO inicia e o chamador degrada (P8). O catálogo/download
-    é o T-1702; aqui só se APONTA um arquivo já presente no disco.
+    `None` — o runtime NÃO inicia e o chamador degrada (P8). Import tardio de
+    `sidecar.gestor_modelos`: esse módulo importa `encerrar_runtime` daqui
+    (para reiniciar o runtime quando o usuário troca o modelo ativo), então o
+    import a nível de módulo criaria um ciclo — cada lado resolve o outro só
+    dentro da função que precisa dele.
     """
     env = os.environ if ambiente is None else ambiente
     bruto = str(modelo).strip() if modelo is not None else env.get(VAR_MODELO, "").strip()
+    if not bruto:
+        from .gestor_modelos import modelo_ativo
+        bruto = modelo_ativo(ambiente) or ""
     if not bruto:
         return None
     caminho = Path(bruto)

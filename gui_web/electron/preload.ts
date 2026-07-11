@@ -11,4 +11,8 @@ contextBridge.exposeInMainWorld('hf', {
   // só recebe o caminho escolhido; quem escreve o arquivo é o sidecar.
   dialogoSalvar: (opcoes: unknown): Promise<string | null> =>
     ipcRenderer.invoke('hf:dialogo-salvar', opcoes),
+  // Diálogo nativo de abrir (Configuração da IA, T-1702): aponta um `.gguf`
+  // já presente no disco — o renderer só recebe o caminho, nunca o conteúdo.
+  dialogoAbrir: (opcoes: unknown): Promise<string | null> =>
+    ipcRenderer.invoke('hf:dialogo-abrir', opcoes),
 })

@@ -221,21 +221,27 @@ class OpenAICompatProvider:
         return self.analisar(fatos, correcao)
 
 
-def _provider_runtime_embarcado(cfg: ConfigAgente) -> LLMProvider:
-    """Sobe (lazy) o `llama-server` embarcado e devolve um `OpenAICompatProvider`
-    apontado ao endpoint loopback (ADR-0016 §E, REQ-F-027).
+def base_url_runtime_embarcado() -> str:
+    """Sobe (lazy) o `llama-server` embarcado e devolve o endpoint loopback
+    (`…/v1`), pronto para qualquer cliente OpenAI-compatible (ADR-0016 §E).
 
     Import TARDIO de `sidecar.runtime_llm`: o sidecar importa o agent, não o
-    contrário — só tocamos o sidecar quando o caminho embarcado é de fato usado,
-    evitando inverter a dependência de camadas no import. Se faltar
-    binário/modelo, `base_url()` levanta `RuntimeLLMIndisponivel` (subclasse de
-    `RuntimeError`), que o grafo converte em degradação P8 — nunca uma exceção
-    no fluxo de negócio.
+    contrário — só tocamos o sidecar quando o caminho embarcado é de fato
+    usado, evitando inverter a dependência de camadas no import. Reusado pela
+    fábrica de provider (abaixo) e pelas de extração/classificação
+    (`agent/extracao.py`/`agent/classificacao.py`, T-1702) — mesma
+    precedência nos três fluxos. Se faltar binário/modelo, levanta
+    `RuntimeLLMIndisponivel` (subclasse de `RuntimeError`); cada chamador
+    decide como degradar (P8), mas nenhum deixa a exceção virar 500.
     """
     from sidecar.runtime_llm import runtime_embarcado
 
-    base = runtime_embarcado().base_url()  # inicia sob demanda; loopback + porta efêmera
-    return OpenAICompatProvider(replace(cfg, base_url=base))
+    return runtime_embarcado().base_url()  # inicia sob demanda; loopback + porta efêmera
+
+
+def _provider_runtime_embarcado(cfg: ConfigAgente) -> LLMProvider:
+    """`OpenAICompatProvider` apontado ao endpoint do runtime embarcado."""
+    return OpenAICompatProvider(replace(cfg, base_url=base_url_runtime_embarcado()))
 
 
 def obter_provider(cfg: ConfigAgente) -> LLMProvider:

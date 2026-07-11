@@ -105,6 +105,30 @@ def test_resolver_modelo_ausente_ou_inexistente_vira_none(tmp_path):
     assert resolver_modelo({rt.VAR_MODELO: str(tmp_path / "sumido.gguf")}) is None
 
 
+def test_resolver_modelo_cai_no_llm_json_sem_env(binario_e_modelo, tmp_path):
+    """Sem `HF_LLM_MODELO`, a escolha feita na tela de Configuração da IA
+    (persistida em `llm.json`, T-1702) é quem resolve o modelo."""
+    from sidecar import gestor_modelos as gm
+
+    _, modelo = binario_e_modelo
+    ambiente = {gm.VAR_LLM_CONFIG_PATH: str(tmp_path / "llm.json")}
+    gm.definir_modelo_ativo(modelo, ambiente)
+    assert resolver_modelo(ambiente) == modelo
+
+
+def test_resolver_modelo_env_precede_llm_json(binario_e_modelo, tmp_path):
+    """`HF_LLM_MODELO` continua tendo precedência sobre o `llm.json`."""
+    from sidecar import gestor_modelos as gm
+
+    binario, modelo = binario_e_modelo
+    outro_modelo = tmp_path / "outro.gguf"
+    outro_modelo.write_bytes(b"GGUF outro")
+    ambiente = {gm.VAR_LLM_CONFIG_PATH: str(tmp_path / "llm.json"),
+                rt.VAR_MODELO: str(modelo)}
+    gm.definir_modelo_ativo(outro_modelo, ambiente)
+    assert resolver_modelo(ambiente) == modelo  # env vence, não o llm.json
+
+
 # ------------------------------------------------- degradação por ausência
 def test_base_url_sem_binario_levanta_indisponivel(binario_e_modelo):
     _, modelo = binario_e_modelo

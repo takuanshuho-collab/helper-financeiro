@@ -25,6 +25,11 @@ import type {
   IaStatusOut,
   ImportacaoAplicadaOut,
   ItemImportacaoIn,
+  LlmBaixarStatusOut,
+  LlmCatalogoOut,
+  LlmJobOut,
+  LlmModeloDefinidoOut,
+  LlmStatusOut,
   PerfilIn,
   RubricaMutOut,
   RubricaNovaIn,
@@ -192,6 +197,12 @@ export const hf = {
     filtroNome: string
     extensoes: string[]
   }): Promise<string | null> => ponte().dialogoSalvar(opcoes),
+  /** Diálogo nativo de ABRIR (Electron) — usado para apontar um `.gguf`
+   * local na tela de Configuração da IA (T-1702). Devolve o caminho ou null. */
+  dialogoAbrir: (opcoes: {
+    filtroNome: string
+    extensoes: string[]
+  }): Promise<string | null> => ponte().dialogoAbrir(opcoes),
 
   // --- cofre local (T-1604, ADR-0016 §D) --------------------------------
   /** `{cadastrado, desbloqueado, aguarde_s}` — decide qual tela mostrar. */
@@ -205,4 +216,23 @@ export const hf = {
   authBloquear: (): Promise<{ ok: boolean }> => chamar('/auth/bloquear', {}),
   authRecuperar: (codigo: string, novaSenha: string): Promise<{ ok: boolean }> =>
     chamar('/auth/recuperar', { codigo, nova_senha: novaSenha }),
+
+  // --- gestor de modelos GGUF (T-1702, ADR-0016 §F, REQ-F-028) -----------
+  llmStatus: (): Promise<LlmStatusOut> => chamar('/llm/status'),
+  llmCatalogo: (): Promise<LlmCatalogoOut> => chamar('/llm/catalogo'),
+  /** Único ponto de rede fora do sidecar local — só dispara por este clique
+   * explícito do usuário (REQ-NF-007). */
+  llmBaixar: (catalogoId: string): Promise<LlmJobOut> =>
+    chamar('/llm/baixar', { catalogo_id: catalogoId }),
+  llmBaixarStatus: (jobId: string): Promise<LlmBaixarStatusOut> =>
+    chamar(`/llm/baixar/${jobId}`),
+  llmBaixarCancelar: (jobId: string): Promise<{ ok: boolean }> =>
+    chamar(`/llm/baixar/${jobId}/cancelar`, {}),
+  /** Define o modelo ativo: `catalogoId` (já baixado) OU `caminho` (.gguf
+   * local apontado pelo usuário) — exatamente um dos dois. */
+  llmDefinirModelo: (args: {
+    catalogoId?: string
+    caminho?: string
+  }): Promise<LlmModeloDefinidoOut> =>
+    chamar('/llm/modelo', { catalogo_id: args.catalogoId, caminho: args.caminho }),
 }

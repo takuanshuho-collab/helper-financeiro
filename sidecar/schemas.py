@@ -249,3 +249,19 @@ class TrocarSenhaCofreIn(BaseModel):
     senha_atual: str
     codigo_totp: str
     nova_senha: str
+
+
+# --------------------------------------------- gestor de modelos (T-1702, ADR-0016 §F)
+class BaixarModeloIn(BaseModel):
+    """Dispara o download de um item do catálogo curado (REQ-F-028)."""
+
+    catalogo_id: str
+
+
+class DefinirModeloIn(BaseModel):
+    """Define o modelo ativo do runtime embarcado: um item já baixado do
+    catálogo (`catalogo_id`) OU um `.gguf` apontado manualmente (`caminho`) —
+    exatamente um dos dois."""
+
+    catalogo_id: str | None = None
+    caminho: str | None = None

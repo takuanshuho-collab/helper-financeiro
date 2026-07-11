@@ -20,8 +20,9 @@ degrada para classificação manual (P8): mapa vazio + motivos.
 """
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from pydantic import ValidationError
@@ -133,13 +134,23 @@ _PROVIDERS_OLLAMA = {"local", "ollama"}
 
 def obter_classificador(cfg: ConfigAgente) -> Classificador:
     """Fábrica. Classificação exige endpoint LOCAL (loopback): os nomes dos
-    lançamentos vêm do extrato bancário e nunca saem da máquina (H2)."""
+    lançamentos vêm do extrato bancário e nunca saem da máquina (H2).
+
+    Mesma precedência da fábrica de provider (ADR-0016 §E, T-1702): sem
+    `HF_BASE_URL`, o dialeto Ollama cai para o runtime embarcado — que fala
+    OpenAI-compatible (`llama-server`), não a API nativa do Ollama. Ver a
+    docstring irmã em `agent/extracao.py::obter_extrator`.
+    """
     if not cfg.endpoint_local:
         raise RuntimeError(
             f"CLASSIFICACAO_LOCAL_ONLY: classificação exige endpoint local "
             f"(loopback); base_url='{cfg.base_url}' é remoto (H2 — o extrato "
             f"contém PII).")
     if cfg.provider.strip().lower() in _PROVIDERS_OLLAMA:
+        if "HF_BASE_URL" not in os.environ:
+            from .provider import base_url_runtime_embarcado
+            return OpenAICompatClassificador(
+                replace(cfg, base_url=base_url_runtime_embarcado()))
         return OllamaClassificador(cfg)
     return OpenAICompatClassificador(cfg)
 

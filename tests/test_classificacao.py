@@ -127,10 +127,27 @@ def test_fabrica_exige_endpoint_local_h2():
     assert resultado.motivos == ["ERRO_CONFIG:RuntimeError"]
 
 
-def test_fabrica_escolhe_o_dialeto_pelo_provider():
+def test_fabrica_escolhe_o_dialeto_pelo_provider(monkeypatch):
+    # HF_BASE_URL fixado: servidor do usuário (Ollama de verdade), não o
+    # runtime embarcado — que, sem HF_BASE_URL, assumiria o dialeto
+    # OpenAI-compatible mesmo com provider="local" (T-1702, ADR-0016 §E).
+    monkeypatch.setenv("HF_BASE_URL", "http://localhost:11434/v1")
     ollama = ConfigAgente(provider="local",
                           base_url="http://localhost:11434/v1")
     assert isinstance(obter_classificador(ollama), OllamaClassificador)
     lmstudio = ConfigAgente(provider="openai_compat",
                             base_url="http://127.0.0.1:1234/v1")
     assert isinstance(obter_classificador(lmstudio), OpenAICompatClassificador)
+
+
+def test_fabrica_sem_hf_base_url_cai_no_runtime_embarcado(monkeypatch):
+    """Sem HF_BASE_URL, provider="local" usa o runtime embarcado — que fala
+    OpenAI-compatible (llama-server), não a API nativa do Ollama (T-1702)."""
+    from agent import provider as provider_mod
+
+    monkeypatch.delenv("HF_BASE_URL", raising=False)
+    monkeypatch.setattr(provider_mod, "base_url_runtime_embarcado",
+                        lambda: "http://127.0.0.1:5599/v1")
+    classificador = obter_classificador(ConfigAgente(provider="local"))
+    assert isinstance(classificador, OpenAICompatClassificador)
+    assert classificador.url == "http://127.0.0.1:5599/v1/chat/completions"

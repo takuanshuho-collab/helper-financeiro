@@ -236,6 +236,23 @@ void app.whenReady().then(async () => {
       return r.canceled || !r.filePath ? null : r.filePath
     },
   )
+  // Gestor de modelos GGUF (T-1702): aponta um `.gguf` já baixado pelo
+  // usuário fora do catálogo — o main só devolve o caminho escolhido, nunca
+  // lê o conteúdo (quem valida existência/extensão é o sidecar).
+  ipcMain.handle(
+    'hf:dialogo-abrir',
+    async (_evento, opcoes: { filtroNome: string; extensoes: string[] }) => {
+      const win = BrowserWindow.getFocusedWindow()
+      const escolha = {
+        properties: ['openFile'] as Array<'openFile'>,
+        filters: [{ name: opcoes.filtroNome, extensions: opcoes.extensoes }],
+      }
+      const r = win
+        ? await dialog.showOpenDialog(win, escolha)
+        : await dialog.showOpenDialog(escolha)
+      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]
+    },
+  )
 
   try {
     await iniciarSidecar()

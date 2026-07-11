@@ -12,8 +12,12 @@ import binascii
 import io
 import logging
 import math
+import os
 import re
 import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
@@ -76,11 +80,13 @@ from .schemas import (
     AnaliseIn,
     AplicarImportacaoIn,
     ArquivarMesIn,
+    BaixarModeloIn,
     CadastrarCofreIn,
     CartaIn,
     CompararMesesIn,
     ConfirmarContratoIn,
     ContratoIn,
+    DefinirModeloIn,
     DividaIn,
     EstrategiasIn,
     ExportarCartaIn,
@@ -99,7 +105,21 @@ from .security import exigir_token
 from .sessao import SessaoBloqueada, SessaoCofre
 from .sessao import sessao as sessao_processo
 
-app = FastAPI(title="Helper Financeiro — sidecar", version="2.8.0")
+
+@asynccontextmanager
+async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
+    """Nada a fazer na subida; no encerramento, derruba o `llama-server`
+    embarcado (se estiver de pé) — pendência deixada pelo T-1701
+    (`sidecar/runtime_llm.py`) e fechada aqui (T-1702). Import tardio: mesmo
+    racional de sempre, evita inverter a camada agent/sidecar no import a
+    nível de módulo."""
+    yield
+    from .runtime_llm import encerrar_runtime
+    encerrar_runtime()
+
+
+app = FastAPI(title="Helper Financeiro — sidecar", version="2.8.0",
+             lifespan=_ciclo_de_vida)
 
 # Chaves do resumo que carregam objetos `Divida` (precisam de serialização).
 _CHAVES_OBJETO = ("divida_mais_cara", "ranking")
@@ -1083,3 +1103,202 @@ def contrato_confirmar(
     estado = confirmar_extracao(entrada.thread_id, entrada.confirmacao,
                                 cfg=cfg, extrator=extrator)
     return {"ok": True, "confirmada": estado.get("confirmada")}
+
+
+# ------------------------------- gestor de modelos GGUF (T-1702, ADR-0016 §F)
+# Atrás de `exigir_cofre` como todo o resto de negócio: a GUI só chega na tela
+# de Configuração da IA já logada, então não há motivo para abrir exceção
+# nenhuma aqui (nem o `/llm/status`, que não expõe PII, mas mantém a regra
+# simples — "tudo depois do login" — em vez de uma exceção caso a caso).
+def _status_llm() -> dict:
+    """Estado consolidado do runtime embarcado: é o que a tela renderiza.
+
+    Import tardio de `.runtime_llm` (mesmo racional do resto do arquivo).
+    `runtime_embarcado().ativo()` só CONSULTA o processo — nunca sobe o
+    `llama-server` (isso só acontece sob demanda, na 1ª análise/extração
+    real); então este endpoint nunca paga o custo de carregar um modelo.
+    """
+    from .runtime_llm import resolver_binario_llama, resolver_modelo, runtime_embarcado
+
+    servidor_usuario = "HF_BASE_URL" in os.environ
+    binario = resolver_binario_llama()
+    modelo = resolver_modelo()
+
+    motivo: str | None = None
+    if not servidor_usuario:
+        if binario is None:
+            motivo = "BINARIO_AUSENTE"
+        elif modelo is None:
+            motivo = "MODELO_AUSENTE"
+
+    return {
+        "servidor_usuario": servidor_usuario,
+        "base_url": os.environ.get("HF_BASE_URL", "") if servidor_usuario else "",
+        "binario_presente": binario is not None,
+        "modelo_ativo": str(modelo) if modelo else None,
+        "runtime_ativo": (not servidor_usuario) and runtime_embarcado().ativo(),
+        "motivo_indisponivel": motivo,
+    }
+
+
+@app.get("/llm/status", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_status() -> dict:
+    return _status_llm()
+
+
+@app.get("/llm/catalogo", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_catalogo() -> dict:
+    """Catálogo curado + estado de cada item (baixado/baixando/ausente).
+
+    "baixando" só é conhecido pelos jobs em memória deste processo — o estado
+    em disco (`listar_catalogo_com_estado`) não sabe de downloads em curso.
+    """
+    from .gestor_modelos import listar_catalogo_com_estado
+
+    itens = listar_catalogo_com_estado()
+    with _JOBS_DOWNLOAD_LOCK:
+        em_andamento = {j["catalogo_id"]: j for j in _JOBS_DOWNLOAD.values()
+                        if j["status"] == "baixando"}
+    for item in itens:
+        job = em_andamento.get(item["id"])
+        if job is not None:
+            item["estado"] = "baixando"
+            item["job_id"] = job["job_id"]
+            item["bytes_baixados"] = job["bytes_baixados"]
+            item["bytes_total"] = job["bytes_total"]
+    return {"catalogo": itens}
+
+
+# Jobs de download em memória — mesmo padrão do job da análise sênior
+# (`_JOBS_IA`, acima): o download de um `.gguf` de ~1-2 GB leva minutos, então
+# a tela dispara e faz poll. `_CANCELAMENTOS_DOWNLOAD` guarda um `Event` por
+# job — `baixar_modelo` checa `evento.is_set` a cada bloco (cancelamento
+# cooperativo, sem matar a thread à força).
+_JOBS_DOWNLOAD: dict[str, dict] = {}
+_JOBS_DOWNLOAD_LOCK = threading.Lock()
+_CANCELAMENTOS_DOWNLOAD: dict[str, threading.Event] = {}
+
+
+def _rodar_job_download(job_id: str, catalogo_id: str) -> None:
+    from .gestor_modelos import (
+        CatalogoIdDesconhecido,
+        ModeloDownloadCancelado,
+        ModeloDownloadFalhou,
+        ModeloHashInvalido,
+        baixar_modelo,
+        item_do_catalogo,
+    )
+
+    evento = _CANCELAMENTOS_DOWNLOAD[job_id]
+
+    def progresso(baixados: int, total: int) -> None:
+        with _JOBS_DOWNLOAD_LOCK:
+            job = _JOBS_DOWNLOAD.get(job_id)
+            if job is not None:
+                job["bytes_baixados"], job["bytes_total"] = baixados, total
+
+    try:
+        item = item_do_catalogo(catalogo_id)
+        baixar_modelo(item, cancelado=evento.is_set, progresso=progresso)
+        estado = {"status": "pronto", "erro": ""}
+    except ModeloDownloadCancelado:
+        estado = {"status": "cancelado", "erro": ""}
+    except (ModeloDownloadFalhou, ModeloHashInvalido, CatalogoIdDesconhecido) as e:
+        estado = {"status": "erro", "erro": f"{type(e).__name__}: {e}"}
+    except Exception as e:  # noqa: BLE001 — a thread nunca deve morrer silenciosa
+        log.warning("Download de modelo %r falhou de forma inesperada: %s", catalogo_id, e)
+        estado = {"status": "erro", "erro": f"{type(e).__name__}: {e}"}
+    with _JOBS_DOWNLOAD_LOCK:
+        job = _JOBS_DOWNLOAD.get(job_id)
+        if job is not None:
+            job.update(estado)
+    _CANCELAMENTOS_DOWNLOAD.pop(job_id, None)
+
+
+@app.post("/llm/baixar", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_baixar(entrada: BaixarModeloIn) -> dict:
+    """Dispara o download (job async) de um item do catálogo — única exceção
+    de rede do app (REQ-NF-007), só por este clique explícito do usuário."""
+    from .gestor_modelos import CatalogoIdDesconhecido, item_do_catalogo
+
+    try:
+        item_do_catalogo(entrada.catalogo_id)  # 404 cedo se o id não existir
+    except CatalogoIdDesconhecido as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    job_id = uuid4().hex
+    evento = threading.Event()
+    with _JOBS_DOWNLOAD_LOCK:
+        # Idempotente por modelo: um segundo POST para o mesmo `catalogo_id`
+        # com job em curso devolve o job existente em vez de abrir outro —
+        # dois jobs concorrentes escreveriam no MESMO `.parcial` e
+        # corromperiam o download (a GUI desabilita o botão, mas o contrato
+        # não pode depender disso).
+        for job in _JOBS_DOWNLOAD.values():
+            if (job["catalogo_id"] == entrada.catalogo_id
+                    and job["status"] == "baixando"):
+                return {"job_id": job["job_id"]}
+        _JOBS_DOWNLOAD[job_id] = {
+            "job_id": job_id, "catalogo_id": entrada.catalogo_id,
+            "status": "baixando", "bytes_baixados": 0, "bytes_total": 0, "erro": "",
+        }
+        _CANCELAMENTOS_DOWNLOAD[job_id] = evento
+    threading.Thread(target=_rodar_job_download, args=(job_id, entrada.catalogo_id),
+                     daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/llm/baixar/{job_id}", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_baixar_status(job_id: str) -> dict:
+    """Progresso do job: baixando (com bytes) | pronto | erro | cancelado."""
+    with _JOBS_DOWNLOAD_LOCK:
+        job = _JOBS_DOWNLOAD.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job de download desconhecido.")
+        if job["status"] == "baixando":
+            return dict(job)
+        resultado = dict(job)
+        del _JOBS_DOWNLOAD[job_id]  # leitura final: libera a memória do job
+    return resultado
+
+
+@app.post("/llm/baixar/{job_id}/cancelar",
+         dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_baixar_cancelar(job_id: str) -> dict:
+    """Pede o cancelamento cooperativo; o `.parcial` fica no disco p/ retomar."""
+    evento = _CANCELAMENTOS_DOWNLOAD.get(job_id)
+    if evento is None:
+        raise HTTPException(status_code=404, detail="Job de download desconhecido.")
+    evento.set()
+    return {"ok": True}
+
+
+@app.post("/llm/modelo", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_definir_modelo(entrada: DefinirModeloIn) -> dict:
+    """Define o modelo ativo (do catálogo baixado OU um `.gguf` local) e
+    encerra o runtime corrente — a próxima chamada sobe já com o modelo novo.
+    """
+    from .gestor_modelos import (
+        CatalogoIdDesconhecido,
+        ModeloLocalInvalido,
+        caminho_final,
+        definir_modelo_ativo,
+        item_do_catalogo,
+    )
+
+    if bool(entrada.catalogo_id) == bool(entrada.caminho):
+        raise HTTPException(
+            status_code=422, detail="Informe catalogo_id OU caminho (exatamente um).")
+    try:
+        caminho: str | Path
+        if entrada.catalogo_id:
+            caminho = caminho_final(item_do_catalogo(entrada.catalogo_id))
+        else:
+            assert entrada.caminho is not None  # garantido pelo XOR acima
+            caminho = entrada.caminho
+        modelo = definir_modelo_ativo(caminho)
+    except CatalogoIdDesconhecido as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ModeloLocalInvalido as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return {"ok": True, "modelo_ativo": str(modelo)}

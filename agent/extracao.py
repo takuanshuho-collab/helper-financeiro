@@ -17,9 +17,10 @@ H2 por construção: extração roda SOMENTE em provider local — documento bru
 from __future__ import annotations
 
 import logging
+import os
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import isclose
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
 from uuid import uuid4
@@ -119,12 +120,26 @@ _PROVIDERS_OLLAMA = {"local", "ollama"}
 def obter_extrator(cfg: ConfigAgente) -> Extrator:
     """Fábrica. Extração exige endpoint LOCAL (loopback): o documento bruto tem
     PII e nunca pode sair da máquina (H2/ADR-0010). O dialeto segue o provider —
-    Ollama (API nativa) ou OpenAI-compatible (LM Studio/llama.cpp/vLLM)."""
+    Ollama (API nativa) ou OpenAI-compatible (LM Studio/llama.cpp/vLLM).
+
+    Mesma precedência da fábrica de provider (ADR-0016 §E, T-1702): com
+    `HF_BASE_URL` definido, o servidor do usuário manda (comportamento de
+    sempre); sem ele, e com `provider` no dialeto Ollama, o runtime embarcado
+    (`llama-server`) é quem responde — e ele fala OpenAI-compatible, não a API
+    nativa do Ollama, daí o dialeto mudar junto com o endpoint. Sem
+    binário/modelo embarcado, `base_url_runtime_embarcado()` levanta
+    `RuntimeLLMIndisponivel` (subclasse de `RuntimeError`); o nó que chama
+    esta fábrica (`_no_extrair`) já captura `Exception` e degrada (P8).
+    """
     if not cfg.endpoint_local:
         raise RuntimeError(
             f"EXTRACAO_LOCAL_ONLY: extração exige endpoint local (loopback); "
             f"base_url='{cfg.base_url}' é remoto (H2 — o documento contém PII).")
     if cfg.provider.strip().lower() in _PROVIDERS_OLLAMA:
+        if "HF_BASE_URL" not in os.environ:
+            from .provider import base_url_runtime_embarcado
+            return OpenAICompatExtrator(
+                replace(cfg, base_url=base_url_runtime_embarcado()))
         return OllamaExtrator(cfg)
     return OpenAICompatExtrator(cfg)
 
