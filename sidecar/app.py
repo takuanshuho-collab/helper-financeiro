@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import io
 import logging
 import math
 import re
@@ -16,8 +17,10 @@ import threading
 from typing import Annotated
 from uuid import uuid4
 
+import qrcode
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from qrcode.image.pure import PyPNGImage
 
 from agent.agente import analisar
 from agent.classificacao import Classificador, classificar_grupos
@@ -210,6 +213,18 @@ def auth_status(sess: Annotated[SessaoCofre, Depends(sessao_dependencia)]) -> di
     return sess.status()
 
 
+def _qr_png_base64(dados: str) -> str:
+    """QR code do `totp_uri` em PNG (base64), gerado 100% local e sem rede —
+    a GUI mostra o segredo em texto como alternativa (T-1604). O backend é o
+    `PyPNGImage` (pypng, Python puro) fixado de propósito: `qrcode.make` sem
+    factory escolhe o Pillow quando presente, e não queremos depender de um
+    binário nativo a mais no empacotamento (T-1703)."""
+    imagem = qrcode.make(dados, image_factory=PyPNGImage)
+    buffer = io.BytesIO()
+    imagem.save(buffer)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
 @app.post("/auth/cadastrar", dependencies=[Depends(exigir_token)])
 def auth_cadastrar(
     entrada: CadastrarCofreIn,
@@ -217,7 +232,8 @@ def auth_cadastrar(
 ) -> dict:
     """Cria o cofre e migra o banco NA HORA; a sessão continua bloqueada — o
     primeiro `/auth/login` confirma que o autenticador foi configurado de
-    verdade (ADR-0016 §D). Os segredos (URI do TOTP + códigos) só saem aqui."""
+    verdade (ADR-0016 §D). Os segredos (URI do TOTP + QR + códigos) só saem
+    aqui."""
     try:
         resultado = sess.cadastrar(entrada.senha)
     except CofreJaCadastrado as e:
@@ -230,6 +246,7 @@ def auth_cadastrar(
             detail="Não foi possível preparar o cofre (banco corrompido?)."
         ) from e
     return {"totp_uri": resultado.totp_uri,
+            "qr_png_base64": _qr_png_base64(resultado.totp_uri),
             "codigos_recuperacao": resultado.codigos_recuperacao}
 
 

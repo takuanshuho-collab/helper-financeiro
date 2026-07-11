@@ -367,6 +367,24 @@ export interface ContratoExtraidoOut {
   llm: DiagLlm // alvo efetivo da LLM (para diagnóstico)
 }
 
+// --- Cofre local (T-1604, ADR-0016 §D / REQ-SEC-005..007) ---------------------
+
+export interface AuthStatusOut {
+  cadastrado: boolean
+  desbloqueado: boolean
+  /** Segundos de espera do anti-brute-force pendente (0 = livre). */
+  aguarde_s: number
+}
+
+/** Resposta única do cadastro: URI/QR do TOTP + códigos de recuperação, que
+ * NUNCA mais voltam a aparecer depois deste retorno (REQ-SEC-007). */
+export interface AuthCadastroOut {
+  totp_uri: string
+  /** PNG do QR code em base64, gerado 100% local no sidecar. */
+  qr_png_base64: string
+  codigos_recuperacao: string[]
+}
+
 // --- Estado de uma chamada assíncrona (para as telas) ------------------------
 
 export type Estado<T> =

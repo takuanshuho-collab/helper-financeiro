@@ -248,7 +248,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1601 | ADR-0016 + bump 2.8.0 + `sidecar/auth.py`: Argon2id (KEK) + DEK envelopada (AES-GCM) + TOTP (pyotp) + 10 códigos de recuperação (hash + envelope da DEK) + anti-brute-force com atraso exponencial; metadados em `auth.json` fora do cofre; testes | REQ-SEC-005/006/007 | — | ✅ |
 | T-1602 | Banco cifrado: `sidecar/persistencia.py` abre via SQLCipher (`PRAGMA key` = DEK) + migração atômica do `dados.db` em claro (exporta → verifica → remove) + testes | REQ-SEC-006 | T-1601 | ✅ |
 | T-1603 | Sessão de cofre no sidecar: endpoints de negócio exigem desbloqueio (`423 Locked`), `POST /auth/*` (cadastro, login, logout, recuperação, trocar senha), auto-lock por inatividade + bloqueio manual; DEK só em memória; testes de contrato | REQ-SEC-005 | T-1601/1602 | ✅ |
-| T-1604 | GUI: assistente de cadastro (senha + QR do TOTP + códigos p/ guardar + aviso "sem backdoor"), tela de desbloqueio, "esqueci a senha" via código, indicador/botão de bloqueio + E2E | REQ-SEC-005/007 | T-1603 | ⬜ |
+| T-1604 | GUI: assistente de cadastro (senha + QR do TOTP + códigos p/ guardar + aviso "sem backdoor"), tela de desbloqueio, "esqueci a senha" via código, indicador/botão de bloqueio + E2E | REQ-SEC-005/007 | T-1603 | ✅ |
 
 ## Milestone M17 — LLM embarcada autogerida (v2.8, ADR-0016)
 
@@ -317,8 +317,26 @@ indisponível ⇒ `RuntimeLLMIndisponivel` → `ERRO_CONFIG:...` degrada P8 no
 grafo. NOTA: extração/classificação têm fábricas próprias
 (`obter_extrator`/`obter_classificador`) e ainda NÃO usam o runtime embarcado
 — pendência explícita do T-1702, junto com ligar `encerrar_runtime()` no
-lifespan do `app.py`. 15 testes novos (379 passed). Próximas: **T-1702**
-(gestor de modelos), T-1703 (empacotamento com smoke real) e T-1704
+lifespan do `app.py`. 15 testes novos (379 passed). **T-1604 ✅ — M16
+FECHADO**: GUI do cofre (`Onboarding.tsx` com os 4 passos: senha → QR/segredo
+TOTP → 10 códigos exibidos UMA vez com copiar/baixar .txt e aviso sem-backdoor
+→ 1º login real; `Desbloqueio.tsx` com 401 genérico sem revelar o fator,
+contador regressivo do 429 via `useContadorEspera` e "esqueci a senha" por
+código de uso único; overlay de auto-lock que NÃO desmonta as telas — nada
+digitado se perde; indicador/botão "Cofre aberto"). Ponte Electron: HTTP
+não-ok vira objeto `__hfErro` (o IPC não preserva propriedades extras de um
+Error) e o `client.ts` relança `HfErro` tipado com `status`/`aguardeS` +
+listener global de 423. QR gerado no sidecar (`qrcode[png]` + `PyPNGImage`
+fixado — SEM Pillow, decisão da revisão: `qrcode.make` sem factory escolhe o
+Pillow quando presente e o backend puro não aceita `format=`; `types-qrcode`
+no dev p/ o mypy). E2E: helper TOTP RFC 6238 em `node:crypto` puro com
+anti-replay do passo de 30 s; 3 cenários novos (cadastro+login, 401 genérico,
+recuperação com prova de uso único) + os 14 existentes adaptados
+(`HF_AUTH_PATH` isolado, `HF_AUTO_LOCK_MIN=1440`) = **17 passed**. Sem porta
+dos fundos de dev, por decisão do mantenedor. `empacotado.spec.ts` adaptado
+mas só valida de verdade no T-1703 (pacote precisa embarcar
+qrcode/sqlcipher3). Próximas: **T-1702** (gestor de modelos; lembrar as
+pendências acima), T-1703 (empacotamento com smoke real) e T-1704
 (fechamento + ata v2.8.0).
 
 ### Histórico do ciclo v2.7 (fechado)

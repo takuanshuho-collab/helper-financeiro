@@ -8,6 +8,8 @@
 import type {
   AnaliseOut,
   ArquivadoOut,
+  AuthCadastroOut,
+  AuthStatusOut,
   CartaCamposIn,
   CartaPreviaOut,
   ContratoExtraidoOut,
@@ -34,10 +36,42 @@ export class HfErro extends Error {
   constructor(
     mensagem: string,
     readonly indisponivel = false,
+    /** Código HTTP do sidecar, quando conhecido (423 = cofre bloqueado, 429 =
+     * anti-brute-force, 401 = fator incorreto, 400 = política/validação). */
+    readonly status?: number,
+    /** Só presente no 429 (`aguarde_s` do corpo, REQ-SEC-005) — contador da GUI. */
+    readonly aguardeS?: number,
   ) {
     super(mensagem)
     this.name = 'HfErro'
   }
+}
+
+/** Formato que `electron/main.ts` devolve para uma resposta HTTP não-ok — o
+ * IPC do Electron não preserva propriedades extras de um Error lançado
+ * através do processo, então o main resolve com este objeto em vez de
+ * rejeitar (ver a docstring de `chamarSidecar`). */
+interface ErroSidecar {
+  __hfErro: true
+  status: number
+  detail: string
+  aguarde_s?: number
+}
+
+function ehErroSidecar(x: unknown): x is ErroSidecar {
+  return !!x && typeof x === 'object' && (x as { __hfErro?: unknown }).__hfErro === true
+}
+
+// Ouvintes do bloqueio 423 global (auto-lock expirado em qualquer chamada de
+// negócio) — o App se inscreve para trocar de tela sem perder o estado em
+// memória das telas de negócio (elas continuam montadas, só a tela de
+// desbloqueio entra por cima).
+type OuvinteBloqueio = () => void
+const ouvintesBloqueio = new Set<OuvinteBloqueio>()
+
+export function aoBloquear(ouvinte: OuvinteBloqueio): () => void {
+  ouvintesBloqueio.add(ouvinte)
+  return () => ouvintesBloqueio.delete(ouvinte)
 }
 
 function ponte(): NonNullable<Window['hf']> {
@@ -50,7 +84,14 @@ function ponte(): NonNullable<Window['hf']> {
 
 async function chamar<T>(metodo: string, payload?: unknown): Promise<T> {
   try {
-    return await ponte().invoke<T>(metodo, payload)
+    const resultado = await ponte().invoke<unknown>(metodo, payload)
+    if (ehErroSidecar(resultado)) {
+      if (resultado.status === 423) {
+        ouvintesBloqueio.forEach((ouvinte) => ouvinte())
+      }
+      throw new HfErro(resultado.detail, false, resultado.status, resultado.aguarde_s)
+    }
+    return resultado as T
   } catch (e) {
     if (e instanceof HfErro) throw e
     throw new HfErro(e instanceof Error ? e.message : String(e))
@@ -151,4 +192,17 @@ export const hf = {
     filtroNome: string
     extensoes: string[]
   }): Promise<string | null> => ponte().dialogoSalvar(opcoes),
+
+  // --- cofre local (T-1604, ADR-0016 §D) --------------------------------
+  /** `{cadastrado, desbloqueado, aguarde_s}` — decide qual tela mostrar. */
+  authStatus: (): Promise<AuthStatusOut> => chamar('/auth/status'),
+  /** Cria o cofre; a sessão permanece bloqueada (o 1º login é que confirma
+   * o autenticador). Devolve o URI/QR do TOTP e os 10 códigos — só aqui. */
+  authCadastrar: (senha: string): Promise<AuthCadastroOut> =>
+    chamar('/auth/cadastrar', { senha }),
+  authLogin: (senha: string, codigoTotp: string): Promise<{ ok: boolean }> =>
+    chamar('/auth/login', { senha, codigo_totp: codigoTotp }),
+  authBloquear: (): Promise<{ ok: boolean }> => chamar('/auth/bloquear', {}),
+  authRecuperar: (codigo: string, novaSenha: string): Promise<{ ok: boolean }> =>
+    chamar('/auth/recuperar', { codigo, nova_senha: novaSenha }),
 }

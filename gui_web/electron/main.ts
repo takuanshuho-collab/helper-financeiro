@@ -112,9 +112,19 @@ async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown>
     body: temCorpo ? JSON.stringify(payload) : undefined,
     dispatcher: dispatcherSidecar,
   })
-  const dados = (await resp.json()) as { detail?: string }
+  const dados = (await resp.json()) as { detail?: string; aguarde_s?: number }
   if (!resp.ok) {
-    throw new Error(dados.detail ?? `HTTP ${resp.status}`)
+    // Erros de HTTP viram um objeto (não uma rejeição): o `ipcRenderer.invoke`
+    // do Electron não preserva propriedades extras de um Error lançado através
+    // do processo — o `status` (essencial para o gate 423 e o contador do 429,
+    // T-1604) se perderia. `hf/client.ts` reconhece o formato `__hfErro` e
+    // relança como `HfErro` tipado no renderer.
+    return {
+      __hfErro: true as const,
+      status: resp.status,
+      detail: dados.detail ?? `HTTP ${resp.status}`,
+      aguarde_s: dados.aguarde_s,
+    }
   }
   return dados
 }

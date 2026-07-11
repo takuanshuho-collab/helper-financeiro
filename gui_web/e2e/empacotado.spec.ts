@@ -20,6 +20,8 @@ import {
   type Page,
 } from '@playwright/test'
 
+import { cadastrarCofreELogin } from './cofre-helpers'
+
 const EXE = path.resolve(
   __dirname,
   '..',
@@ -61,9 +63,20 @@ test.beforeAll(async () => {
       HF_BASE_URL: 'http://127.0.0.1:1/v1',
       HF_TIMEOUT: '1',
       HF_DB_PATH: path.join(os.tmpdir(), `hf-e2e-pacote-${Date.now()}.db`),
+      // Cofre isolado (T-1604): o exe congelado agora força o onboarding
+      // antes de qualquer tela de negócio (REQ-SEC-005) — igual ao dev.
+      HF_AUTH_PATH: path.join(os.tmpdir(), `hf-e2e-pacote-auth-${Date.now()}.json`),
+      HF_AUTO_LOCK_MIN: '1440',
     },
   })
   win = await app.firstWindow()
+  // Cadastra o cofre pela UI (sem porta dos fundos) e confirma o 1º login —
+  // NOTA (T-1604): este spec roda contra o pacote CONGELADO antigo (o
+  // executável do `dist:dir` gerado antes desta task, sem o assistente do
+  // cofre) — a validação real deste fluxo aqui só acontece no T-1703, quando
+  // o pacote for regerado com o `qrcode`/`sqlcipher3` embarcados. Até lá,
+  // este `beforeAll` falha ao esperar `.auth-card` (tela antiga não existe).
+  await cadastrarCofreELogin(win, 'senha-e2e-pacote-super-secreta')
   // O hero só aparece quando o sidecar (exe PyInstaller) respondeu.
   await win.waitForSelector('.hero', { timeout: 45_000 })
 })

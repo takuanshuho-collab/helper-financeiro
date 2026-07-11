@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import { IconeLua, IconeSol } from './components/Icones'
-import { hf } from './hf/client'
+import { IconeCadeadoAberto, IconeLua, IconeSol } from './components/Icones'
+import { HfErro, aoBloquear, hf } from './hf/client'
 import type {
+  AuthStatusOut,
   DividaIn,
   PerfilIn,
   RubricaMutOut,
@@ -13,7 +14,9 @@ import { useAnalise } from './hf/useAnalise'
 import Analise from './screens/Analise'
 import Carta from './screens/Carta'
 import Contrato from './screens/Contrato'
+import Desbloqueio from './screens/Desbloqueio'
 import Dividas from './screens/Dividas'
+import Onboarding from './screens/Onboarding'
 import Perfil from './screens/Perfil'
 import VisaoGeral from './screens/VisaoGeral'
 
@@ -78,6 +81,62 @@ function temaDoSo(): boolean {
 }
 
 export default function App() {
+  // Cofre (T-1604, ADR-0016 §D / REQ-SEC-005): nenhuma tela de negócio
+  // aparece antes do gate resolver. `authStatus === null` = ainda
+  // consultando `/auth/status`; `semGate` = sidecar inalcançável (fora do
+  // Electron, iteração de UI) — não há dado real para proteger nesse caso.
+  const [authStatus, setAuthStatus] = useState<AuthStatusOut | null>(null)
+  const [semGate, setSemGate] = useState(false)
+  // Auto-lock expirado (423) em pleno uso: sobrepõe a tela de desbloqueio
+  // SEM desmontar o app — nada do que o usuário digitou se perde.
+  const [bloqueioNoMeio, setBloqueioNoMeio] = useState(false)
+
+  async function consultarStatusCofre() {
+    try {
+      const status = await hf.authStatus()
+      setAuthStatus(status)
+    } catch (e) {
+      if (e instanceof HfErro && e.indisponivel) setSemGate(true)
+    }
+  }
+
+  useEffect(() => {
+    let ativo = true
+    hf.authStatus()
+      .then((status) => {
+        if (ativo) setAuthStatus(status)
+      })
+      .catch((e) => {
+        if (ativo && e instanceof HfErro && e.indisponivel) setSemGate(true)
+      })
+    return () => {
+      ativo = false
+    }
+  }, [])
+
+  const cadastrado = semGate || authStatus?.cadastrado === true
+  const desbloqueado = semGate || authStatus?.desbloqueado === true
+  const podeVerNegocio = cadastrado && desbloqueado
+
+  // Só conta como "auto-lock em pleno uso" (overlay) um 423 que chegou DEPOIS
+  // do cofre já estar utilizável — telas de negócio ficam mantidas montadas
+  // mesmo antes do gate resolver (Rules of Hooks: `useAnalise` roda sempre),
+  // então elas também podem levar 423 durante o onboarding/desbloqueio
+  // inicial; esses são esperados e não devem acionar o overlay. Usa `ref`
+  // (em vez de deps) para o listener sempre ler o valor mais recente sem
+  // reinscrever a cada render.
+  const podeVerNegocioRef = useRef(podeVerNegocio)
+  useEffect(() => {
+    podeVerNegocioRef.current = podeVerNegocio
+  }, [podeVerNegocio])
+  useEffect(
+    () =>
+      aoBloquear(() => {
+        if (podeVerNegocioRef.current) setBloqueioNoMeio(true)
+      }),
+    [],
+  )
+
   const [abaAtiva, setAbaAtiva] = useState(0)
   const [escuro, setEscuro] = useState<boolean | null>(escolhaSalva)
 
@@ -109,6 +168,10 @@ export default function App() {
   const [hidratado, setHidratado] = useState(false)
 
   useEffect(() => {
+    // Sem cofre pronto ainda não há repositório de negócio a carregar (a
+    // janela de onboarding do backend existe, mas a GUI força o assistente
+    // antes de mostrar qualquer tela — REQ-SEC-005) — evita um 423 inútil.
+    if (!podeVerNegocio) return
     let ativo = true
     hf.estadoCarregar()
       .then((estado) => {
@@ -125,7 +188,7 @@ export default function App() {
     return () => {
       ativo = false
     }
-  }, [])
+  }, [podeVerNegocio])
 
   // Auto-save com debounce: qualquer edição (Perfil, Dívidas, contrato
   // confirmado) persiste o estado inteiro — sem botão "salvar".
@@ -156,6 +219,32 @@ export default function App() {
   const aoMutarRubricas = (r: RubricaMutOut) => {
     setRubricas(r.rubricas)
     setPerfil(r.perfil)
+  }
+
+  async function bloquearCofre() {
+    try {
+      await hf.authBloquear()
+    } catch {
+      // best-effort: o gate 423 do próximo /estado já cobre a segurança
+    }
+    setBloqueioNoMeio(true)
+  }
+
+  async function aoDesbloquear() {
+    setBloqueioNoMeio(false)
+    await consultarStatusCofre()
+  }
+
+  // Assistente de cadastro: força-se ANTES de qualquer tela de negócio
+  // (REQ-SEC-005) — nem a Visão Geral é alcançável sem um cofre cadastrado.
+  if (!semGate && authStatus === null) {
+    return <div className="auth-tela" aria-busy="true" />
+  }
+  if (!cadastrado) {
+    return <Onboarding aoConcluir={() => void consultarStatusCofre()} />
+  }
+  if (!desbloqueado) {
+    return <Desbloqueio aoDesbloquear={() => void consultarStatusCofre()} />
   }
 
   function tela() {
@@ -211,6 +300,16 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {!semGate && (
+          <button
+            className="cofre-indicador"
+            onClick={() => void bloquearCofre()}
+            title="Bloquear o cofre agora"
+            aria-label="Cofre aberto — clique para bloquear"
+          >
+            <IconeCadeadoAberto /> Cofre aberto
+          </button>
+        )}
         <button
           className="btn-tema"
           onClick={alternarTema}
@@ -222,6 +321,14 @@ export default function App() {
       </header>
 
       <main className="conteudo">{tela()}</main>
+
+      {bloqueioNoMeio && (
+        <Desbloqueio
+          overlay
+          aviso="O cofre bloqueou por inatividade (auto-lock). O que você digitou continua aqui — desbloqueie para continuar."
+          aoDesbloquear={() => void aoDesbloquear()}
+        />
+      )}
     </div>
   )
 }

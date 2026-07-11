@@ -60,3 +60,20 @@ export const IconeLua = () => (
     <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
   </Svg>
 )
+
+/** Cofre aberto (T-1604): indicador na navegação + botão de bloqueio manual. */
+export const IconeCadeadoAberto = () => (
+  <Svg>
+    <rect x="3" y="11" width="14" height="10" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 9-3" />
+  </Svg>
+)
+
+/** Cofre bloqueado (tela de desbloqueio / onboarding, REQ-SEC-005). */
+export const IconeCadeadoFechado = () => (
+  <Svg>
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    <circle cx="12" cy="16" r="1.5" />
+  </Svg>
+)

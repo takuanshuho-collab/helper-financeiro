@@ -18,26 +18,49 @@ import {
   type Page,
 } from '@playwright/test'
 
+import { cadastrarCofreELogin, desbloquearCofre } from './cofre-helpers'
+
 const RAIZ_GUI = path.resolve(__dirname, '..')
 
 // Banco isolado por RODADA (T-1102): o app agora persiste o estado em SQLite;
 // sem isolar, uma rodada herdaria o perfil editado pela anterior (ou pior, o
 // banco real do usuário). O mesmo arquivo vale para os relaunches do teste de
-// tema/persistência — é exatamente o que queremos provar.
+// tema/persistência — é exatamente o que queremos provar. `HF_AUTH_PATH`
+// isola o cofre (T-1604) pela mesma razão — o mesmo arquivo persiste entre os
+// relançamentos DESTA rodada, então só o 1º precisa cadastrar (os demais só
+// desbloqueiam).
 const DB_E2E = path.join(os.tmpdir(), `hf-e2e-${Date.now()}.db`)
+const AUTH_E2E = path.join(os.tmpdir(), `hf-e2e-auth-${Date.now()}.json`)
+const SENHA_COFRE = 'senha-e2e-super-secreta-123'
 
 test.describe.configure({ mode: 'serial' })
 
 let app: ElectronApplication
 let win: Page
+// Preenchido no 1º cadastro (passo do QR) — os relançamentos seguintes só
+// desbloqueiam com ele (mesmo cofre, mesmo `AUTH_E2E`).
+let segredoTotp = ''
 
 async function abrirApp(): Promise<[ElectronApplication, Page]> {
   const instancia = await electron.launch({
     args: ['.'],
     cwd: RAIZ_GUI,
-    env: { ...process.env, HF_MODO_DEGRADADO: '1', HF_DB_PATH: DB_E2E },
+    env: {
+      ...process.env,
+      HF_MODO_DEGRADADO: '1',
+      HF_DB_PATH: DB_E2E,
+      HF_AUTH_PATH: AUTH_E2E,
+      // Auto-lock alto: a rodada inteira (com OCR) passa bem de 15 min.
+      HF_AUTO_LOCK_MIN: '1440',
+    },
   })
   const janela = await instancia.firstWindow()
+  if (!segredoTotp) {
+    const resultado = await cadastrarCofreELogin(janela, SENHA_COFRE)
+    segredoTotp = resultado.segredoTotp
+  } else {
+    await desbloquearCofre(janela, SENHA_COFRE, segredoTotp)
+  }
   // O hero só aparece quando o sidecar respondeu o primeiro /diagnostico.
   await janela.waitForSelector('.hero', { timeout: 30_000 })
   return [instancia, janela]

@@ -23,6 +23,7 @@ dependencies = [
     "cryptography>=49.0.0",  # AES-GCM (envelope DEK/KEK) + HKDF (códigos de recuperação)
     "pyotp>=2.10.0",  # TOTP offline (2º fator, REQ-SEC-005; QR renderizado só na GUI, T-1604)
     "sqlcipher3-wheels>=0.5.7",  # banco cifrado SQLCipher (AES-256) via import sqlcipher3 (ADR-0016 §B, REQ-SEC-006); wheel com binário nativo p/ Windows/Py3.12 — empacotar no PyInstaller é o T-1703
+    "qrcode[png]>=8.2",
 ]
 
 [dependency-groups]
@@ -34,6 +35,7 @@ dev = [
     "pre-commit>=4.0",
     "hypothesis>=6.100",
     "httpx>=0.28.1",
+    "types-qrcode>=8.2.0.20260518",
 ]
 # Empacotamento (T-1001): congela o sidecar p/ o electron-builder embarcar.
 # Rodar: uv run --group build pyinstaller SidecarHF.spec --noconfirm
