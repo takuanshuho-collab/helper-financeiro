@@ -18,7 +18,9 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 import urllib.request
+from dataclasses import replace
 from typing import Any, Protocol
 
 from contracts import AnaliseAgente, FatosFinanceiros, PassoNegociacao, Prioridade
@@ -219,12 +221,38 @@ class OpenAICompatProvider:
         return self.analisar(fatos, correcao)
 
 
+def _provider_runtime_embarcado(cfg: ConfigAgente) -> LLMProvider:
+    """Sobe (lazy) o `llama-server` embarcado e devolve um `OpenAICompatProvider`
+    apontado ao endpoint loopback (ADR-0016 §E, REQ-F-027).
+
+    Import TARDIO de `sidecar.runtime_llm`: o sidecar importa o agent, não o
+    contrário — só tocamos o sidecar quando o caminho embarcado é de fato usado,
+    evitando inverter a dependência de camadas no import. Se faltar
+    binário/modelo, `base_url()` levanta `RuntimeLLMIndisponivel` (subclasse de
+    `RuntimeError`), que o grafo converte em degradação P8 — nunca uma exceção
+    no fluxo de negócio.
+    """
+    from sidecar.runtime_llm import runtime_embarcado
+
+    base = runtime_embarcado().base_url()  # inicia sob demanda; loopback + porta efêmera
+    return OpenAICompatProvider(replace(cfg, base_url=base))
+
+
 def obter_provider(cfg: ConfigAgente) -> LLMProvider:
-    """Fábrica: escolhe o provider conforme a configuração."""
+    """Fábrica: escolhe o provider conforme a configuração.
+
+    ADR-0016 §E: com `provider="local"`, o runtime embarcado é o **padrão de
+    fábrica** — MAS a ADR-0002 é preservada: se o usuário apontou um servidor
+    próprio via `HF_BASE_URL` (Ollama/LM Studio), ele tem **precedência** e o
+    embarcado nem inicia. Sem `HF_BASE_URL` e sem binário/modelo embarcado, a
+    resolução levanta `RuntimeLLMIndisponivel` e o grafo degrada (P8).
+    """
     if cfg.provider == "fake":
         return FakeProvider()
-    if cfg.provider == "local":
-        return OllamaProvider(cfg)
     if cfg.provider == "openai_compat":
         return OpenAICompatProvider(cfg)
+    if cfg.provider == "local":
+        if "HF_BASE_URL" in os.environ:
+            return OllamaProvider(cfg)  # servidor do usuário tem precedência (ADR-0002)
+        return _provider_runtime_embarcado(cfg)
     raise ValueError(f"Provider desconhecido: {cfg.provider}")

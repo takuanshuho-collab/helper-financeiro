@@ -1,0 +1,264 @@
+"""
+Runtime LLM embarcado (T-1701, ADR-0016 §E, REQ-F-027/NF-007) — Gate A (offline).
+
+SEM binário real e SEM rede externa: um processo FALSO (um mini HTTP server em
+Python que responde `/health`) exercita start/readiness/shutdown/restart em
+loopback + porta efêmera. Resolução de caminho e degradação por ausência de
+binário/modelo vão por monkeypatch de ambiente; relógio/health são injetáveis
+para não dormir. O teste com `llama-server` de verdade é opt-in
+(`HF_LLAMA_REAL=1`), no mesmo padrão do `HF_OCR_REAL`.
+"""
+from __future__ import annotations
+
+import os
+import sys
+import time
+
+import pytest
+
+from sidecar import runtime_llm as rt
+from sidecar.runtime_llm import (
+    ConfigRuntime,
+    RuntimeLLM,
+    RuntimeLLMIndisponivel,
+    resolver_binario_llama,
+    resolver_modelo,
+)
+
+# Script do "llama-server" FALSO: sobe um HTTP server na porta passada e responde
+# 200 em /health (o suficiente para o ciclo de vida — não precisa completar chat).
+_SERVIDOR_FALSO = """
+import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+porta = int(sys.argv[sys.argv.index("--port") + 1])
+
+
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/health":
+            corpo = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(corpo)))
+            self.end_headers()
+            self.wfile.write(corpo)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, *a):
+        pass
+
+
+HTTPServer(("127.0.0.1", porta), H).serve_forever()
+"""
+
+
+@pytest.fixture
+def binario_e_modelo(tmp_path):
+    """Cria arquivos-placeholder para binário e modelo (só precisam existir)."""
+    binario = tmp_path / "llama-server-fake"
+    binario.write_text("fake", encoding="utf-8")
+    modelo = tmp_path / "modelo.gguf"
+    modelo.write_bytes(b"GGUF\x00placeholder")
+    return binario, modelo
+
+
+@pytest.fixture
+def script_servidor(tmp_path):
+    caminho = tmp_path / "servidor_falso.py"
+    caminho.write_text(_SERVIDOR_FALSO, encoding="utf-8")
+    return caminho
+
+
+def _comando_fake(script):
+    """montar_comando que roda o servidor FALSO na porta escolhida."""
+    return lambda porta: [sys.executable, str(script), "--port", str(porta)]
+
+
+# ------------------------------------------------------ resolução de caminho
+def test_resolver_binario_override_existente(binario_e_modelo):
+    binario, _ = binario_e_modelo
+    ambiente = {rt.VAR_BINARIO: str(binario)}
+    assert resolver_binario_llama(ambiente) == binario
+
+
+def test_resolver_binario_override_inexistente_vira_none(tmp_path):
+    ambiente = {rt.VAR_BINARIO: str(tmp_path / "nao-existe.exe")}
+    assert resolver_binario_llama(ambiente) is None
+
+
+def test_resolver_binario_ausente_sem_pacote():
+    # No dev/teste não há resources/llama/ empacotado ⇒ indisponível (None).
+    assert resolver_binario_llama({}) is None
+
+
+def test_resolver_modelo_por_parametro_e_por_env(binario_e_modelo):
+    _, modelo = binario_e_modelo
+    assert resolver_modelo({}, modelo=modelo) == modelo
+    assert resolver_modelo({rt.VAR_MODELO: str(modelo)}) == modelo
+
+
+def test_resolver_modelo_ausente_ou_inexistente_vira_none(tmp_path):
+    assert resolver_modelo({}) is None
+    assert resolver_modelo({rt.VAR_MODELO: str(tmp_path / "sumido.gguf")}) is None
+
+
+# ------------------------------------------------- degradação por ausência
+def test_base_url_sem_binario_levanta_indisponivel(binario_e_modelo):
+    _, modelo = binario_e_modelo
+    runtime = RuntimeLLM(ConfigRuntime(binario=None, modelo=modelo))
+    with pytest.raises(RuntimeLLMIndisponivel, match="BINARIO_AUSENTE"):
+        runtime.base_url()
+
+
+def test_base_url_sem_modelo_levanta_indisponivel(binario_e_modelo):
+    binario, _ = binario_e_modelo
+    runtime = RuntimeLLM(ConfigRuntime(binario=binario, modelo=None))
+    with pytest.raises(RuntimeLLMIndisponivel, match="MODELO_AUSENTE"):
+        runtime.base_url()
+
+
+# --------------------------------------------- ciclo de vida (processo falso)
+def test_start_readiness_e_endpoint(binario_e_modelo, script_servidor):
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0),
+        montar_comando=_comando_fake(script_servidor),
+    )
+    try:
+        base = runtime.base_url()
+        assert base.startswith("http://127.0.0.1:")
+        assert base.endswith("/v1")
+        assert runtime.ativo()
+        # Idempotente: já ativo, não sobe outro processo (mesmo endpoint).
+        assert runtime.base_url() == base
+    finally:
+        runtime.encerrar()
+
+
+def test_shutdown_encerra_processo(binario_e_modelo, script_servidor):
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0),
+        montar_comando=_comando_fake(script_servidor),
+    )
+    runtime.base_url()
+    assert runtime.ativo()
+    runtime.encerrar()
+    assert not runtime.ativo()
+    runtime.encerrar()  # idempotente
+
+
+def test_restart_sob_demanda_apos_morte(binario_e_modelo, script_servidor):
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0),
+        montar_comando=_comando_fake(script_servidor),
+    )
+    try:
+        primeira = runtime.base_url()
+        # Simula morte do processo por fora (crash do servidor).
+        runtime._proc.kill()
+        runtime._proc.wait()
+        assert not runtime.ativo()
+        # A próxima necessidade reinicia sob demanda.
+        segunda = runtime.base_url()
+        assert runtime.ativo()
+        assert segunda.startswith("http://127.0.0.1:")
+        # Portas efêmeras: reinício quase sempre pega outra porta (não exigimos igual).
+        assert isinstance(primeira, str)
+    finally:
+        runtime.encerrar()
+
+
+def test_health_timeout_encerra_e_degrada(binario_e_modelo):
+    """Servidor que nunca fica saudável ⇒ RuntimeLLMIndisponivel, sem dormir de
+    verdade (relógio/health injetados)."""
+    binario, modelo = binario_e_modelo
+    relogio = {"t": 0.0}
+
+    def agora() -> float:
+        relogio["t"] += 0.5
+        return relogio["t"]
+
+    # Processo vivo, mas que NÃO abre porta nenhuma (dorme): /health nunca sobe.
+    def comando_sem_health(porta):
+        return [sys.executable, "-c", "import time; time.sleep(30)"]
+
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=1.0),
+        montar_comando=comando_sem_health,
+        agora=agora,
+        dormir=lambda _s: None,
+        verificar_saude=lambda _url: False,
+    )
+    with pytest.raises(RuntimeLLMIndisponivel, match="HEALTH_TIMEOUT"):
+        runtime.base_url()
+    # Falha limpa: o processo não fica pendurado.
+    assert not runtime.ativo()
+
+
+# ---------------------------------------------- integração com a fábrica
+def test_obter_provider_ollama_quando_hf_base_url(monkeypatch):
+    """HF_BASE_URL definido ⇒ servidor do usuário tem precedência (ADR-0002)."""
+    from agent.config import ConfigAgente
+    from agent.provider import OllamaProvider, obter_provider
+
+    monkeypatch.setenv("HF_BASE_URL", "http://localhost:11434/v1")
+    prov = obter_provider(ConfigAgente(provider="local", base_url="http://localhost:11434/v1"))
+    assert isinstance(prov, OllamaProvider)
+
+
+def test_obter_provider_runtime_embarcado_sem_hf_base_url(monkeypatch):
+    """Sem HF_BASE_URL ⇒ runtime embarcado é o padrão; provider aponta ao loopback."""
+    from agent.config import ConfigAgente
+    from agent.provider import OpenAICompatProvider, obter_provider
+
+    monkeypatch.delenv("HF_BASE_URL", raising=False)
+
+    class RuntimeFalso:
+        def base_url(self) -> str:
+            return "http://127.0.0.1:5599/v1"
+
+    monkeypatch.setattr(rt, "runtime_embarcado", lambda: RuntimeFalso())
+    prov = obter_provider(ConfigAgente(provider="local"))
+    assert isinstance(prov, OpenAICompatProvider)
+    assert prov.url == "http://127.0.0.1:5599/v1/chat/completions"
+
+
+def test_obter_provider_embarcado_indisponivel_degrada(monkeypatch, perfil_atencao):
+    """Sem binário/modelo E sem HF_BASE_URL ⇒ degradação P8, nunca exceção."""
+    from agent.agente import analisar
+    from agent.config import ConfigAgente
+
+    monkeypatch.delenv("HF_BASE_URL", raising=False)
+    monkeypatch.setattr(
+        rt, "runtime_embarcado",
+        lambda: RuntimeLLM(ConfigRuntime(binario=None, modelo=None)),
+    )
+    res = analisar(perfil_atencao, cfg=ConfigAgente(provider="local"))
+    assert res.modo == "degradado"
+    assert res.guardrails_violados == ["ERRO_CONFIG:RuntimeLLMIndisponivel"]
+    assert res.fatos.saldo_devedor_total > 0  # determinístico intacto
+
+
+# ------------------------------------------------------- real (opt-in)
+@pytest.mark.skipif(
+    not os.getenv(rt.VAR_TESTE_REAL),
+    reason="requer llama-server + modelo GGUF reais (HF_LLAMA_REAL=1, HF_LLAMA_SERVER, HF_LLM_MODELO)",
+)
+def test_runtime_real_sobe_e_responde_health():
+    binario = resolver_binario_llama()
+    modelo = resolver_modelo()
+    assert binario is not None and modelo is not None, "configure HF_LLAMA_SERVER e HF_LLM_MODELO"
+    runtime = RuntimeLLM(ConfigRuntime(binario=binario, modelo=modelo))
+    try:
+        base = runtime.base_url()
+        assert base.endswith("/v1")
+        assert rt._saude_ok(base.removesuffix("/v1") + "/health")
+        assert runtime.ativo()
+    finally:
+        runtime.encerrar()
+        time.sleep(0.1)

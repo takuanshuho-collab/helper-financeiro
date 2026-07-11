@@ -50,13 +50,17 @@ def test_modo_degradado_explicito(perfil_atencao):
     assert res.guardrails_violados == ["MODO_DEGRADADO"]
 
 
-def test_provider_offline_real_degrada(perfil_atencao):
+def test_provider_offline_real_degrada(perfil_atencao, monkeypatch):
     """T-206: OllamaProvider DE VERDADE contra porta local fechada.
 
     Diferente dos fakes acima, aqui o caminho real de rede (urllib) falha com
     conexão recusada — e o usuário ainda recebe o determinístico, sem exceção.
     A porta 9 (discard) não tem listener; a recusa é imediata, sem internet.
+
+    `HF_BASE_URL` definido = servidor do usuário (Ollama) tem precedência sobre
+    o runtime embarcado (ADR-0016 §E); é o `OllamaProvider` que falha na rede.
     """
+    monkeypatch.setenv("HF_BASE_URL", "http://127.0.0.1:9")
     cfg = ConfigAgente(provider="local", base_url="http://127.0.0.1:9", timeout_s=2)
     res = analisar(perfil_atencao, cfg=cfg)
     assert res.modo == "degradado"

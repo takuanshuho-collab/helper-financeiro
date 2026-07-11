@@ -259,7 +259,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-1701 | `sidecar/runtime_llm.py`: gerência do processo `llama-server` (start sob demanda, loopback + porta efêmera, health, shutdown), `OpenAICompatProvider` apontando p/ ele como padrão de fábrica; sem modelo ⇒ degrada com motivo (P8); testes | REQ-F-027, REQ-NF-007 | — | ⬜ |
+| T-1701 | `sidecar/runtime_llm.py`: gerência do processo `llama-server` (start sob demanda, loopback + porta efêmera, health, shutdown), `OpenAICompatProvider` apontando p/ ele como padrão de fábrica; sem modelo ⇒ degrada com motivo (P8); testes | REQ-F-027, REQ-NF-007 | — | ✅ |
 | T-1702 | Gestor de modelos: catálogo curado (URL + SHA-256 travados no código, licença comercial ok), download com progresso/retomada + verificação de hash obrigatória, opção de apontar `.gguf` local; tela de configuração da IA + E2E | REQ-F-028, REQ-NF-007 | T-1701 | ⬜ |
 | T-1703 | Empacotamento: `llama-server` (CPU + Vulkan) como *extraResource* + sqlcipher3 no `SidecarHF.spec`; smoke do pacote que abre cofre E gera análise com o runtime embarcado | Processo | T-1602/1701 | ⬜ |
 | T-1704 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.8.0 e docs sincronizados | Processo | todos | ⬜ |
@@ -304,10 +304,22 @@ a rota; `/health` e `/auth/*` fora). **Janela de onboarding**: sem cofre
 cadastrado o app opera como pré-v2.8 (REQ-SEC-005 atualizado no SPEC) — o
 T-1604 força o cadastro na GUI. Decisão registrada: stderr do SQLCipher NÃO é
 filtrado (`ChaveInvalida` pós-login = corrupção real). 19 testes novos
-(365 passed). Próxima task: **T-1604** (GUI onboarding/login + E2E). Depois
-T-1603 (sessão 423/login/lock no sidecar), T-1604 (GUI de
-onboarding/desbloqueio), T-1701/1702 (runtime embarcado + gestor de modelos),
-T-1703 (empacotamento com smoke real) e T-1704 (fechamento + ata v2.8.0).
+(365 passed). **T-1701 ✅**:
+`sidecar/runtime_llm.py` (`RuntimeLLM` com lock único: start preguiçoso em
+`base_url()`, loopback + porta efêmera, poll do `/health` com relógio
+injetável — timeout 60 s p/ carga do modelo —, detecção de processo morto com
+restart sob demanda, `terminate → wait → kill`; convenção p/ o T-1703:
+binário em `resources/llama/llama-server(.exe)` relativo ao executável,
+override `HF_LLAMA_SERVER`, modelo via `HF_LLM_MODELO`). Fábrica
+(`agent/provider.py`): com `provider="local"`, `HF_BASE_URL` definido ⇒
+servidor do usuário (ADR-0002 preservada); senão ⇒ runtime embarcado;
+indisponível ⇒ `RuntimeLLMIndisponivel` → `ERRO_CONFIG:...` degrada P8 no
+grafo. NOTA: extração/classificação têm fábricas próprias
+(`obter_extrator`/`obter_classificador`) e ainda NÃO usam o runtime embarcado
+— pendência explícita do T-1702, junto com ligar `encerrar_runtime()` no
+lifespan do `app.py`. 15 testes novos (379 passed). Próximas: **T-1702**
+(gestor de modelos), T-1703 (empacotamento com smoke real) e T-1704
+(fechamento + ata v2.8.0).
 
 ### Histórico do ciclo v2.7 (fechado)
 

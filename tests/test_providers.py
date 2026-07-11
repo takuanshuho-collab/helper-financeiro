@@ -81,7 +81,10 @@ def test_ollama_provider_fala_a_api_nativa(servidor, perfil_atencao):
     assert "<FATOS>" in req["corpo"]["messages"][1]["content"]
 
 
-def test_ollama_resposta_fora_do_schema_degrada(servidor, perfil_atencao):
+def test_ollama_resposta_fora_do_schema_degrada(servidor, perfil_atencao, monkeypatch):
+    # HF_BASE_URL definido = usuário apontou o próprio servidor (Ollama): tem
+    # precedência sobre o runtime embarcado (ADR-0002/0016 §E).
+    monkeypatch.setenv("HF_BASE_URL", servidor.url)
     servidor.resposta = {"message": {"content": '{"nada": "a ver"}'}}
     cfg = ConfigAgente(provider="local", base_url=servidor.url)
 
@@ -92,8 +95,9 @@ def test_ollama_resposta_fora_do_schema_degrada(servidor, perfil_atencao):
     assert len(servidor.requisicoes) == 2  # 1 tentativa + 1 recuperação
 
 
-def test_pipeline_completo_com_provider_real(servidor, perfil_atencao):
+def test_pipeline_completo_com_provider_real(servidor, perfil_atencao, monkeypatch):
     """E2E offline: analisar() → OllamaProvider → HTTP → guardrails → completo."""
+    monkeypatch.setenv("HF_BASE_URL", servidor.url)  # servidor do usuário tem precedência
     servidor.resposta = {"message": {"content": _analise_valida_json(perfil_atencao)}}
     cfg = ConfigAgente(provider="local", base_url=servidor.url)
 
