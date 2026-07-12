@@ -117,7 +117,33 @@ async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown>
     body: temCorpo ? JSON.stringify(payload) : undefined,
     dispatcher: dispatcherSidecar,
   })
-  const dados = (await resp.json()) as { detail?: string; aguarde_s?: number }
+  // O corpo pode não ser JSON (C-06): um 500 imprevisto que escape de algum
+  // handler do sidecar sem cair no `exception_handler(Exception)` genérico
+  // (ex.: erro dentro do próprio ASGI, fora do alcance do FastAPI) ainda
+  // devolveria o `PlainTextResponse` padrão do Starlette. Sem o try/catch, o
+  // `resp.json()` lançaria uma exceção de parse crua, que atravessaria o
+  // `ipcMain.handle` como rejeição de Promise — o structured-clone do
+  // Electron preserva só `.message`, perdendo o `status` (essencial para o
+  // gate 423/429, T-1604). Regressão exata ao padrão pré-T-1604.
+  let dados: { detail?: string; aguarde_s?: number }
+  try {
+    dados = (await resp.json()) as { detail?: string; aguarde_s?: number }
+  } catch {
+    // Corpo não-JSON: nunca deixamos a exceção de parse escapar. Se a
+    // resposta já não era `ok`, devolvemos `__hfErro` com o status real e um
+    // detalhe genérico (o corpo original pode ser um stack trace do
+    // Starlette — não repassamos ao renderer, REQ-SEC-003). Se a resposta
+    // ERA `ok` (caso teórico: 2xx com corpo não-JSON, nenhuma rota do
+    // sidecar faz isso hoje), tratamos como falha também — um "sucesso" sem
+    // corpo interpretável não tem como o chamador consumir sem quebrar, e
+    // devolver `__hfErro` aqui é o comportamento são: o renderer já sabe
+    // lidar com esse formato em vez de receber `undefined`/lixo.
+    return {
+      __hfErro: true as const,
+      status: resp.status,
+      detail: 'Erro interno do serviço (resposta não-JSON)',
+    }
+  }
   if (!resp.ok) {
     // Erros de HTTP viram um objeto (não uma rejeição): o `ipcRenderer.invoke`
     // do Electron não preserva propriedades extras de um Error lançado através

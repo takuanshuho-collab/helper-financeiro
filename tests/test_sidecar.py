@@ -191,6 +191,57 @@ def test_valor_negativo_detail_e_string_422():
     assert "saldo_devedor" in detail
 
 
+# --- Erro não mapeado (C-06) --------------------------------------------------
+
+
+def test_erro_nao_mapeado_devolve_json_500(monkeypatch):
+    """C-06 (alto): uma exceção que escapa de um endpoint sem `try/except`
+    próprio precisa sair como 500 com corpo JSON `{"detail": string}` —
+    ANTES do `exception_handler(Exception)`, o handler padrão do Starlette
+    devolve `PlainTextResponse` (texto puro), que quebra o `resp.json()` do
+    `chamarSidecar` no lado Electron (ver `main.ts`). `raise_server_exceptions
+    =False` é necessário: por padrão o `TestClient` relança a exceção em vez
+    de deixar o handler global do FastAPI tratá-la."""
+
+    def _explode(_perfil):
+        raise RuntimeError("caminho sensível: C:/Users/alguem/segredo.db")
+
+    monkeypatch.setattr("sidecar.app.resumo_diagnostico", _explode)
+    cliente_sem_reraise = TestClient(app, raise_server_exceptions=False)
+    payload = {
+        "renda": {"salario_liquido": 4000.0},
+        "fixas": {"moradia": 1000.0},
+    }
+    resposta = cliente_sem_reraise.post(
+        "/diagnostico", json=payload, headers=CABECALHO
+    )
+    assert resposta.status_code == 500
+    corpo = resposta.json()  # antes da correção: falharia aqui (corpo não é JSON)
+    assert corpo == {"detail": "Erro interno do sidecar."}
+    # REQ-SEC-003: a mensagem original (com o caminho sensível) NUNCA vai ao
+    # corpo — só ao log local (stderr), fora do alcance deste teste.
+    assert "segredo" not in resposta.text
+    assert "RuntimeError" not in resposta.text
+
+
+def test_erros_existentes_continuam_intactos_apos_handler_generico():
+    """O `exception_handler(Exception)` não pode capturar `HTTPException` nem
+    os handlers já registrados (`AguardeCofre` 429, `RequestValidationError`
+    422) — Starlette despacha por handler mais específico primeiro. Prova
+    rápida com os dois casos mais sensíveis do gate: 401 sem token e 422 de
+    validação continuam com o corpo/status de sempre."""
+    resposta_401 = cliente.post("/diagnostico", json={})
+    assert resposta_401.status_code == 401
+
+    resposta_422 = cliente.post(
+        "/diagnostico",
+        json={"dividas": [{"saldo_devedor": 100.0}]},
+        headers=CABECALHO,
+    )
+    assert resposta_422.status_code == 422
+    assert isinstance(resposta_422.json()["detail"], str)
+
+
 # --- Roundtrip determinístico (REQ-NF-005) -----------------------------------
 
 

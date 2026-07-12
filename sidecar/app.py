@@ -282,6 +282,31 @@ def _tratar_validacao(_request: object, exc: RequestValidationError) -> JSONResp
     return JSONResponse(status_code=422, content={"detail": detail})
 
 
+@app.exception_handler(Exception)
+def _tratar_erro_nao_mapeado(_request: object, exc: Exception) -> JSONResponse:
+    """Rede de segurança para exceções não previstas (C-06, ADR-0017 §E).
+
+    Sem este handler, um 500 imprevisto vira o `PlainTextResponse` padrão do
+    Starlette — texto puro, não JSON — e o `chamarSidecar` do Electron
+    (`resp.json()`) quebra ao tentar parsear, perdendo o `status` no
+    caminho da rejeição da Promise (regressão ao padrão pré-T-1604). Aqui
+    todo 500 sai com corpo JSON `{"detail": string}`, coerente com o
+    contrato de `ErroSidecar` em `client.ts`.
+
+    `str(exc)` NUNCA vai no corpo: pode conter caminho de arquivo local ou
+    outro dado sensível (REQ-SEC-003). O detalhe completo só sai no log
+    local (stderr), via `log.exception` — mesma política do T-1603 para
+    exceções não mapeadas.
+
+    Nota: FastAPI/Starlette só chama handlers de `Exception` para exceções
+    que ESCAPAM da rota; um `HTTPException` (e o `AguardeCofre`/
+    `RequestValidationError` acima, que têm handler próprio) nunca cai
+    aqui — os 4xx/423/429 existentes continuam com o corpo que já emitem.
+    """
+    log.exception("Erro não mapeado no sidecar: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": "Erro interno do sidecar."})
+
+
 @app.get("/auth/status", dependencies=[Depends(exigir_token)])
 def auth_status(sess: Annotated[SessaoCofre, Depends(sessao_dependencia)]) -> dict:
     """`{cadastrado, desbloqueado, aguarde_s}` — o front decide a tela."""
