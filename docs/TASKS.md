@@ -261,7 +261,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 |----|------|-----|---------|--------|
 | T-1701 | `sidecar/runtime_llm.py`: gerência do processo `llama-server` (start sob demanda, loopback + porta efêmera, health, shutdown), `OpenAICompatProvider` apontando p/ ele como padrão de fábrica; sem modelo ⇒ degrada com motivo (P8); testes | REQ-F-027, REQ-NF-007 | — | ✅ |
 | T-1702 | Gestor de modelos: catálogo curado (URL + SHA-256 travados no código, licença comercial ok), download com progresso/retomada + verificação de hash obrigatória, opção de apontar `.gguf` local; tela de configuração da IA + E2E | REQ-F-028, REQ-NF-007 | T-1701 | ✅ |
-| T-1703 | Empacotamento: `llama-server` (CPU + Vulkan) como *extraResource* + sqlcipher3 no `SidecarHF.spec`; smoke do pacote que abre cofre E gera análise com o runtime embarcado | Processo | T-1602/1701 | ⬜ |
+| T-1703 | Empacotamento: `llama-server` (CPU + Vulkan) como *extraResource* + sqlcipher3 no `SidecarHF.spec`; smoke do pacote que abre cofre E gera análise com o runtime embarcado | Processo | T-1602/1701 | ✅ |
 | T-1704 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.8.0 e docs sincronizados | Processo | todos | ⬜ |
 
 ---
@@ -355,11 +355,40 @@ Correções da revisão: `/llm/baixar` idempotente por modelo (2 jobs no mesmo
 — voltaram a passar contra o Ollama do usuário). Suíte 409 passed / 95,8%;
 E2E 18 passed (1 flake do cenário "recuperação" em 1 de 3 rodadas, perfil do
 flake histórico: pós-rodada pesada, passa na reexecução — sem correção às
-cegas). Próximas: **T-1703** (empacotamento: llama-server extraResource
-CPU+Vulkan, sqlcipher3+qrcode/pypng no spec, smoke real cofre+download fake+
-análise; revalidar `empacotado.spec.ts`) e T-1704 (fechamento + ata v2.8.0;
-lembrar `scripts/preparar_ocr.py` antes do PyInstaller e TASKS.md finalizado
-antes de hashear).
+cegas). **T-1703 ✅**: `scripts/preparar_llama.py` (análogo do
+`preparar_ocr.py`) baixa/verifica/extrai o `llama-server` do release oficial
+`ggml-org/llama.cpp` **b9966** — SHA-256 + tamanho dos zips travados no código
+e conferidos NA REVISÃO contra o digest da API do GitHub (2/2 batem); download
+em `.parcial` promovido só após o hash, extração seletiva achatada por
+`Path(nome).name` (sem zip-slip), idempotente via marcador `.origem.json`.
+**Variante Vulkan como único binário embarcado**: o zip Vulkan traz também
+todos os backends de CPU (`ggml-cpu-*.dll`) — na GPU-alvo (GTX 1650 4 GB)
+acelera, sem GPU/driver cai em CPU sozinho; `--variante cpu` existe mas nunca
+é padrão. `resources/llama/` no `.gitignore` (~130 MB, rede só no build —
+REQ-NF-006). Flags de GPU: default `-ngl 99` (offload total; os modelos do
+catálogo 1,1–2,4 GB cabem nos 4 GB), override por `HF_LLAMA_FLAGS` (definida
+vazia ⇒ zera = CPU puro). `SidecarHF.spec`: `collect_all` de
+sqlcipher3/argon2/`_argon2_cffi_bindings` + hiddenimports pyotp/qrcode/png.
+electron-builder: extraResource `../resources/llama` →
+`sidecar-hf/resources/llama` (a convenção do `resolver_binario_llama`, ao lado
+do exe do sidecar). Smoke do pacote REAL executado: cofre cadastra+loga no exe
+congelado (dados.db SQLCipher criado), download fake ok, e **análise ponta a
+ponta pelo runtime embarcado com o Qwen2.5-1.5B do catálogo: `modo: completo`,
+zero guardrails** (0.5B de teste degradou P8 corretamente por SCHEMA); pytest
+opt-in `HF_LLAMA_REAL` passou com binário+modelo reais. Novo
+`empacotado-llm.spec.ts` (binário resolvido no pacote ⇒ MODELO_AUSENTE, nunca
+BINARIO_AUSENTE + download/ativação contra o pacote); `empacotado.spec.ts`
+enfim validado contra pacote com cofre (pendência do T-1604 fechada). Dois
+testes ajustados por consequência do binário materializado no checkout
+(`configuracao-ia.spec.ts` força BINARIO_AUSENTE via `HF_LLAMA_SERVER`
+inexistente; `test_resolver_binario_ausente_sem_pacote` com monkeypatch de
+`_base_pacote`) — determinísticos, sem enfraquecer. Suíte 425 passed / 95,8%;
+E2E dev 18 passed; E2E pacote 4 passed. Próxima: **T-1704** (fechamento + ata
+v2.8.0): rodar `preparar_llama.py` E `preparar_ocr.py` ANTES do
+PyInstaller/electron-builder; alvo NSIS (`npm run dist`) ainda não buildado
+(só `dist:dir`); bump da tag do llama.cpp exige recomputar os 2 SHA-256 de
+`ASSETS`; TASKS.md finalizado antes de hashear; mencionar na ata que modelos
+com menos de 1B degradam no schema (o catálogo 1.5B–3.8B satisfaz).
 
 ### Histórico do ciclo v2.7 (fechado)
 

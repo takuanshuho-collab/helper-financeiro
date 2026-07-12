@@ -89,8 +89,13 @@ def test_resolver_binario_override_inexistente_vira_none(tmp_path):
     assert resolver_binario_llama(ambiente) is None
 
 
-def test_resolver_binario_ausente_sem_pacote():
-    # No dev/teste não há resources/llama/ empacotado ⇒ indisponível (None).
+def test_resolver_binario_ausente_sem_pacote(tmp_path, monkeypatch):
+    # Sem binário em `<base>/resources/llama/` ⇒ indisponível (None). Aponta a
+    # base para um tmp VAZIO: a partir do T-1703, `scripts/preparar_llama.py`
+    # pode ter materializado o binário em resources/llama/ no próprio checkout,
+    # então não dá para depender da ausência do arquivo real (o teste ficaria
+    # acoplado ao estado do build).
+    monkeypatch.setattr(rt, "_base_pacote", lambda: tmp_path)
     assert resolver_binario_llama({}) is None
 
 
@@ -127,6 +132,33 @@ def test_resolver_modelo_env_precede_llm_json(binario_e_modelo, tmp_path):
                 rt.VAR_MODELO: str(modelo)}
     gm.definir_modelo_ativo(outro_modelo, ambiente)
     assert resolver_modelo(ambiente) == modelo  # env vence, não o llm.json
+
+
+# ------------------------------------------------- flags de GPU (T-1703)
+def test_flags_padrao_aceleram_gpu():
+    """Sem `HF_LLAMA_FLAGS`, o default offloada as camadas p/ a GPU Vulkan."""
+    assert rt.resolver_flags({}) == ("-ngl", "99")
+
+
+def test_flags_env_sobrepoe():
+    ambiente = {rt.VAR_FLAGS: "-ngl 20 --threads 4"}
+    assert rt.resolver_flags(ambiente) == ("-ngl", "20", "--threads", "4")
+
+
+def test_flags_env_vazia_forca_cpu():
+    """`HF_LLAMA_FLAGS=""` definido (mesmo vazio) zera as flags — força CPU."""
+    assert rt.resolver_flags({rt.VAR_FLAGS: ""}) == ()
+    assert rt.resolver_flags({rt.VAR_FLAGS: "   "}) == ()
+
+
+def test_flags_entram_no_comando_do_servidor(binario_e_modelo):
+    """As flags calibradas viram argumentos do `llama-server` (após `-c ctx`)."""
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, flags_extra=("-ngl", "99")))
+    comando = runtime._comando_llama_server(8080)
+    assert comando[-2:] == ["-ngl", "99"]
+    assert str(modelo) in comando
 
 
 # ------------------------------------------------- degradação por ausência

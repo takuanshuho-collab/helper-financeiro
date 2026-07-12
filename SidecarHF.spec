@@ -55,6 +55,26 @@ if _faltando:
         + "\n  Rode antes: uv run python scripts/preparar_ocr.py"
     )
 
+# Cofre (ADR-0016, M16): as dependências novas trazem binário nativo e/ou são
+# importadas de formas que o grafo estático do PyInstaller não pega sozinho.
+#   - sqlcipher3: binding do SQLCipher com DLL nativa (sqlcipher3-wheels) — sem
+#     ela o `PRAGMA key` e a migração do cofre não sobem no exe congelado.
+#     `collect_all` embarca o pacote + a DLL. O nome de import é `sqlcipher3`
+#     (o pacote no PyPI é `sqlcipher3-wheels`, mas importa como sqlcipher3).
+#   - argon2 (argon2-cffi): KDF Argon2id da KEK; traz `_ffi`/`_argon2_cffi_bindings`
+#     nativos importados dinamicamente pelo cffi.
+for pacote in ('sqlcipher3', 'argon2', '_argon2_cffi_bindings'):
+    d, b, h = collect_all(pacote)
+    datas += d
+    binaries += b
+    hiddenimports += h
+
+# TOTP + QR do onboarding (T-1604). `pyotp` é puro-Python mas importado
+# tardiamente em `sidecar/auth.py`; `qrcode` usa `png` (pypng, do extra
+# qrcode[png]) para o PNG do QR — SEM Pillow (o app usa PyNGImage/pypng puro,
+# ver a decisão do T-1604). Declarados explícitos para não sumirem no freeze.
+hiddenimports += ['pyotp', 'qrcode', 'qrcode.image.pure', 'png']
+
 # uvicorn escolhe loop/protocolo por import dinâmico (uvicorn.loops.auto etc.).
 hiddenimports += collect_submodules('uvicorn')
 

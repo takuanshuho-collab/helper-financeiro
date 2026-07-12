@@ -18,6 +18,9 @@ dist/
 *.spec
 !SidecarHF.spec
 gui_web/release/
+# Binário do llama-server (llama.cpp) baixado por scripts/preparar_llama.py —
+# grande (~130 MB), materializado no build, nunca versionado (ADR-0016 §E).
+resources/llama/
 
 # IDE / SO
 .vscode/

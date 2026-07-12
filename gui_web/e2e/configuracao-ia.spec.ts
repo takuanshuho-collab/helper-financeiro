@@ -74,6 +74,14 @@ test('catálogo fake: baixa, ativa e reflete no status — sem tocar a rede real
       HF_CATALOGO_TESTE: catalogoJson,
       HF_MODELOS_DIR: path.join(dirTmp, 'modelos'),
       HF_LLM_CONFIG_PATH: path.join(dirTmp, 'llm.json'),
+      // Força BINARIO_AUSENTE de forma determinística (T-1703): a partir desta
+      // task, `scripts/preparar_llama.py` pode ter materializado o binário em
+      // resources/llama/ NESTE checkout de dev — então não dá mais para inferir
+      // "sem binário" pela ausência do arquivo. Um HF_LLAMA_SERVER apontando
+      // para caminho inexistente faz `resolver_binario_llama` devolver None
+      // (ver runtime_llm.py), reproduzindo o cenário "app sem binário" que este
+      // teste (T-1702) exercita — independente de o binário estar no checkout.
+      HF_LLAMA_SERVER: path.join(dirTmp, 'sem-binario-llama-server.exe'),
     },
   })
   const win = await app.firstWindow()

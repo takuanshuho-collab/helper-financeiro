@@ -70,12 +70,10 @@ test.beforeAll(async () => {
     },
   })
   win = await app.firstWindow()
-  // Cadastra o cofre pela UI (sem porta dos fundos) e confirma o 1º login —
-  // NOTA (T-1604): este spec roda contra o pacote CONGELADO antigo (o
-  // executável do `dist:dir` gerado antes desta task, sem o assistente do
-  // cofre) — a validação real deste fluxo aqui só acontece no T-1703, quando
-  // o pacote for regerado com o `qrcode`/`sqlcipher3` embarcados. Até lá,
-  // este `beforeAll` falha ao esperar `.auth-card` (tela antiga não existe).
+  // Cadastra o cofre pela UI (sem porta dos fundos) e confirma o 1º login.
+  // T-1703: o pacote agora embarca qrcode/pypng + sqlcipher3 + argon2 + pyotp
+  // (ver SidecarHF.spec), então este onboarding roda de verdade contra o exe
+  // congelado — cadastro cifra o dados.db (SQLCipher) e o 1º login o reabre.
   await cadastrarCofreELogin(win, 'senha-e2e-pacote-super-secreta')
   // O hero só aparece quando o sidecar (exe PyInstaller) respondeu.
   await win.waitForSelector('.hero', { timeout: 45_000 })

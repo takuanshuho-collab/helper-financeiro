@@ -54,6 +54,10 @@
       {
         "from": "../dist/sidecar-hf",
         "to": "sidecar-hf"
+      },
+      {
+        "from": "../resources/llama",
+        "to": "sidecar-hf/resources/llama"
       }
     ],
     "win": {

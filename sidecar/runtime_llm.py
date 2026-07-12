@@ -64,6 +64,18 @@ log = logging.getLogger("helper_financeiro.runtime_llm")
 VAR_BINARIO = "HF_LLAMA_SERVER"   # override do caminho do binário llama-server
 VAR_MODELO = "HF_LLM_MODELO"      # caminho de um .gguf já instalado no disco
 VAR_TESTE_REAL = "HF_LLAMA_REAL"  # liga o teste opt-in com binário/modelo reais
+VAR_FLAGS = "HF_LLAMA_FLAGS"      # flags extras do llama-server (ex.: aceleração GPU)
+
+# Aceleração GPU por padrão (T-1703). O binário empacotado é o build **Vulkan**
+# do llama.cpp (ver scripts/preparar_llama.py): `-ngl 99` manda offload de TODAS
+# as camadas para a GPU Vulkan. Racional da calibragem para a GPU-alvo (4 GB de
+# VRAM) com os modelos do catálogo (Q4, ~1,1–2,4 GB): os dois modelos leves
+# (1.5B/2B) cabem inteiros na VRAM; o build Vulkan também carrega os backends de
+# CPU, então numa máquina SEM GPU/driver Vulkan o `-ngl` não tem para onde
+# offloadar e o servidor roda em CPU — o default é seguro nos dois mundos. Quem
+# tiver VRAM apertada (ex.: o modelo de 3,8 B numa placa muito cheia) sobrepõe
+# via `HF_LLAMA_FLAGS` (inclusive `HF_LLAMA_FLAGS=""` para forçar CPU puro).
+_FLAGS_PADRAO: tuple[str, ...] = ("-ngl", "99")
 
 # Contexto padrão: acompanha o NUM_CTX do provider (fatos crescem com a carteira).
 _CTX_PADRAO = 8192
@@ -148,6 +160,19 @@ def resolver_modelo(
         log.warning("Modelo GGUF configurado não encontrado — runtime indisponível.")
         return None
     return caminho
+
+
+def resolver_flags(ambiente: Mapping[str, str] | None = None) -> tuple[str, ...]:
+    """Flags extras do `llama-server`: `HF_LLAMA_FLAGS` (split por espaços) ou o
+    default de aceleração (`_FLAGS_PADRAO`).
+
+    A env **definida** vence — inclusive vazia: `HF_LLAMA_FLAGS=""` zera as flags
+    (força CPU puro, útil se o offload Vulkan falhar). Não definida ⇒ default.
+    """
+    env = os.environ if ambiente is None else ambiente
+    if VAR_FLAGS not in env:
+        return _FLAGS_PADRAO
+    return tuple(env[VAR_FLAGS].split())
 
 
 def _porta_livre(host: str = _HOST_LOOPBACK) -> int:
@@ -338,7 +363,11 @@ def runtime_embarcado() -> RuntimeLLM:
     with _LOCK_SINGLETON:
         if _RUNTIME is None:
             _RUNTIME = RuntimeLLM(
-                ConfigRuntime(binario=resolver_binario_llama(), modelo=resolver_modelo())
+                ConfigRuntime(
+                    binario=resolver_binario_llama(),
+                    modelo=resolver_modelo(),
+                    flags_extra=resolver_flags(),
+                )
             )
         return _RUNTIME
 
