@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -303,12 +304,47 @@ def _sha256_arquivo(caminho: Path) -> str:
     return h.hexdigest()
 
 
+# Cache do veredito de hash por (caminho, mtime_ns, tamanho): `estado_arquivo`
+# roda a cada poll de `GET /llm/catalogo`, e sem cache re-hashearia cada `.gguf`
+# (até ~2,4 GB) por item, por request — saturando disco/CPU e podendo colidir
+# com um download em curso (C-14). A chave inclui `st_mtime_ns` e `st_size`:
+# promover o download (`os.replace`) muda o mtime, então uma entrada velha nunca
+# é servida para um arquivo novo; um arquivo trocado no lugar (mesmo tamanho,
+# mtime diferente) também invalida a chave e força o re-hash. `baixar_modelo` e
+# `definir_modelo_ativo` seguem verificando o hash de verdade (não passam por
+# aqui): o cache é só para a leitura de estado do catálogo.
+_CACHE_HASH: dict[tuple[str, int, int], str] = {}
+_CACHE_HASH_LOCK = threading.Lock()
+
+
+def _sha256_cacheado(caminho: Path) -> str:
+    """SHA-256 de `caminho`, cacheado por (caminho, mtime_ns, tamanho).
+
+    Só re-hasheia quando a tupla muda. Chama `_sha256_arquivo` pelo nome do
+    módulo (não uma referência capturada) de propósito: mantém o ponto de
+    monkeypatch dos testes."""
+    st = caminho.stat()
+    chave = (str(caminho), st.st_mtime_ns, st.st_size)
+    with _CACHE_HASH_LOCK:
+        em_cache = _CACHE_HASH.get(chave)
+    if em_cache is not None:
+        return em_cache
+    digest = _sha256_arquivo(caminho)
+    with _CACHE_HASH_LOCK:
+        # Só o estado atual de cada caminho interessa: descarta chaves velhas do
+        # mesmo arquivo (mtime/tamanho anteriores) para o cache não crescer.
+        for velha in [k for k in _CACHE_HASH if k[0] == chave[0] and k != chave]:
+            del _CACHE_HASH[velha]
+        _CACHE_HASH[chave] = digest
+    return digest
+
+
 def estado_arquivo(item: ModeloCatalogo, ambiente: Mapping[str, str] | None = None,
                    destino_dir: Path | None = None) -> EstadoArquivo:
     """`"baixado"` só se o arquivo final existe E o hash bate (um arquivo
     corrompido/truncado não conta como baixado — evita falso positivo)."""
     final = caminho_final(item, ambiente, destino_dir)
-    if final.is_file() and _sha256_arquivo(final) == item.sha256:
+    if final.is_file() and _sha256_cacheado(final) == item.sha256:
         return "baixado"
     return "ausente"
 

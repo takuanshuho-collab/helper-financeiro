@@ -265,6 +265,70 @@ def test_auto_lock_nao_conta_consultas_de_status(tmp_path):
         sess.fechar()
 
 
+# --- gancho ao_bloquear: descarte de PII no bloqueio (C-04) ------------------
+def _sessao_com_gancho(tmp_path, relogio, disparos, auto_lock_min=15.0) -> SessaoCofre:
+    return SessaoCofre(
+        cofre=Cofre(tmp_path / "auth.json", agora=relogio, parametros_kdf=KDF_RAPIDO),
+        caminho_db=tmp_path / "dados.db",
+        agora=relogio,
+        auto_lock_min=auto_lock_min,
+        ao_bloquear=lambda: disparos.append(1),
+    )
+
+
+def test_gancho_ao_bloquear_dispara_no_bloqueio_manual(tmp_path):
+    """O bloqueio manual dispara `ao_bloquear` exatamente uma vez; bloquear já
+    bloqueado NÃO redispara (idempotência preservada)."""
+    relogio = RelogioFake()
+    disparos: list[int] = []
+    sess = _sessao_com_gancho(tmp_path, relogio, disparos)
+    app.dependency_overrides[sessao_dependencia] = lambda: sess
+    try:
+        dados = _cadastrar(relogio)
+        assert _login(relogio, totp_uri=dados["totp_uri"]).status_code == 200
+
+        assert cliente.post("/auth/bloquear", headers=CABECALHO).status_code == 200
+        assert disparos == [1]  # disparou uma vez no bloqueio de sessão aberta
+        assert cliente.post("/auth/bloquear", headers=CABECALHO).status_code == 200
+        assert disparos == [1]  # já bloqueado: não redispara
+    finally:
+        del app.dependency_overrides[sessao_dependencia]
+        sess.fechar()
+
+
+def test_gancho_ao_bloquear_dispara_no_auto_lock(tmp_path):
+    """O auto-lock por inatividade também passa pelo ponto único de descarte da
+    DEK — logo dispara `ao_bloquear` (a PII não pode sobreviver ao auto-lock)."""
+    relogio = RelogioFake()
+    disparos: list[int] = []
+    sess = _sessao_com_gancho(tmp_path, relogio, disparos, auto_lock_min=5.0)
+    app.dependency_overrides[sessao_dependencia] = lambda: sess
+    try:
+        dados = _cadastrar(relogio)
+        assert _login(relogio, totp_uri=dados["totp_uri"]).status_code == 200
+
+        relogio.avancar(301.0)  # > 5 min de inatividade
+        assert cliente.post("/diagnostico", json={}, headers=CABECALHO).status_code == 423
+        assert disparos == [1]  # o auto-lock disparou o gancho
+    finally:
+        del app.dependency_overrides[sessao_dependencia]
+        sess.fechar()
+
+
+def test_sessao_do_processo_arma_descarte_de_jobs_ia():
+    """Fim a fim de produção: `sessao_dependencia` arma `_descartar_jobs_ia`
+    como gancho da sessão do processo (C-04)."""
+    from sidecar import app as app_mod
+    from sidecar.sessao import resetar_sessao
+
+    resetar_sessao()
+    try:
+        sess = app_mod.sessao_dependencia()
+        assert sess.ao_bloquear is app_mod._descartar_jobs_ia
+    finally:
+        resetar_sessao()
+
+
 # --- recuperação -------------------------------------------------------------
 
 

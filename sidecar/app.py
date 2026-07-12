@@ -15,6 +15,7 @@ import math
 import os
 import re
 import threading
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -218,8 +219,16 @@ def sessao_dependencia() -> SessaoCofre:
     Mesmo padrão de singleton preguiçoso que o antigo `repositorio()` tinha
     para o `Repositorio`: em produção devolve a sessão única do processo; os
     testes trocam por uma sessão isolada via `app.dependency_overrides`.
+
+    Arma (uma vez) o gancho `ao_bloquear` da sessão do processo: quando o cofre
+    bloqueia — manual ou por auto-lock — `_descartar_jobs_ia` esvazia `_JOBS_IA`
+    para a PII desanonimizada da análise sênior não sobreviver à janela
+    desbloqueada (C-04, REQ-SEC-003).
     """
-    return sessao_processo()
+    sess = sessao_processo()
+    if sess.ao_bloquear is None:
+        sess.ao_bloquear = _descartar_jobs_ia
+    return sess
 
 
 def exigir_cofre(
@@ -740,11 +749,55 @@ def contexto_analise() -> tuple[ConfigAgente | None, LLMProvider | None]:
     return None, None
 
 
+# ------------------------------------------------ coleta preguiçosa de jobs
+# TTL dos jobs em memória (análise sênior e download) que chegaram ao estado
+# final mas nunca foram lidos no poll — a GUI pode ter fechado, o auto-lock pode
+# ter disparado, ou a tela só faz poll do catálogo agregado (nunca do
+# `GET /llm/baixar/{job_id}`). Sem isso, cada job terminal abandonado fica preso
+# pela vida do processo: no caso da IA, com PII DESANONIMIZADA em claro (C-04);
+# no do download, com a entrada e o `threading.Event` (C-08). A cada acesso aos
+# dicionários varremos as entradas terminais mais velhas que o TTL, sem thread
+# de fundo. 10 min cobrem com folga qualquer poll legítimo da tela.
+_TTL_JOBS_S = 600.0
+
+
+def _relogio_jobs() -> float:
+    """Relógio monotônico da coleta de jobs. Função nomeada de propósito: os
+    testes a substituem via monkeypatch para avançar o tempo sem `sleep` real."""
+    return time.monotonic()
+
+
+def _varrer_jobs_terminais(jobs: dict[str, dict], termino: dict[str, float]) -> list[str]:
+    """Remove os jobs cujo instante de término passou do TTL e devolve os ids
+    varridos (o chamador limpa estruturas satélite, p.ex. o `Event` de
+    cancelamento do download). O chamador deve segurar o lock do dicionário."""
+    agora = _relogio_jobs()
+    expirados = [jid for jid, t in termino.items() if agora - t > _TTL_JOBS_S]
+    for jid in expirados:
+        jobs.pop(jid, None)
+        termino.pop(jid, None)
+    return expirados
+
+
 # Jobs em memória: a chamada ao LLM local leva de segundos a minutos, então a
 # tela dispara o job e faz poll — o sidecar continua respondendo às demais
-# rotas. O resultado é descartado na primeira leitura de estado final.
+# rotas. O resultado é descartado na primeira leitura de estado final; o TTL
+# acima cobre os jobs terminais que essa leitura nunca alcança. `_JOBS_IA_FIM`
+# guarda, à parte do dict de estado, o instante em que cada job virou terminal
+# (não vaza no JSON do contrato, que é `{status, secao, erro}`).
 _JOBS_IA: dict[str, dict] = {}
 _JOBS_IA_LOCK = threading.Lock()
+_JOBS_IA_FIM: dict[str, float] = {}
+
+
+def _descartar_jobs_ia() -> None:
+    """Esvazia `_JOBS_IA` — armado como `ao_bloquear` da sessão do cofre, roda
+    quando ela bloqueia (manual OU auto-lock). A seção da análise sênior guarda
+    credores DESANONIMIZADOS (REQ-SEC-003): a PII não pode sobreviver à janela
+    desbloqueada, então some junto com a DEK (C-04)."""
+    with _JOBS_IA_LOCK:
+        _JOBS_IA.clear()
+        _JOBS_IA_FIM.clear()
 
 
 def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
@@ -762,7 +815,13 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
         estado = {"status": "erro", "secao": None,
                   "erro": f"{type(e).__name__}: {e}"}
     with _JOBS_IA_LOCK:
-        _JOBS_IA[job_id] = estado
+        # Só grava se a entrada AINDA existe: se o cofre bloqueou no meio do
+        # job, `_descartar_jobs_ia` já a removeu — regravar aqui ressuscitaria
+        # a seção DESANONIMIZADA depois do bloqueio (C-04). O poll seguinte
+        # recebe 404 e a tela trata como job encerrado.
+        if job_id in _JOBS_IA:
+            _JOBS_IA[job_id] = estado
+            _JOBS_IA_FIM[job_id] = _relogio_jobs()  # terminal: conta o TTL
 
 
 @app.post("/analise/ia", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
@@ -779,6 +838,7 @@ def analise_ia_iniciar(
     perfil = _para_perfil(entrada.perfil)
     job_id = uuid4().hex
     with _JOBS_IA_LOCK:
+        _varrer_jobs_terminais(_JOBS_IA, _JOBS_IA_FIM)  # coleta preguiçosa
         _JOBS_IA[job_id] = {"status": "rodando", "secao": None, "erro": ""}
     threading.Thread(
         target=_rodar_job_ia, args=(job_id, perfil, entrada.extra, cfg, provider),
@@ -791,11 +851,13 @@ def analise_ia_iniciar(
 def analise_ia_status(job_id: str) -> dict:
     """Estado do job: rodando | pronto (com a seção) | erro. 404 se desconhecido."""
     with _JOBS_IA_LOCK:
+        _varrer_jobs_terminais(_JOBS_IA, _JOBS_IA_FIM)  # coleta preguiçosa
         job = _JOBS_IA.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job desconhecido.")
         if job["status"] != "rodando":
             del _JOBS_IA[job_id]  # leitura final: libera a memória do job
+            _JOBS_IA_FIM.pop(job_id, None)
     return {"job_id": job_id, **job}
 
 
@@ -1202,6 +1264,7 @@ def llm_catalogo() -> dict:
 
     itens = listar_catalogo_com_estado()
     with _JOBS_DOWNLOAD_LOCK:
+        _varrer_jobs_download_sem_lock()  # coleta preguiçosa dos jobs terminais
         em_andamento = {j["catalogo_id"]: j for j in _JOBS_DOWNLOAD.values()
                         if j["status"] == "baixando"}
     for item in itens:
@@ -1222,6 +1285,18 @@ def llm_catalogo() -> dict:
 _JOBS_DOWNLOAD: dict[str, dict] = {}
 _JOBS_DOWNLOAD_LOCK = threading.Lock()
 _CANCELAMENTOS_DOWNLOAD: dict[str, threading.Event] = {}
+# Instante em que cada job de download virou terminal — mesmo papel de
+# `_JOBS_IA_FIM` (à parte do dict de estado, para o TTL não vazar no JSON).
+_JOBS_DOWNLOAD_FIM: dict[str, float] = {}
+
+
+def _varrer_jobs_download_sem_lock() -> None:
+    """Aplica o TTL aos jobs de download terminais (C-08). O `Event` de
+    cancelamento correspondente sai junto — já costuma ter sido removido ao fim
+    do job, mas garantimos aqui para quem nunca chega ao poll final. O chamador
+    deve segurar `_JOBS_DOWNLOAD_LOCK`."""
+    for jid in _varrer_jobs_terminais(_JOBS_DOWNLOAD, _JOBS_DOWNLOAD_FIM):
+        _CANCELAMENTOS_DOWNLOAD.pop(jid, None)
 
 
 def _rodar_job_download(job_id: str, catalogo_id: str) -> None:
@@ -1257,6 +1332,7 @@ def _rodar_job_download(job_id: str, catalogo_id: str) -> None:
         job = _JOBS_DOWNLOAD.get(job_id)
         if job is not None:
             job.update(estado)
+            _JOBS_DOWNLOAD_FIM[job_id] = _relogio_jobs()  # terminal: conta o TTL
     _CANCELAMENTOS_DOWNLOAD.pop(job_id, None)
 
 
@@ -1274,6 +1350,7 @@ def llm_baixar(entrada: BaixarModeloIn) -> dict:
     job_id = uuid4().hex
     evento = threading.Event()
     with _JOBS_DOWNLOAD_LOCK:
+        _varrer_jobs_download_sem_lock()  # coleta preguiçosa dos jobs terminais
         # Idempotente por modelo: um segundo POST para o mesmo `catalogo_id`
         # com job em curso devolve o job existente em vez de abrir outro —
         # dois jobs concorrentes escreveriam no MESMO `.parcial` e
@@ -1297,6 +1374,7 @@ def llm_baixar(entrada: BaixarModeloIn) -> dict:
 def llm_baixar_status(job_id: str) -> dict:
     """Progresso do job: baixando (com bytes) | pronto | erro | cancelado."""
     with _JOBS_DOWNLOAD_LOCK:
+        _varrer_jobs_download_sem_lock()  # coleta preguiçosa dos jobs terminais
         job = _JOBS_DOWNLOAD.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job de download desconhecido.")
@@ -1304,6 +1382,7 @@ def llm_baixar_status(job_id: str) -> dict:
             return dict(job)
         resultado = dict(job)
         del _JOBS_DOWNLOAD[job_id]  # leitura final: libera a memória do job
+        _JOBS_DOWNLOAD_FIM.pop(job_id, None)
     return resultado
 
 

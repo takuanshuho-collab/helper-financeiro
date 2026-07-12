@@ -214,6 +214,57 @@ def test_llm_baixar_cancelar_de_verdade(monkeypatch, tmp_path):
         servidor.shutdown()
 
 
+def _esperar_download_terminal_em_memoria(job_id: str, timeout_s: float = 5.0) -> None:
+    """Espera o download virar terminal olhando `_JOBS_DOWNLOAD` DIRETO — sem o
+    poll de `/llm/baixar/{id}`, que apagaria o job na leitura final (queremos o
+    job terminal ainda preso para exercitar o TTL)."""
+    from sidecar import app as app_mod
+
+    limite = time.monotonic() + timeout_s
+    while time.monotonic() < limite:
+        with app_mod._JOBS_DOWNLOAD_LOCK:
+            job = app_mod._JOBS_DOWNLOAD.get(job_id)
+            if job is not None and job["status"] != "baixando":
+                return
+        time.sleep(0.02)
+    raise AssertionError("download não virou terminal no tempo do teste")
+
+
+def test_llm_download_terminal_expira_por_ttl(monkeypatch, tmp_path):
+    """C-08: um download concluído mas nunca lido em `/llm/baixar/{id}` (a tela
+    só polla o catálogo) é varrido no próximo acesso assim que passa o TTL — o
+    `threading.Event` sai junto. Antes: crescia para sempre."""
+    from sidecar import app as app_mod
+
+    reloginho = {"t": 5_000.0}
+    monkeypatch.setattr(app_mod, "_relogio_jobs", lambda: reloginho["t"])
+
+    servidor, url = _subir_servidor_fake()
+    try:
+        item_fake = gm.ModeloCatalogo(
+            id="teste-ttl", nome="Teste TTL", descricao="", licenca="MIT",
+            url=url, sha256=SHA_CONTEUDO, tamanho_bytes=len(CONTEUDO),
+            arquivo="teste-ttl.gguf")
+        monkeypatch.setattr(gm, "CATALOGO", (item_fake,))
+        monkeypatch.setenv(gm.VAR_MODELOS_DIR, str(tmp_path))
+
+        job_id = cliente.post("/llm/baixar", json={"catalogo_id": item_fake.id},
+                              headers=CABECALHO).json()["job_id"]
+        _esperar_download_terminal_em_memoria(job_id)
+        with app_mod._JOBS_DOWNLOAD_LOCK:
+            assert job_id in app_mod._JOBS_DOWNLOAD  # terminal, nunca lido no poll
+
+        # Passa o TTL; o poll do catálogo (o que a tela realmente faz) coleta.
+        reloginho["t"] += app_mod._TTL_JOBS_S + 1.0
+        assert cliente.get("/llm/catalogo", headers=CABECALHO).status_code == 200
+        with app_mod._JOBS_DOWNLOAD_LOCK:
+            assert job_id not in app_mod._JOBS_DOWNLOAD
+            assert job_id not in app_mod._JOBS_DOWNLOAD_FIM
+            assert job_id not in app_mod._CANCELAMENTOS_DOWNLOAD
+    finally:
+        servidor.shutdown()
+
+
 def test_llm_baixar_duplicado_devolve_o_mesmo_job(monkeypatch, tmp_path):
     """2º POST para o MESMO modelo com job em curso devolve o job existente
     (idempotente): dois jobs concorrentes escreveriam no mesmo `.parcial` e

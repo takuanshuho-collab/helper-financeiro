@@ -608,6 +608,86 @@ def test_analise_ia_job_desconhecido_404():
     assert resp.status_code == 404
 
 
+def _esperar_terminal_em_memoria(job_id: str, timeout_s: float = 5.0) -> None:
+    """Espera o job virar terminal olhando `_JOBS_IA` DIRETO — sem passar pelo
+    endpoint de status, que apagaria o job na leitura final (precisamos do job
+    terminal ainda preso para exercitar o TTL)."""
+    from sidecar import app as app_mod
+
+    fim = time.monotonic() + timeout_s
+    while time.monotonic() < fim:
+        with app_mod._JOBS_IA_LOCK:
+            job = app_mod._JOBS_IA.get(job_id)
+            if job is not None and job["status"] != "rodando":
+                return
+        time.sleep(0.02)
+    raise AssertionError("job da IA não virou terminal no tempo do teste")
+
+
+def test_analise_ia_job_terminal_expira_por_ttl(monkeypatch):
+    """C-04: um job terminal nunca lido no poll (GUI fechou / auto-lock / tela
+    só polla o catálogo) é varrido no próximo acesso ao dicionário assim que
+    passa o TTL — antes ficava preso em memória com a seção DESANONIMIZADA."""
+    from sidecar import app as app_mod
+
+    reloginho = {"t": 1_000.0}
+    monkeypatch.setattr(app_mod, "_relogio_jobs", lambda: reloginho["t"])
+
+    espiao = ProviderEspiao()
+    cfg = ConfigAgente(provider="fake", cache=False)
+    cliente.app.dependency_overrides[contexto_analise] = lambda: (cfg, espiao)
+    try:
+        job_id = cliente.post("/analise/ia", json={"perfil": PERFIL_ANALISE},
+                              headers=CABECALHO).json()["job_id"]
+        _esperar_terminal_em_memoria(job_id)
+        with app_mod._JOBS_IA_LOCK:
+            assert job_id in app_mod._JOBS_IA  # terminal, ainda não lido
+
+        # Passa o TTL e faz outro acesso ao dicionário (novo job) — coleta.
+        reloginho["t"] += app_mod._TTL_JOBS_S + 1.0
+        cliente.post("/analise/ia", json={"perfil": PERFIL_ANALISE}, headers=CABECALHO)
+        with app_mod._JOBS_IA_LOCK:
+            assert job_id not in app_mod._JOBS_IA  # varrido (antes: continuava preso)
+            assert job_id not in app_mod._JOBS_IA_FIM
+    finally:
+        cliente.app.dependency_overrides.clear()
+        app_mod._descartar_jobs_ia()  # não deixa jobs deste teste vazarem
+
+
+def test_descartar_jobs_ia_esvazia_dicionarios():
+    """C-04: o gancho de bloqueio esvazia `_JOBS_IA` (PII desanonimizada não
+    sobrevive à janela desbloqueada do cofre)."""
+    from sidecar import app as app_mod
+
+    with app_mod._JOBS_IA_LOCK:
+        app_mod._JOBS_IA["j"] = {"status": "pronto",
+                                 "secao": {"credor": "Maria Real"}, "erro": ""}
+        app_mod._JOBS_IA_FIM["j"] = 0.0
+    app_mod._descartar_jobs_ia()
+    with app_mod._JOBS_IA_LOCK:
+        assert app_mod._JOBS_IA == {}
+        assert app_mod._JOBS_IA_FIM == {}
+
+
+def test_job_ia_descartado_no_meio_nao_ressuscita_pii(monkeypatch):
+    """C-04 (revisão): se o cofre bloqueia ENQUANTO o job roda, o worker não
+    pode regravar a seção desanonimizada ao terminar — sem a guarda no
+    `_rodar_job_ia`, a PII ressuscitava em `_JOBS_IA` depois do bloqueio."""
+    from core.models import PerfilFinanceiro
+    from sidecar import app as app_mod
+
+    monkeypatch.setattr(
+        app_mod, "analisar",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("nem chega aqui")))
+    with app_mod._JOBS_IA_LOCK:
+        app_mod._JOBS_IA["j2"] = {"status": "rodando", "secao": None, "erro": ""}
+    app_mod._descartar_jobs_ia()          # cofre bloqueou no meio do job
+    app_mod._rodar_job_ia("j2", PerfilFinanceiro(), 0.0, None, None)
+    with app_mod._JOBS_IA_LOCK:
+        assert "j2" not in app_mod._JOBS_IA      # resultado morreu com o descarte
+        assert "j2" not in app_mod._JOBS_IA_FIM
+
+
 # --- Carta ao credor (T-903, REQ-F-016) ---------------------------------------
 
 DIVIDA_CARTA = {

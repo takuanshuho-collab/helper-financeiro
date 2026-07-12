@@ -125,6 +125,74 @@ def test_listar_catalogo_com_estado_marca_ausente_sem_arquivo(tmp_path):
     assert all(e["estado"] == "ausente" for e in estados)
 
 
+# ------------------------------------------ cache do veredito de hash (C-14)
+def _contar_hashes(monkeypatch) -> dict[str, int]:
+    """Instala um espião sobre `_sha256_arquivo` que conta as chamadas reais
+    (delegando ao original) — prova quantas vezes o `.gguf` foi lido inteiro."""
+    contador = {"n": 0}
+    original = gm._sha256_arquivo
+
+    def _espiao(caminho):
+        contador["n"] += 1
+        return original(caminho)
+
+    monkeypatch.setattr(gm, "_sha256_arquivo", _espiao)
+    return contador
+
+
+def test_estado_arquivo_nao_re_hasheia_arquivo_inalterado(tmp_path, monkeypatch):
+    """`GET /llm/catalogo` polla o estado; re-hashear o `.gguf` (até ~2,4 GB)
+    por request satura disco/CPU (C-14). Duas leituras seguidas do mesmo
+    arquivo intacto = 1 hash (antes: 2)."""
+    (tmp_path / "teste.gguf").write_bytes(CONTEUDO)
+    item = _item("http://x/teste.gguf")
+    contador = _contar_hashes(monkeypatch)
+
+    assert gm.estado_arquivo(item, destino_dir=tmp_path) == "baixado"
+    assert gm.estado_arquivo(item, destino_dir=tmp_path) == "baixado"
+    assert contador["n"] == 1  # antes da correção: 2
+
+
+def test_estado_arquivo_re_hasheia_quando_arquivo_muda(tmp_path, monkeypatch):
+    """Arquivo alterado (tamanho/mtime diferentes) invalida a chave do cache e
+    força o re-hash — o veredito acompanha o disco."""
+    import os
+
+    arquivo = tmp_path / "teste.gguf"
+    arquivo.write_bytes(CONTEUDO)
+    item = _item("http://x/teste.gguf")
+    contador = _contar_hashes(monkeypatch)
+
+    assert gm.estado_arquivo(item, destino_dir=tmp_path) == "baixado"
+    # Reescreve com conteúdo diferente (tamanho diferente) e mtime distinto.
+    arquivo.write_bytes(CONTEUDO + b"MAIS")
+    st = arquivo.stat()
+    os.utime(arquivo, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+
+    assert gm.estado_arquivo(item, destino_dir=tmp_path) == "ausente"  # hash não bate
+    assert contador["n"] == 2  # re-hasheou o arquivo novo
+
+
+def test_estado_arquivo_corrompido_mesmo_tamanho_mtime_novo_vira_ausente(tmp_path):
+    """Arquivo trocado por um corrompido de MESMO tamanho, mas mtime diferente
+    ⇒ o cache (chave inclui mtime_ns) invalida e o estado volta a "ausente" —
+    guarda contra uma chave só por (caminho, tamanho)."""
+    import os
+
+    arquivo = tmp_path / "teste.gguf"
+    arquivo.write_bytes(CONTEUDO)
+    item = _item("http://x/teste.gguf")
+    assert gm.estado_arquivo(item, destino_dir=tmp_path) == "baixado"
+
+    corrompido = bytes((b + 1) % 256 for b in CONTEUDO)  # mesmo tamanho, outro conteúdo
+    assert len(corrompido) == len(CONTEUDO)
+    arquivo.write_bytes(corrompido)
+    st = arquivo.stat()
+    os.utime(arquivo, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+
+    assert gm.estado_arquivo(item, destino_dir=tmp_path) == "ausente"
+
+
 # --------------------------------------------------------------- llm.json
 def test_llm_config_roundtrip(tmp_path):
     gguf = tmp_path / "modelo.gguf"

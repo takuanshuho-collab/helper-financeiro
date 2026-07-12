@@ -85,6 +85,7 @@ class SessaoCofre:
         caminho_db: Path | None = None,
         agora: Callable[[], float] = time.monotonic,
         auto_lock_min: float | None = None,
+        ao_bloquear: Callable[[], None] | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._cofre = cofre if cofre is not None else Cofre()
@@ -96,6 +97,13 @@ class SessaoCofre:
         self._dek: bytes | None = None
         self._repo: Repositorio | None = None
         self._ultimo_uso: float = agora()
+        # Gancho disparado quando a sessão SAI do estado desbloqueado (bloqueio
+        # manual OU auto-lock). O `app.py` o usa para descartar `_JOBS_IA`: a
+        # seção da análise sênior guarda credores DESANONIMIZADOS (REQ-SEC-003) e
+        # essa PII não pode sobreviver à janela desbloqueada do cofre (C-04).
+        # Atributo público para o `app.py` armá-lo sem acoplar a camada de
+        # sessão à de negócio.
+        self.ao_bloquear = ao_bloquear
 
     @property
     def cofre(self) -> Cofre:
@@ -197,8 +205,20 @@ class SessaoCofre:
         do mapa de anonimização, REQ-SEC-003).
         """
         with self._lock:
-            self._fechar_repo_sem_lock()
-            self._dek = None
+            self._descartar_dek_sem_lock()
+
+    def _descartar_dek_sem_lock(self) -> None:
+        """Ponto ÚNICO de saída do estado desbloqueado: fecha o repositório
+        cifrado, descarta a referência da DEK e — só quando havia mesmo uma
+        sessão aberta — dispara `ao_bloquear`. Bloqueio manual e auto-lock
+        passam ambos por aqui, então o gancho cobre os dois sem duplicação; o
+        guard `estava_desbloqueada` mantém o bloqueio idempotente (bloquear já
+        bloqueado não redispara o gancho)."""
+        estava_desbloqueada = self._dek is not None
+        self._fechar_repo_sem_lock()
+        self._dek = None
+        if estava_desbloqueada and self.ao_bloquear is not None:
+            self.ao_bloquear()
 
     def _fechar_repo_sem_lock(self) -> None:
         if self._repo is not None:
@@ -234,8 +254,7 @@ class SessaoCofre:
             return
         limite_s = self._auto_lock_min * 60.0
         if self._agora() - self._ultimo_uso > limite_s:
-            self._fechar_repo_sem_lock()
-            self._dek = None
+            self._descartar_dek_sem_lock()
 
     # ---------------------------------------------------------------- ciclo
     def fechar(self) -> None:
