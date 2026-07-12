@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.8.0 (ciclo FECHADO — ADR-0016, ata `FREEZE.md` v2.8.0) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.9.0 (ciclo ABERTO — ADR-0017; v2.8.0 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -266,15 +266,53 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 ---
 
+## Milestone M18 — Auditoria de saúde de código (ciclo v2.9, ADR-0017)
+
+> Varreduras NÃO alteram código: produzem achados em formato único (ID
+> `A-<task>-<seq>`, categoria, arquivo:linha, severidade, esforço P/M/G,
+> evidência, impacto, proposta). Severidade pelos critérios da ADR-0017 §D.
+> Perímetro: Python de primeira parte + fronteira TS (electron/main.ts,
+> preload.ts, client.ts, contract.ts); telas React fora do perímetro base.
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-1801 | Varredura de SEGURANÇA: pendências conhecidas (stderr SQLCipher, code signing), authz rota a rota, segredos/logs, TOCTOU nos arquivos do cofre, superfície loopback+token, `pip-audit`/`npm audit` | Processo (ADR-0017) | — | ⬜ |
+| T-1802 | Varredura de CONCORRÊNCIA E RECURSOS: jobs em memória e locks, corridas, processos filhos (órfão do llama-server), handles não fechados, caminhos de shutdown | Processo (ADR-0017) | — | ⬜ |
+| T-1803 | Varredura da FRONTEIRA backend↔frontend: sincronia Pydantic↔`contract.ts` campo a campo, caminhos de erro do IPC, códigos HTTP, serialização de opcionais, respostas truncadas, timeouts assimétricos | Processo (ADR-0017) | — | ⬜ |
+| T-1804 | Varredura de HIGIENE E BOAS PRÁTICAS: código morto, imports/deps não usados, duplicação, `except` largos, TODO/FIXME, complexidade, docstrings mentirosas | Processo (ADR-0017) | — | ⬜ |
+| T-1805 | Varredura de SILENCIOSOS E DÍVIDA DE TESTE: testes que degradam sem falhar, ramos dos 4,2% descobertos, asserts fracos, raiz do flake E2E, exceções engolidas em jobs async | Processo (ADR-0017) | — | ⬜ |
+| T-1806 | Consolidação: dedupe + priorização → `docs/RELATORIO-AUDITORIA.md` → PORTÃO (mantenedor aprova a lista de correções) | Processo (ADR-0017) | T-1801..1805 | ⬜ |
+
+## Milestone M19 — Correção dos achados aprovados (ciclo v2.9, ADR-0017)
+
+> As tasks T-19xx nascem do portão do T-1806 (achado/grupo aprovado ⇒ task com
+> teste de regressão obrigatório que falharia antes da correção). Restrições
+> invioláveis: zero regressão, sem migração de schema/quebra do cofre, sem
+> mudança de comportamento visível exceto correção de bug real, bump de
+> dependência só com smoke do pacote repetido (ADR-0017 §E).
+
+| ID | Task | REQ | Depende | Status |
+|----|------|-----|---------|--------|
+| T-19xx | (definidas no portão do T-1806) | Processo (ADR-0017) | T-1806 | ⬜ |
+| T-19NN | Fechamento do ciclo: gates, rebuild dos binários, ata `FREEZE.md` v2.9.0 e docs sincronizados | Processo | todas | ⬜ |
+
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
 harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**CICLO v2.8 FECHADO E CONGELADO (ata `FREEZE.md` v2.8.0)** — qualquer mudança
-nos artefatos congelados exige **nova ADR + incremento de versão + nova ata**;
-o próximo ciclo começa por uma ADR.
+**Ciclo v2.9 ABERTO (ADR-0017, M18+M19) — saúde de código.** Nenhum recurso
+novo: auditoria profunda (5 varreduras especializadas por família de categoria
++ consolidação em `docs/RELATORIO-AUDITORIA.md`) → **portão humano** (o
+mantenedor aprova a lista de correções) → correção com teste de regressão
+obrigatório → ata v2.9.0. Perímetro: Python de primeira parte + fronteira TS.
+Restrições: zero regressão, sem migração de schema/quebra do cofre, sem
+mudança de comportamento visível exceto bug real (ADR-0017 §E). Próxima ação:
+lançar T-1801/T-1802 (Opus) e T-1803/T-1804 (Sonnet) em pares paralelos;
+T-1805 é do orquestrador. Nota: a fase 0 do PaddleOCR-VL foi executada FORA de
+ciclo (2026-07-12) com veredito "manter RapidOCR" — relatório em
+`docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (untracked).
 
 ### Histórico do ciclo v2.8 (fechado)
 
