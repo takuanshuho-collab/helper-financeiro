@@ -22,7 +22,7 @@ from typing import Annotated
 from uuid import uuid4
 
 import qrcode
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from qrcode.image.pure import PyPNGImage
@@ -183,6 +183,29 @@ def _divida_dict(d: Divida) -> dict:
 def health() -> dict:
     """Liveness — dispensa token para o Electron aferir prontidão."""
     return {"status": "ok", "servico": "helper-financeiro-sidecar"}
+
+
+@app.post("/encerrar", dependencies=[Depends(exigir_token)])
+def encerrar(request: Request) -> dict:
+    """Encerramento GRACIOSO pedido pelo Electron antes do kill duro (C-11).
+
+    No Windows não há SIGTERM: o `sidecar.kill()` do Electron é um
+    `TerminateProcess` que nunca roda o lifespan do FastAPI — o SQLCipher não
+    fecha e o `encerrar_runtime()` (que derruba o `llama-server`) não executa.
+    Este endpoint dá ao processo pai um caminho limpo: sinaliza o uvicorn a sair
+    do loop de forma graciosa, o que dispara o shutdown do lifespan. O Electron
+    faz este POST e AGUARDA o `exit` com prazo curto; o `kill()` continua sendo
+    o último recurso se o prazo estourar.
+
+    Exige só o token (não o cofre): o encerramento tem de funcionar mesmo com a
+    sessão bloqueada. O `uvicorn.Server` é injetado em `app.state.servidor` pelo
+    launcher (`sidecar/__main__`); sob `TestClient` ele não existe e o endpoint
+    apenas responde `ok` (não há loop para encerrar).
+    """
+    servidor = getattr(request.app.state, "servidor", None)
+    if servidor is not None:
+        servidor.should_exit = True
+    return {"ok": True}
 
 
 # --------------------------------------------------- sessão do cofre (T-1603)

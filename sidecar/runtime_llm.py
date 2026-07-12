@@ -58,6 +58,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .job_windows import AncoraProcessos
+
 log = logging.getLogger("helper_financeiro.runtime_llm")
 
 # Variáveis de ambiente (prefixo HF_, como o resto do projeto).
@@ -240,6 +242,11 @@ class RuntimeLLM:
         self._verificar_saude = verificar_saude
         self._proc: subprocess.Popen[bytes] | None = None
         self._porta: int | None = None
+        # Rede de segurança do Windows (C-02): ancora o `llama-server` a um Job
+        # Object com KILL_ON_JOB_CLOSE, para que a morte DURA do sidecar
+        # (TerminateProcess, que não roda o lifespan) não deixe o neto órfão.
+        # No-op fora do Windows; toda falha degrada sem piorar o atual (P8).
+        self._ancora = AncoraProcessos()
 
     # -------------------------------------------------------------- comando
     def _comando_llama_server(self, porta: int) -> list[str]:
@@ -305,6 +312,9 @@ class RuntimeLLM:
         proc = subprocess.Popen(
             comando, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
+        # Ancora ao Job Object ANTES de esperar a saúde: se o sidecar morrer
+        # duro durante o boot do modelo, o SO ainda aniquila este processo.
+        self._ancora.anexar(proc)
         self._proc = proc
         self._porta = porta
         if not self._esperar_saude_sem_lock(porta):

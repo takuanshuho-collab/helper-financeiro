@@ -43,7 +43,16 @@ def main() -> None:
     sys.stdout.write(json.dumps({"port": port, "token": token}) + "\n")
     sys.stdout.flush()
 
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    # Server explícito (em vez de `uvicorn.run`) para expor a referência ao
+    # endpoint `POST /encerrar`: o Electron pede o encerramento gracioso e o
+    # handler seta `servidor.should_exit`, saindo do loop e rodando o lifespan
+    # (fecha SQLCipher, derruba o llama-server) — coisa que o TerminateProcess
+    # do Windows nunca faria (C-11).
+    servidor = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    )
+    app.state.servidor = servidor
+    servidor.run()
 
 
 if __name__ == "__main__":

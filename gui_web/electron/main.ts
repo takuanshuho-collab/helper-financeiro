@@ -73,6 +73,11 @@ function iniciarSidecar(): Promise<void> {
         sidecarPort = hs.port
         sidecarToken = hs.token
         rl.close()
+        // Drena o stdout após o handshake (C-24): fechado o readline, ninguém
+        // mais consome o pipe. Se o sidecar algum dia escrever >64 KB em stdout,
+        // o pipe encheria e o Python bloquearia no write. `resume()` descarta
+        // as escritas futuras e mantém o filho livre para prosseguir.
+        sidecar?.stdout?.resume()
         resolve()
       } catch (err) {
         reject(err)
@@ -207,9 +212,41 @@ function configurarAutoUpdate(): void {
   void autoUpdater.checkForUpdatesAndNotify()
 }
 
-function encerrarSidecar(): void {
-  if (sidecar && !sidecar.killed) sidecar.kill()
+// Prazo do encerramento gracioso do sidecar antes do kill duro. Curto de
+// propósito: o quit do app nunca pode ficar preso esperando o filho.
+const PRAZO_ENCERRAR_SIDECAR_MS = 3_000
+
+let sidecarEncerrado = false
+
+/**
+ * Encerramento GRACIOSO do sidecar (C-11), com prazo e kill como último recurso.
+ *
+ * No Windows não existe SIGTERM: um `sidecar.kill()` seco é TerminateProcess e
+ * o lifespan do FastAPI nunca roda — o SQLCipher não fecha e o `llama-server`
+ * neto fica órfão (coberto na raiz pelo Job Object do sidecar, C-02; aqui
+ * garantimos também o caminho limpo). Por isso pedimos `POST /encerrar` (o
+ * sidecar sai do loop do uvicorn e roda o shutdown) e AGUARDAMOS o `exit` até
+ * `PRAZO_ENCERRAR_SIDECAR_MS`. Se estourar, `kill()`. Idempotente e nunca
+ * lança — é chamado no caminho de quit.
+ */
+async function encerrarSidecar(): Promise<void> {
+  const proc = sidecar
   sidecar = null
+  if (!proc || proc.killed || proc.exitCode !== null) return
+
+  const saiu = new Promise<void>((resolve) => proc.once('exit', () => resolve()))
+  // O POST é disparado SEM await: só o `exit` (ou o prazo) decide a espera.
+  // Aguardá-lo aqui reintroduziria o travamento que o prazo existe para
+  // impedir — um sidecar deadlockado aceita a conexão e nunca responde,
+  // prendendo o quit no timeout de 15 min do undici.
+  chamarSidecar('/encerrar', {}).catch(() => {
+    // O sidecar pode já ter caído/cortado a conexão — o prazo/kill resolve.
+  })
+  const prazo = new Promise<void>((resolve) =>
+    setTimeout(resolve, PRAZO_ENCERRAR_SIDECAR_MS),
+  )
+  await Promise.race([saiu, prazo])
+  if (!proc.killed && proc.exitCode === null) proc.kill() // último recurso
 }
 
 void app.whenReady().then(async () => {
@@ -268,8 +305,19 @@ void app.whenReady().then(async () => {
   })
 })
 
+// Fechar todas as janelas pede o quit (fora do macOS, onde o app segue vivo);
+// o encerramento do sidecar acontece uma única vez no `before-quit`.
 app.on('window-all-closed', () => {
-  encerrarSidecar()
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') void app.quit()
 })
-app.on('before-quit', encerrarSidecar)
+
+// Encerramento gracioso com trava contra reentrância: `before-quit` dispara,
+// seguramos o quit (`preventDefault`), aguardamos o sidecar encerrar e então
+// chamamos `app.quit()` de novo — na 2ª passada a trava deixa o quit seguir.
+// O prazo dentro de `encerrarSidecar` garante que isto nunca prende o app.
+app.on('before-quit', (evento) => {
+  if (sidecarEncerrado) return
+  evento.preventDefault()
+  sidecarEncerrado = true
+  void encerrarSidecar().finally(() => app.quit())
+})

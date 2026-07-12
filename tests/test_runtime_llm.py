@@ -11,6 +11,7 @@ para não dormir. O teste com `llama-server` de verdade é opt-in
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import time
 
@@ -254,6 +255,76 @@ def test_health_timeout_encerra_e_degrada(binario_e_modelo):
         runtime.base_url()
     # Falha limpa: o processo não fica pendurado.
     assert not runtime.ativo()
+
+
+# ------------------------------------- kill forçado no shutdown (C-18)
+class _PopenQueIgnoraTerminate:
+    """Fake de `Popen` que NÃO morre no `terminate()` — força o ramo
+    `TimeoutExpired → kill()` de `_encerrar_processo_sem_lock` (descoberto por
+    teste antes desta task, C-18). Cross-platform: no Windows `terminate()` real
+    é TerminateProcess (mata na hora) e não exercitaria este caminho."""
+
+    def __init__(self) -> None:
+        self.terminado = False
+        self.morto = False
+
+    def poll(self) -> int | None:
+        return 0 if self.morto else None
+
+    def terminate(self) -> None:
+        self.terminado = True  # de propósito: ignora o pedido gentil
+
+    def kill(self) -> None:
+        self.morto = True
+
+    def wait(self, timeout: float | None = None) -> int:
+        if not self.morto:
+            raise subprocess.TimeoutExpired(cmd="fake", timeout=timeout)
+        return 0
+
+
+def test_encerrar_forca_kill_quando_terminate_nao_encerra(binario_e_modelo):
+    """terminate() não encerra ⇒ estoura o prazo ⇒ kill() (C-18: cobre
+    `runtime_llm.py` :344-347, onde nascia o órfão sem rede de teste)."""
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(ConfigRuntime(binario=binario, modelo=modelo))
+    fake = _PopenQueIgnoraTerminate()
+    runtime._proc = fake  # type: ignore[assignment]
+    runtime._porta = 5000
+    runtime.encerrar(prazo_s=0.01)
+    assert fake.terminado and fake.morto  # tentou gentil, depois matou
+    assert runtime._proc is None and not runtime.ativo()
+
+
+# --------------------------------- ancoragem ao Job Object no start (C-02)
+def test_start_ancora_processo_ao_job(binario_e_modelo, script_servidor):
+    """Ao subir o `llama-server`, o runtime o anexa à âncora (Job Object no
+    Windows). Verifica a integração em qualquer SO com uma âncora-espiã; a
+    eficácia real do KILL_ON_JOB_CLOSE é testada em `test_job_windows.py`."""
+    binario, modelo = binario_e_modelo
+
+    class AncoraEspia:
+        def __init__(self) -> None:
+            self.anexados: list[object] = []
+
+        def anexar(self, proc: object) -> bool:
+            self.anexados.append(proc)
+            return True
+
+        def fechar(self) -> None:
+            pass
+
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0),
+        montar_comando=_comando_fake(script_servidor),
+    )
+    espia = AncoraEspia()
+    runtime._ancora = espia  # type: ignore[assignment]
+    try:
+        runtime.base_url()
+        assert espia.anexados == [runtime._proc]  # anexou o processo que subiu
+    finally:
+        runtime.encerrar()
 
 
 # ---------------------------------------------- integração com a fábrica

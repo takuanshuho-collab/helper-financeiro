@@ -87,6 +87,48 @@ def test_diagnostico_token_invalido_401():
     assert resposta.status_code == 401
 
 
+# --- Encerramento gracioso (C-11) --------------------------------------------
+# O Electron pede `POST /encerrar` antes do kill duro para o lifespan rodar
+# (fecha SQLCipher, derruba o llama-server). O launcher injeta o `uvicorn.Server`
+# em `app.state.servidor`; aqui usamos um duplo com `should_exit`.
+class _ServidorFalso:
+    def __init__(self) -> None:
+        self.should_exit = False
+
+
+def test_encerrar_sem_token_401():
+    """Encerramento exige o token do processo (REQ-SEC-004): sem ele, 401 —
+    nada de derrubar o serviço a partir de um request sem credencial."""
+    resposta = cliente.post("/encerrar")
+    assert resposta.status_code == 401
+
+
+def test_encerrar_sinaliza_shutdown_do_servidor():
+    """Com token, o endpoint seta `should_exit` no servidor injetado — é o que
+    tira o uvicorn do loop e dispara o shutdown do lifespan."""
+    servidor = _ServidorFalso()
+    app.state.servidor = servidor
+    try:
+        resposta = cliente.post("/encerrar", headers=CABECALHO)
+        assert resposta.status_code == 200
+        assert resposta.json() == {"ok": True}
+        assert servidor.should_exit is True
+    finally:
+        del app.state.servidor
+
+
+def test_encerrar_sem_servidor_injetado_nao_quebra():
+    """Sob TestClient não há `app.state.servidor` (nem loop uvicorn para
+    encerrar): o endpoint apenas responde `ok`, sem AttributeError."""
+    try:
+        del app.state.servidor
+    except (AttributeError, KeyError):
+        pass
+    resposta = cliente.post("/encerrar", headers=CABECALHO)
+    assert resposta.status_code == 200
+    assert resposta.json() == {"ok": True}
+
+
 # --- Validação de entrada (REQ-NF-005) ---------------------------------------
 
 
