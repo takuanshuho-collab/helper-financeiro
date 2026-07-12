@@ -99,17 +99,21 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   (`core.extrato.ler_extrato_ocr` → mesmos grupos/revisão/aplicação do CSV) —
   REQ-F-024/025/026. O instalador cresce p/ ~330 MB (modelos OCR). Sem migração
   de schema.
-- **Ciclo v2.8 ABERTO (ADR-0016, M16+M17):** o app vira um **cofre** — login
-  local com senha mestra + **TOTP** e códigos de recuperação (sem backdoor),
-  banco **SQLCipher** com envelope DEK/KEK (**Argon2id**), sessão
-  bloqueada/desbloqueada no sidecar (`423 Locked`), anti-brute-force e
-  auto-lock (REQ-SEC-005/006/007) — e a **LLM local deixa de exigir
-  Ollama/LM Studio**: `llama-server` (llama.cpp) embarcado e gerido pelo
-  sidecar em loopback, modelo GGUF instalado pelo próprio app (catálogo com
-  SHA-256 travado, download opt-in — única exceção de rede, REQ-NF-007 — ou
-  `.gguf` local) — REQ-F-027/028.
-- **Mudanças nos artefatos congelados (v2.7.0) exigem nova ADR + incremento de
-  versão + nova ata** — esta ADR-0016 é a autorização do ciclo v2.8.
+- **Ciclo v2.8 FECHADO (`FREEZE.md` v2.8.0, ADR-0016, M16+M17):** o app virou
+  um **cofre** — login local com senha mestra + **TOTP** e códigos de
+  recuperação (sem backdoor), banco **SQLCipher** com envelope DEK/KEK
+  (**Argon2id**), sessão bloqueada/desbloqueada no sidecar (`423 Locked`),
+  anti-brute-force e auto-lock, onboarding forçado na GUI
+  (REQ-SEC-005/006/007) — e a **LLM local deixou de exigir Ollama/LM Studio**:
+  `llama-server` (llama.cpp, build Vulkan com fallback de CPU) **embarcado**
+  no pacote e gerido pelo sidecar em loopback, modelo GGUF instalado pelo
+  próprio app na tela "Configuração da IA" (catálogo com SHA-256 travado,
+  download opt-in — única exceção de rede, REQ-NF-007 — ou `.gguf` local) —
+  REQ-F-027/028. `HF_BASE_URL` definido preserva o servidor do usuário
+  (ADR-0002). Sem migração de schema relacional (o banco inteiro passou a ser
+  cifrado; migração atômica no cadastro do cofre).
+- **Mudanças nos artefatos congelados (v2.8.0) exigem nova ADR + incremento de
+  versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar
 ```bash

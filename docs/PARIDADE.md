@@ -88,6 +88,8 @@ Legenda: ✅ paridade plena · ✨ web supera o tkinter · Δ mudou de lugar (se
 | Histórico no export `.xlsx` (aba "Evolução mensal", totais =SUM + gráfico nativo) (v2.6) | `outputs/planilha.py` | ✨ | `test_planilha_com_historico_ganha_aba_evolucao` + `test_exportar_planilha_inclui_historico_arquivado` |
 | Contrato escaneado/imagem lido por OCR local (PP-OCRv6 medium, 100% na máquina) (v2.7, ADR-0015) | Contrato (aceita PDF e imagem) | ✨ | E2E "contrato: aceita imagem" + `tests/test_ocr.py` + smoke do pacote (T-1404) |
 | Comprovante/extrato escaneado → importação (OCR local → mesmos grupos/revisão do CSV) (v2.7, ADR-0015) | Planilha, seção "Importar extrato (CSV ou imagem)" | ✨ | E2E "importação por OCR" + `tests/test_extrato.py::test_ler_extrato_ocr_*` + `test_importar_ocr_*` |
+| Cofre: onboarding forçado (senha → QR TOTP → códigos de recuperação → 1º login), desbloqueio com 401 genérico + contador 429, recuperação por código de uso único, overlay de auto-lock (v2.8, ADR-0016) | `Onboarding.tsx` / `Desbloqueio.tsx` / gate no `App.tsx` | ✨ | E2E "cofre" (`cofre.spec.ts`) + `tests/test_auth.py` + `tests/test_sessao.py` |
+| Configuração da IA: catálogo curado com download verificado (progresso/cancelar/retomada), apontar `.gguf` local, status do runtime embarcado (v2.8, ADR-0016) | 7ª aba (`ConfiguracaoIa.tsx`) | ✨ | E2E "configuração da IA" + `tests/test_gestor_modelos.py` + `tests/test_sidecar_llm.py` |
 
 ## Limitações conhecidas do E2E
 

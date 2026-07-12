@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.8.0 (ciclo aberto — ADR-0016) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.8.0 (ciclo FECHADO — ADR-0016, ata `FREEZE.md` v2.8.0) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -262,7 +262,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-1701 | `sidecar/runtime_llm.py`: gerência do processo `llama-server` (start sob demanda, loopback + porta efêmera, health, shutdown), `OpenAICompatProvider` apontando p/ ele como padrão de fábrica; sem modelo ⇒ degrada com motivo (P8); testes | REQ-F-027, REQ-NF-007 | — | ✅ |
 | T-1702 | Gestor de modelos: catálogo curado (URL + SHA-256 travados no código, licença comercial ok), download com progresso/retomada + verificação de hash obrigatória, opção de apontar `.gguf` local; tela de configuração da IA + E2E | REQ-F-028, REQ-NF-007 | T-1701 | ✅ |
 | T-1703 | Empacotamento: `llama-server` (CPU + Vulkan) como *extraResource* + sqlcipher3 no `SidecarHF.spec`; smoke do pacote que abre cofre E gera análise com o runtime embarcado | Processo | T-1602/1701 | ✅ |
-| T-1704 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.8.0 e docs sincronizados | Processo | todos | ⬜ |
+| T-1704 | Fechamento do ciclo: gates, binários, ata `FREEZE.md` v2.8.0 e docs sincronizados | Processo | todos | ✅ |
 
 ---
 
@@ -272,7 +272,13 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.8 ABERTO (ADR-0016, M16+M17)** — o app vira um **cofre** e a LLM
+**CICLO v2.8 FECHADO E CONGELADO (ata `FREEZE.md` v2.8.0)** — qualquer mudança
+nos artefatos congelados exige **nova ADR + incremento de versão + nova ata**;
+o próximo ciclo começa por uma ADR.
+
+### Histórico do ciclo v2.8 (fechado)
+
+**Ciclo v2.8 (ADR-0016, M16+M17)** — o app vira um **cofre** e a LLM
 deixa de exigir ferramenta de terceiros. Decisões do mantenedor (2026-07-10):
 runtime **llama.cpp embarcado** (`llama-server` gerido pelo sidecar), modelo
 por **download gerenciado no 1º uso** (catálogo com SHA-256 travado; `.gguf`
@@ -383,12 +389,25 @@ testes ajustados por consequência do binário materializado no checkout
 (`configuracao-ia.spec.ts` força BINARIO_AUSENTE via `HF_LLAMA_SERVER`
 inexistente; `test_resolver_binario_ausente_sem_pacote` com monkeypatch de
 `_base_pacote`) — determinísticos, sem enfraquecer. Suíte 425 passed / 95,8%;
-E2E dev 18 passed; E2E pacote 4 passed. Próxima: **T-1704** (fechamento + ata
-v2.8.0): rodar `preparar_llama.py` E `preparar_ocr.py` ANTES do
-PyInstaller/electron-builder; alvo NSIS (`npm run dist`) ainda não buildado
-(só `dist:dir`); bump da tag do llama.cpp exige recomputar os 2 SHA-256 de
-`ASSETS`; TASKS.md finalizado antes de hashear; mencionar na ata que modelos
-com menos de 1B degradam no schema (o catálogo 1.5B–3.8B satisfaz).
+E2E dev 18 passed; E2E pacote 4 passed. **T-1704 ✅ — CICLO FECHADO**: build
+oficial completo (`preparar_llama.py` + `preparar_ocr.py` → PyInstaller →
+electron-builder **NSIS**): `Helper Financeiro Setup 2.8.0.exe` (350,0 MB) +
+`sidecar-hf.exe` (37,8 MB), hashes na ata. Incidente do build registrado: o
+1º `npm run dist` falhou com `EBUSY` em `release\win-unpacked` — **dois
+`llama-server.exe` órfãos** do smoke do T-1703 seguravam o diretório (kill
+duro no sidecar vaza o filho; o `encerrar_runtime()` só roda no shutdown
+limpo) — risco residual documentado na ata; encerrados os processos, o build
+passou. Gates finais (rodados de novo após o build): ruff/mypy ok, suíte
+**425 passed / 2 skipped opt-in / cobertura 95,8%**, E2E dev **18 passed**,
+E2E contra o pacote NSIS novo **4 passed**. Docs sincronizados:
+INDEX (ciclo fechado), README (cofre/LLM embarcada/privacidade),
+HARNESS §7 (REQ-SEC-005/006/007, REQ-F-027/028, REQ-NF-007 → testes),
+PARIDADE §7 (cofre + Configuração da IA). Ata `FREEZE.md` v2.8.0 com SHA-256
+de todos os artefatos (TASKS.md finalizado ANTES de hashear; INDEX/FREEZE não
+se auto-hasheiam). Lembretes p/ o próximo ciclo: bump da tag do llama.cpp
+exige recomputar os 2 SHA-256 de `ASSETS`; modelos com menos de 1B degradam
+no schema (o catálogo 1.5B–3.8B satisfaz); `docs/PaddleOCR-VL*.md` são
+material de estudo NÃO versionado (avaliação fase 0 pendente).
 
 ### Histórico do ciclo v2.7 (fechado)
 

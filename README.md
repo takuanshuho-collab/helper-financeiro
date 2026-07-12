@@ -18,7 +18,13 @@ evolução** por categoria e leve o histórico para o `.xlsx` (aba "Evolução
 mensal"). O ciclo v2.7 (ADR-0015) trouxe o **OCR local**: contrato, comprovante
 ou extrato **escaneado** (foto/PDF sem texto) é lido por OCR **na sua máquina**
 (RapidOCR + PP-OCRv6 medium, modelos embarcados — sem rede) e alimenta a mesma
-extração do Contrato e a mesma importação do CSV.
+extração do Contrato e a mesma importação do CSV. O ciclo v2.8 (ADR-0016)
+transformou o app num **cofre**: senha mestra + **TOTP** com códigos de
+recuperação (sem backdoor), banco local cifrado com **SQLCipher** e auto-lock —
+e a **IA local deixou de exigir programa de terceiros**: o `llama-server`
+(llama.cpp) vem embarcado e o próprio app baixa o modelo (catálogo verificado
+por SHA-256) ou aceita um `.gguf` seu; quem já usa Ollama/LM Studio continua
+podendo apontar para ele (`HF_BASE_URL`).
 
 ---
 
@@ -138,10 +144,13 @@ adicione o pacote em falta com outro `--collect-all`.
 ## 🔒 Privacidade
 
 Tudo roda **localmente**: os dados financeiros, os PDFs e os extratos CSV não
-saem da sua máquina.
-Nenhuma informação é enviada pela internet. O estado do app (perfil, dívidas e
-rubricas — v2.4) fica num banco SQLite local em
-`%APPDATA%\HelperFinanceiro\dados.db`, no seu perfil de usuário.
+saem da sua máquina. O estado do app (perfil, dívidas e rubricas) fica num
+banco local em `%APPDATA%\HelperFinanceiro\dados.db` — desde o v2.8
+**cifrado com SQLCipher**, protegido por senha mestra + TOTP (cofre sem
+backdoor: perdeu a senha E os códigos de recuperação, os dados são
+irrecuperáveis por design). A única exceção de rede é **opt-in**: o download
+do modelo de IA no 1º uso (catálogo com SHA-256 verificado, REQ-NF-007);
+análises, OCR e extração nunca tocam a internet.
 
 ---
 
@@ -191,9 +200,13 @@ uv run pre-commit install    # instala os hooks de commit (uma vez)
 
 ### Usando o CONSELHEIRO com um LLM de verdade (M2)
 
-O provider é **agnóstico** (ADR-0002/0005): por padrão aponta para **Ollama
-local** (LGPD / offline); um endpoint OpenAI-compatible na nuvem entra por
-variável de ambiente e **só recebe dados anonimizados** (H2).
+Desde o v2.8 (ADR-0016) **nenhum programa de terceiros é necessário**: o
+`llama-server` (llama.cpp) viaja embarcado no pacote e o modelo GGUF é
+instalado pelo próprio app (tela "Configuração da IA"). O provider continua
+**agnóstico** (ADR-0002/0005): defina `HF_BASE_URL` para usar o seu
+Ollama/LM Studio (a env definida tem precedência sobre o runtime embarcado);
+um endpoint OpenAI-compatible na nuvem entra por variável de ambiente e **só
+recebe dados anonimizados** (H2).
 
 ```bash
 # 1. instalar o Ollama (https://ollama.com) e baixar os modelos
