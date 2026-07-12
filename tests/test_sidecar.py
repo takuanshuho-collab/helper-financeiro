@@ -97,6 +97,58 @@ def test_payload_invalido_422():
     assert resposta.status_code == 422
 
 
+def test_payload_invalido_detail_e_string_422():
+    """C-07 (alto), independente de C-01: QUALQUER 422 de validação
+    automática do Pydantic — mesmo o de campo obrigatório ausente, que já
+    existia antes deste ciclo — precisa devolver `detail` como STRING. O
+    handler padrão do FastAPI (não sobrescrito) devolve uma LISTA de
+    `{loc, msg}`; sem o `exception_handler(RequestValidationError)`, o
+    `client.ts` (que tipa `detail: string`) recebia a lista crua."""
+    payload = {"dividas": [{"saldo_devedor": 100.0}]}  # sem credor/tipo
+    resposta = cliente.post("/diagnostico", json=payload, headers=CABECALHO)
+    assert resposta.status_code == 422
+    detail = resposta.json()["detail"]
+    assert isinstance(detail, str)
+
+
+def test_valor_negativo_barrado_422():
+    """C-01 (crítico): saldo_devedor negativo é barrado na fronteira, ANTES
+    do core rodar — antes da correção (`Field(ge=0)`), este payload voltava
+    200 com um número financeiro incorreto, e pior:
+    `Divida.juros_restantes = max(custo_total_restante - saldo_devedor, 0.0)`
+    MASCARAVA o erro como 0.0 em vez de sinalizá-lo (viola H1)."""
+    payload = {"dividas": [
+        {"credor": "Banco X", "tipo": "Empréstimo",
+         "saldo_devedor": -100.0, "taxa_mensal": 0.02, "parcela": 50.0,
+         "parcelas_restantes": 10},
+    ]}
+    resposta = cliente.post("/diagnostico", json=payload, headers=CABECALHO)
+    assert resposta.status_code == 422
+    # Nenhum ranking/`juros_restantes` chega a ser calculado: a entrada nunca
+    # alcança o core (a barreira é o próprio Pydantic, não uma regra de
+    # negócio) — o corpo do 422 não tem nenhum resquício do resumo.
+    corpo = resposta.json()
+    assert "ranking" not in corpo
+    assert "divida_mais_cara" not in corpo
+
+
+def test_valor_negativo_detail_e_string_422():
+    """C-07 (alto): o `detail` de um 422 de validação automática do Pydantic
+    é STRING legível, não a lista bruta `[{"loc":...,"msg":...}]` — sem o
+    `exception_handler(RequestValidationError)`, o `client.ts` (que tipa
+    `detail: string`) recebia a lista crua e o `Error()` a coagia para
+    "[object Object]" na tela. Acoplado a C-01: o `Field(ge=0)` multiplica a
+    frequência desse 422."""
+    payload = {"dividas": [
+        {"credor": "Banco X", "tipo": "Empréstimo", "saldo_devedor": -100.0},
+    ]}
+    resposta = cliente.post("/diagnostico", json=payload, headers=CABECALHO)
+    assert resposta.status_code == 422
+    detail = resposta.json()["detail"]
+    assert isinstance(detail, str)
+    assert "saldo_devedor" in detail
+
+
 # --- Roundtrip determinístico (REQ-NF-005) -----------------------------------
 
 
@@ -800,7 +852,7 @@ def test_rubrica_criar_aplica_roll_up_no_perfil(repo_tmp):
                  headers=CABECALHO)
 
     dados = _criar_rubrica("Conta de luz", 180.0)
-    assert dados["rubrica"]["id"] is not None
+    assert dados["rubricas"][0]["id"] is not None
     # Campo detalhado passa a valer a SOMA das rubricas, não o valor digitado.
     assert dados["perfil"]["fixas"]["contas_casa"] == 180.0
 
@@ -814,18 +866,18 @@ def test_rubrica_criar_aplica_roll_up_no_perfil(repo_tmp):
 
 
 def test_rubrica_editar_recalcula(repo_tmp):
-    rid = _criar_rubrica("Luz", 180.0)["rubrica"]["id"]
+    rid = _criar_rubrica("Luz", 180.0)["rubricas"][0]["id"]
     resposta = cliente.post(f"/rubricas/{rid}",
                             json={"nome": "Luz + taxa", "valor": 200.0},
                             headers=CABECALHO)
     assert resposta.status_code == 200
     dados = resposta.json()
-    assert dados["rubrica"]["nome"] == "Luz + taxa"
+    assert dados["rubricas"][0]["nome"] == "Luz + taxa"
     assert dados["perfil"]["fixas"]["contas_casa"] == 200.0
 
 
 def test_rubrica_remover_mantem_a_ultima_soma(repo_tmp):
-    rid = _criar_rubrica("Luz", 180.0)["rubrica"]["id"]
+    rid = _criar_rubrica("Luz", 180.0)["rubricas"][0]["id"]
     resposta = cliente.post(f"/rubricas/{rid}/remover", headers=CABECALHO)
     assert resposta.status_code == 200
     dados = resposta.json()
@@ -833,6 +885,25 @@ def test_rubrica_remover_mantem_a_ultima_soma(repo_tmp):
     # Sem rubricas o campo volta a ser editável, mas conserva a última soma —
     # remover o detalhamento não zera o orçamento (ADR-0012).
     assert dados["perfil"]["fixas"]["contas_casa"] == 180.0
+
+
+def test_rubrica_mutacoes_devolvem_so_o_contrato(repo_tmp):
+    """C-32 (baixo): as três rotas de mutação devolvem EXATAMENTE
+    `{rubricas, perfil}` — sem as chaves `rubrica`/`ok`, que nenhuma tela
+    consome (`RubricaMutOut` em `contract.ts` só modela essas duas). Antes da
+    correção, `rubrica_criar`/`rubrica_editar` incluíam `rubrica` e
+    `rubrica_remover` incluía `ok`."""
+    criado = _criar_rubrica("Água", 90.0)
+    assert set(criado.keys()) == {"rubricas", "perfil"}
+
+    rid = criado["rubricas"][0]["id"]
+    editado = cliente.post(f"/rubricas/{rid}",
+                           json={"nome": "Água + esgoto", "valor": 95.0},
+                           headers=CABECALHO).json()
+    assert set(editado.keys()) == {"rubricas", "perfil"}
+
+    removido = cliente.post(f"/rubricas/{rid}/remover", headers=CABECALHO).json()
+    assert set(removido.keys()) == {"rubricas", "perfil"}
 
 
 def test_rubrica_ancoragem_invalida_422(repo_tmp):

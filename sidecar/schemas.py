@@ -15,38 +15,38 @@ from pydantic import BaseModel, Field
 class DividaIn(BaseModel):
     credor: str
     tipo: str
-    saldo_devedor: float = 0.0
-    taxa_mensal: float = 0.0
-    parcela: float = 0.0
-    parcelas_restantes: int = 0
+    saldo_devedor: float = Field(default=0.0, ge=0)
+    taxa_mensal: float = Field(default=0.0, ge=0)
+    parcela: float = Field(default=0.0, ge=0)
+    parcelas_restantes: int = Field(default=0, ge=0)
     garantia: str = ""
     em_atraso: bool = False
-    dias_atraso: int = 0
-    cet_anual: float | None = None
+    dias_atraso: int = Field(default=0, ge=0)
+    cet_anual: float | None = Field(default=None, ge=0)
 
 
 class RendaIn(BaseModel):
-    salario_liquido: float = 0.0
-    renda_extra: float = 0.0
-    outras_rendas: float = 0.0
+    salario_liquido: float = Field(default=0.0, ge=0)
+    renda_extra: float = Field(default=0.0, ge=0)
+    outras_rendas: float = Field(default=0.0, ge=0)
 
 
 class FixasIn(BaseModel):
-    moradia: float = 0.0
-    contas_casa: float = 0.0
-    transporte: float = 0.0
-    saude: float = 0.0
-    educacao: float = 0.0
-    assinaturas: float = 0.0
-    outras_fixas: float = 0.0
+    moradia: float = Field(default=0.0, ge=0)
+    contas_casa: float = Field(default=0.0, ge=0)
+    transporte: float = Field(default=0.0, ge=0)
+    saude: float = Field(default=0.0, ge=0)
+    educacao: float = Field(default=0.0, ge=0)
+    assinaturas: float = Field(default=0.0, ge=0)
+    outras_fixas: float = Field(default=0.0, ge=0)
 
 
 class VariaveisIn(BaseModel):
-    mercado: float = 0.0
-    lazer: float = 0.0
-    vestuario: float = 0.0
-    imprevistos: float = 0.0
-    outras_variaveis: float = 0.0
+    mercado: float = Field(default=0.0, ge=0)
+    lazer: float = Field(default=0.0, ge=0)
+    vestuario: float = Field(default=0.0, ge=0)
+    imprevistos: float = Field(default=0.0, ge=0)
+    outras_variaveis: float = Field(default=0.0, ge=0)
 
 
 class PerfilIn(BaseModel):
@@ -55,8 +55,8 @@ class PerfilIn(BaseModel):
     renda: RendaIn = Field(default_factory=RendaIn)
     fixas: FixasIn = Field(default_factory=FixasIn)
     variaveis: VariaveisIn = Field(default_factory=VariaveisIn)
-    reserva_emergencia: float = 0.0
-    saldo_fgts: float = 0.0
+    reserva_emergencia: float = Field(default=0.0, ge=0)
+    saldo_fgts: float = Field(default=0.0, ge=0)
     dividas: list[DividaIn] = Field(default_factory=list)
 
 
@@ -70,16 +70,16 @@ class RubricaIn(BaseModel):
     categoria: str   # 'renda' | 'fixas' | 'variaveis'
     campo_pai: str   # ex.: 'contas_casa'
     nome: str
-    valor: float = 0.0
-    ordem: int = 0
+    valor: float = Field(default=0.0, ge=0)
+    ordem: int = Field(default=0, ge=0)
 
 
 class RubricaEditIn(BaseModel):
     """Edição de rubrica: nome/valor (e ordem, opcional). Ancoragem não muda."""
 
     nome: str
-    valor: float = 0.0
-    ordem: int | None = None
+    valor: float = Field(default=0.0, ge=0)
+    ordem: int | None = Field(default=None, ge=0)
 
 
 class ArquivarMesIn(BaseModel):
@@ -125,7 +125,7 @@ class ItemImportacaoIn(BaseModel):
     categoria: str   # 'renda' | 'fixas' | 'variaveis'
     campo_pai: str   # ex.: 'mercado'
     nome: str
-    valor: float = 0.0
+    valor: float = Field(default=0.0, ge=0)
 
 
 class AplicarImportacaoIn(BaseModel):
@@ -139,7 +139,7 @@ class EstrategiasIn(BaseModel):
     """Perfil + pagamento extra mensal para simular a quitação."""
 
     perfil: PerfilIn
-    extra: float = 0.0
+    extra: float = Field(default=0.0, ge=0)
 
 
 class AnaliseIn(BaseModel):
@@ -150,15 +150,15 @@ class AnaliseIn(BaseModel):
     """
 
     perfil: PerfilIn
-    extra: float = 0.0
-    taxa_alvo: float = 0.018
+    extra: float = Field(default=0.0, ge=0)
+    taxa_alvo: float = Field(default=0.018, ge=0)
 
 
 class AnaliseIaIn(BaseModel):
     """Disparo do job assíncrono da análise sênior (IA, sob guardrails)."""
 
     perfil: PerfilIn
-    extra: float = 0.0
+    extra: float = Field(default=0.0, ge=0)
 
 
 class ExportarPlanilhaIn(BaseModel):
@@ -166,8 +166,8 @@ class ExportarPlanilhaIn(BaseModel):
 
     perfil: PerfilIn
     caminho: str
-    extra: float = 0.0
-    taxa_alvo: float = 0.018
+    extra: float = Field(default=0.0, ge=0)
+    taxa_alvo: float = Field(default=0.018, ge=0)
 
 
 class ExportarRelatorioIn(ExportarPlanilhaIn):
@@ -187,9 +187,9 @@ class CartaIn(BaseModel):
 
     divida: DividaIn
     tipo: str = "quitacao"  # "quitacao" | "portabilidade" | "reducao"
-    valor_proposto: float | None = None
+    valor_proposto: float | None = Field(default=None, ge=0)
     banco_concorrente: str = ""
-    taxa_concorrente_mensal: float | None = None
+    taxa_concorrente_mensal: float | None = Field(default=None, ge=0)
     nome_usuario: str = ""
     cpf: str = ""
     contrato: str = ""

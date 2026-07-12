@@ -23,6 +23,7 @@ from uuid import uuid4
 
 import qrcode
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from qrcode.image.pure import PyPNGImage
 
@@ -225,6 +226,28 @@ def _tratar_aguarde_cofre(_request: object, exc: AguardeCofre) -> JSONResponse:
         content={"detail": str(exc), "aguarde_s": exc.segundos},
         headers={"Retry-After": str(math.ceil(exc.segundos))},
     )
+
+
+@app.exception_handler(RequestValidationError)
+def _tratar_validacao(_request: object, exc: RequestValidationError) -> JSONResponse:
+    """Normaliza o `detail` da validação automática do Pydantic (C-01/C-07).
+
+    O handler padrão do FastAPI devolve `detail` como LISTA de objetos
+    `{loc, msg, ...}`; o contrato da fronteira (`ErroSidecar.detail` em
+    `client.ts`) é `string` — sem este handler, `String(list)` vira o
+    ilegível `"[object Object]"` na tela assim que um campo monetário nasce
+    com `Field(ge=0)`. Junta `loc` (nome do campo, em pt-BR quando possível)
+    + `msg` (mensagem do Pydantic, mantida como vem — traduzir robustamente
+    seria frágil) numa única frase por erro."""
+    mensagens = []
+    for erro in exc.errors():
+        # `loc` inclui "body" como primeiro elemento; descartado por não
+        # ajudar o usuário a identificar o campo.
+        caminho = ".".join(str(parte) for parte in erro["loc"] if parte != "body")
+        msg = erro.get("msg", "valor inválido")
+        mensagens.append(f"campo '{caminho}': {msg}" if caminho else msg)
+    detail = "; ".join(mensagens) or "dados inválidos"
+    return JSONResponse(status_code=422, content={"detail": detail})
 
 
 @app.get("/auth/status", dependencies=[Depends(exigir_token)])
@@ -507,10 +530,9 @@ def rubrica_criar(entrada: RubricaIn,
         validar_rubrica(entrada.categoria, entrada.campo_pai, entrada.nome)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    rubrica = repo.criar_rubrica(entrada.categoria, entrada.campo_pai,
-                                 entrada.nome.strip(), entrada.valor,
-                                 entrada.ordem)
-    return {"rubrica": rubrica, "rubricas": repo.listar_rubricas(),
+    repo.criar_rubrica(entrada.categoria, entrada.campo_pai,
+                       entrada.nome.strip(), entrada.valor, entrada.ordem)
+    return {"rubricas": repo.listar_rubricas(),
             "perfil": _perfil_apos_mutacao(repo)}
 
 
@@ -525,7 +547,7 @@ def rubrica_editar(rubrica_id: int, entrada: RubricaEditIn,
                                      entrada.valor, entrada.ordem)
     if rubrica is None:
         raise HTTPException(status_code=404, detail="Rubrica desconhecida.")
-    return {"rubrica": rubrica, "rubricas": repo.listar_rubricas(),
+    return {"rubricas": repo.listar_rubricas(),
             "perfil": _perfil_apos_mutacao(repo)}
 
 
@@ -536,7 +558,7 @@ def rubrica_remover(rubrica_id: int,
     editável quando perde a última rubrica (decisão do ADR-0012)."""
     if not repo.remover_rubrica(rubrica_id):
         raise HTTPException(status_code=404, detail="Rubrica desconhecida.")
-    return {"ok": True, "rubricas": repo.listar_rubricas(),
+    return {"rubricas": repo.listar_rubricas(),
             "perfil": _perfil_apos_mutacao(repo)}
 
 

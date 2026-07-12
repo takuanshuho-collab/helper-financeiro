@@ -38,7 +38,7 @@ export default function CampoMoeda({
           }}
           onChange={(ev) => {
             setRascunho(ev.target.value)
-            onValor(parseBR(ev.target.value))
+            onValor(Math.max(0, parseBR(ev.target.value)))
           }}
           onBlur={() => setFoco(false)}
         />
