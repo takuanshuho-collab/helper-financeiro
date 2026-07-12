@@ -88,9 +88,14 @@ markers = [
 
 # ---------------------------------------------------------------- coverage
 [tool.coverage.run]
-source = ["core", "agent", "guardrails", "outputs", "contracts"]
-# gui/ fica fora da medição até existir AppController testável (Fase 3, F-08)
-omit = ["*/__init__.py"]
+source = ["core", "agent", "guardrails", "outputs", "contracts", "sidecar"]
+# gui/ fica fora da medição até existir AppController testável (Fase 3, F-08).
+# sidecar/__main__.py também fica fora (C-05): é o launcher de processo real
+# (porta efêmera + `uvicorn.Server.run()` bloqueante) — testá-lo de verdade
+# exigiria subir um processo/servidor real, não um teste de fumaça isolado. O
+# restante do pacote sidecar/ (app.py, gestor_modelos.py, runtime_llm.py etc.)
+# já é coberto pelos testes existentes e agora entra na medição.
+omit = ["*/__init__.py", "sidecar/__main__.py"]
 
 [tool.coverage.report]
 show_missing = true

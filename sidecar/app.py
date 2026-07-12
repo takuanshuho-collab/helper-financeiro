@@ -837,6 +837,12 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
         estado: dict[str, object] = {"status": "pronto",
                                      "secao": secao.model_dump(), "erro": ""}
     except Exception as e:  # noqa: BLE001 — o erro vira status consultável no poll
+        # C-34: nunca engolir em silêncio. `perfil` carrega dados financeiros
+        # do usuário (credores, valores) — `str(e)` pode ecoar fragmentos dele
+        # se a exceção vier de validação/serialização, então o log fica só com
+        # o tipo (espelha `_rodar_job_download`, que loga `str(e)` porque ali a
+        # exceção só carrega dados de catálogo de modelo, não PII do perfil).
+        log.warning("Análise IA %s falhou: %s", job_id, type(e).__name__)
         estado = {"status": "erro", "secao": None,
                   "erro": f"{type(e).__name__}: {e}"}
     with _JOBS_IA_LOCK:
@@ -985,19 +991,31 @@ def contexto_ocr() -> Motor | None:
 
 _motor_ocr: Motor | None = None
 _motor_ocr_tentado = False
+_LOCK_MOTOR_OCR = threading.Lock()
 
 
 def _motor_ocr_singleton() -> Motor | None:
     """Singleton preguiçoso do RapidOCR: cria uma vez, reusa entre requisições.
-    Devolve `None` se o motor não puder ser criado (o endpoint degrada, P8)."""
+    Devolve `None` se o motor não puder ser criado (o endpoint degrada, P8).
+
+    Mesmo padrão de `_LOCK_SINGLETON` em `runtime_llm.py` (C-13): a checagem e
+    a construção do motor SEMPRE acontecem dentro do lock. Sem ele, duas
+    requisições concorrentes na primeira chamada poderiam tanto construir
+    DOIS motores RapidOCR quanto (pior) uma delas devolver `None` prematuro —
+    a flag `_motor_ocr_tentado` marcada pela primeira thread antes de
+    terminar de construir faria a segunda pular a construção e ler
+    `_motor_ocr` ainda vazio. Carregar os modelos PP-OCRv6 é raro (uma vez por
+    processo), então pagar o lock em toda chamada é custo desprezível.
+    """
     global _motor_ocr, _motor_ocr_tentado
-    if not _motor_ocr_tentado:
-        _motor_ocr_tentado = True
-        try:
-            _motor_ocr = obter_motor()
-        except OCRIndisponivel as e:
-            log.warning("Motor de OCR indisponível: %s", e)
-            _motor_ocr = None
+    with _LOCK_MOTOR_OCR:
+        if not _motor_ocr_tentado:
+            _motor_ocr_tentado = True
+            try:
+                _motor_ocr = obter_motor()
+            except OCRIndisponivel as e:
+                log.warning("Motor de OCR indisponível: %s", e)
+                _motor_ocr = None
     return _motor_ocr
 
 
@@ -1035,7 +1053,9 @@ def importar_ocr(
     try:
         texto = ocr_documento(dados, entrada.nome, motor=motor).texto
     except Exception as e:  # noqa: BLE001 — documento ilegível ⇒ P8, nunca 500
-        log.warning("Falha no OCR de %r: %s", entrada.nome, e)
+        # C-22: nome do arquivo é PII do usuário — não vai ao log, só a extensão.
+        log.warning("Falha no OCR (arquivo %s): %s: %s",
+                    Path(entrada.nome).suffix, type(e).__name__, e)
         return _degradado(f"OCR_FALHOU:{type(e).__name__}")
 
     resposta = _resposta_importacao(ler_extrato_ocr(texto), cfg, classificador)
@@ -1184,7 +1204,9 @@ def contrato_extrair(
         try:
             texto_plano = ocr_documento(dados, entrada.nome, motor=motor).texto
         except Exception as e:  # noqa: BLE001 — documento ilegível ⇒ P8, nunca 500
-            log.warning("Falha no OCR de %r: %s", entrada.nome, e)
+            # C-22: nome do arquivo é PII do usuário — não vai ao log, só a extensão.
+            log.warning("Falha no OCR (arquivo %s): %s: %s",
+                        Path(entrada.nome).suffix, type(e).__name__, e)
             return {"modo": "vazio", "thread_id": None, "campos": [],
                     "descartados": [], "inconsistencias": [],
                     "motivos": [f"OCR_FALHOU:{type(e).__name__}"],

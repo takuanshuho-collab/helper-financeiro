@@ -6,7 +6,9 @@ token, a validação de entrada e o roundtrip determinístico core <-> JSON,
 incluindo os casos de borda (sem dívidas, reserva sem despesas, ordenação).
 """
 import base64
+import logging
 import os
+import threading
 import time
 
 import pytest
@@ -654,6 +656,32 @@ def test_analise_ia_provider_falho_degrada_sem_500():
         cliente.app.dependency_overrides.clear()
 
 
+def test_analise_ia_falha_inesperada_loga_warning(monkeypatch, caplog):
+    """C-34: uma falha INESPERADA no job de IA (não o P8 de provider, que já
+    degrada dentro de `analisar`) não pode ser engolida em silêncio — antes da
+    correção, `_rodar_job_ia` só gravava o estado de erro, sem log nenhum."""
+    from sidecar import app as app_mod
+
+    def _explode(*_a, **_kw):
+        raise RuntimeError("bug interno inesperado")
+
+    monkeypatch.setattr(app_mod, "analisar", _explode)
+    cfg = ConfigAgente(provider="fake", cache=False)
+    cliente.app.dependency_overrides[contexto_analise] = lambda: (cfg, FakeProvider())
+    try:
+        with caplog.at_level(logging.WARNING, logger="helper_financeiro.sidecar"):
+            resp = cliente.post("/analise/ia", json={"perfil": PERFIL_ANALISE},
+                                headers=CABECALHO)
+            job_id = resp.json()["job_id"]
+            dados = _esperar_job(job_id)
+        assert dados["status"] == "erro"
+        assert "RuntimeError" in dados["erro"]
+        mensagens = [r.getMessage() for r in caplog.records]
+        assert any("Análise IA" in m and job_id in m for m in mensagens)
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
 def test_analise_ia_job_desconhecido_404():
     resp = cliente.get("/analise/ia/nao-existe", headers=CABECALHO)
     assert resp.status_code == 404
@@ -926,6 +954,105 @@ def test_contrato_imagem_ocr_extrai(monkeypatch):
         # O texto do OCR realimenta a extração: os campos citados foram achados.
         campos = {c["chave"] for c in dados["campos"]}
         assert {"saldo", "taxa", "parcela"} <= campos
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_motor_ocr_singleton_thread_safe_constroi_uma_vez(monkeypatch):
+    """C-13: duas threads concorrentes na PRIMEIRA chamada não podem ver o
+    motor ainda em construção como indisponível, nem construir dois motores.
+
+    Sem lock, a checagem `if not _motor_ocr_tentado` e a construção não são
+    atômicas: a segunda thread, chegando enquanto a primeira ainda constrói,
+    já encontrava a flag marcada e devolvia `_motor_ocr` (ainda `None`) na
+    hora — um falso "OCR indisponível" mesmo com o motor quase pronto. Este
+    teste prova que a 2ª thread agora FICA BLOQUEADA até a 1ª terminar, e que
+    a fábrica só é chamada uma vez."""
+    from sidecar import app as app_mod
+
+    entrou = threading.Event()
+    pode_terminar = threading.Event()
+    chamadas: list[int] = []
+
+    def fabrica_lenta() -> MotorFalso:
+        chamadas.append(1)
+        entrou.set()
+        assert pode_terminar.wait(timeout=5), "a 2ª thread não liberou a tempo"
+        return MotorFalso([])
+
+    monkeypatch.setattr(app_mod, "obter_motor", fabrica_lenta)
+    monkeypatch.setattr(app_mod, "_motor_ocr", None)
+    monkeypatch.setattr(app_mod, "_motor_ocr_tentado", False)
+
+    resultado_t1: dict[str, object] = {}
+    resultado_t2: dict[str, object] = {}
+
+    t1 = threading.Thread(
+        target=lambda: resultado_t1.__setitem__(
+            "motor", app_mod._motor_ocr_singleton()))
+    t1.start()
+    assert entrou.wait(timeout=5), "a 1ª thread nunca chegou a construir o motor"
+
+    t2 = threading.Thread(
+        target=lambda: resultado_t2.__setitem__(
+            "motor", app_mod._motor_ocr_singleton()))
+    t2.start()
+    # Enquanto a 1ª thread ainda constrói, a 2ª tem que ficar travada no lock —
+    # nunca destravar sozinha devolvendo `None` prematuramente.
+    t2.join(timeout=0.2)
+    assert t2.is_alive(), "a 2ª thread não deveria destravar antes da construção terminar"
+
+    pode_terminar.set()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    assert len(chamadas) == 1  # a fábrica RapidOCR só rodou uma vez
+    assert resultado_t1["motor"] is not None
+    assert resultado_t2["motor"] is resultado_t1["motor"]
+
+
+class MotorQuebrado:
+    """Motor de OCR que sempre falha — para exercitar o caminho de erro sem
+    vazar dados sensíveis no log (C-22)."""
+
+    def reconhecer(self, imagem: bytes) -> list:
+        raise ValueError("SEGREDO-NAO-DEVE-VAZAR-AO-LOG")
+
+
+def test_importar_ocr_falha_nao_loga_nome_do_arquivo(repo_tmp, caplog):
+    """C-22: o nome do arquivo (PII do usuário) não pode ir para o log quando
+    o OCR falha — só a extensão e o tipo/mensagem da exceção."""
+    fake = FakeClassificador()
+    nome_sensivel = "extrato-joao-da-silva-cpf-123.jpg"
+    with caplog.at_level(logging.WARNING, logger="helper_financeiro.sidecar"):
+        resp = _importar_ocr(fake, MotorQuebrado(), nome=nome_sensivel)
+    assert resp.status_code == 200
+    assert resp.json()["modo"] == "vazio"
+    mensagens = [r.getMessage() for r in caplog.records]
+    assert any("Falha no OCR" in m for m in mensagens)
+    assert not any(nome_sensivel in m for m in mensagens)
+    assert not any("joao-da-silva" in m for m in mensagens)
+    assert any(".jpg" in m for m in mensagens)
+
+
+def test_contrato_extrair_falha_ocr_nao_loga_nome_do_arquivo(caplog):
+    """C-22: mesma checagem do teste acima, no outro ponto de log (`/contrato/extrair`)."""
+    nome_sensivel = "contrato-maria-oliveira-conta-98765.jpg"
+    cliente.app.dependency_overrides[contexto_ocr] = lambda: MotorQuebrado()
+    try:
+        with caplog.at_level(logging.WARNING, logger="helper_financeiro.sidecar"):
+            resp = cliente.post(
+                "/contrato/extrair",
+                json={"pdf_base64": PDF_B64, "nome": nome_sensivel},
+                headers=CABECALHO,
+            )
+        assert resp.status_code == 200
+        assert resp.json()["modo"] == "vazio"
+        mensagens = [r.getMessage() for r in caplog.records]
+        assert any("Falha no OCR" in m for m in mensagens)
+        assert not any(nome_sensivel in m for m in mensagens)
+        assert not any("maria-oliveira" in m for m in mensagens)
+        assert any(".jpg" in m for m in mensagens)
     finally:
         cliente.app.dependency_overrides.clear()
 
