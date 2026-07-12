@@ -276,12 +276,21 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | REQ | Depende | Status |
 |----|------|-----|---------|--------|
-| T-1801 | Varredura de SEGURANÇA: pendências conhecidas (stderr SQLCipher, code signing), authz rota a rota, segredos/logs, TOCTOU nos arquivos do cofre, superfície loopback+token, `pip-audit`/`npm audit` | Processo (ADR-0017) | — | ⬜ |
-| T-1802 | Varredura de CONCORRÊNCIA E RECURSOS: jobs em memória e locks, corridas, processos filhos (órfão do llama-server), handles não fechados, caminhos de shutdown | Processo (ADR-0017) | — | ⬜ |
-| T-1803 | Varredura da FRONTEIRA backend↔frontend: sincronia Pydantic↔`contract.ts` campo a campo, caminhos de erro do IPC, códigos HTTP, serialização de opcionais, respostas truncadas, timeouts assimétricos | Processo (ADR-0017) | — | ⬜ |
-| T-1804 | Varredura de HIGIENE E BOAS PRÁTICAS: código morto, imports/deps não usados, duplicação, `except` largos, TODO/FIXME, complexidade, docstrings mentirosas | Processo (ADR-0017) | — | ⬜ |
-| T-1805 | Varredura de SILENCIOSOS E DÍVIDA DE TESTE: testes que degradam sem falhar, ramos dos 4,2% descobertos, asserts fracos, raiz do flake E2E, exceções engolidas em jobs async | Processo (ADR-0017) | — | ⬜ |
-| T-1806 | Consolidação: dedupe + priorização → `docs/RELATORIO-AUDITORIA.md` → PORTÃO (mantenedor aprova a lista de correções) | Processo (ADR-0017) | T-1801..1805 | ⬜ |
+| T-1801 | Varredura de SEGURANÇA: pendências conhecidas (stderr SQLCipher, code signing), authz rota a rota, segredos/logs, TOCTOU nos arquivos do cofre, superfície loopback+token, `pip-audit`/`npm audit` | Processo (ADR-0017) | — | ✅ |
+| T-1802 | Varredura de CONCORRÊNCIA E RECURSOS: jobs em memória e locks, corridas, processos filhos (órfão do llama-server), handles não fechados, caminhos de shutdown | Processo (ADR-0017) | — | ✅ |
+| T-1803 | Varredura da FRONTEIRA backend↔frontend: sincronia Pydantic↔`contract.ts` campo a campo, caminhos de erro do IPC, códigos HTTP, serialização de opcionais, respostas truncadas, timeouts assimétricos | Processo (ADR-0017) | — | ✅ |
+| T-1804 | Varredura de HIGIENE E BOAS PRÁTICAS: código morto, imports/deps não usados, duplicação, `except` largos, TODO/FIXME, complexidade, docstrings mentirosas | Processo (ADR-0017) | — | ✅ |
+| T-1805 | Varredura de SILENCIOSOS E DÍVIDA DE TESTE: testes que degradam sem falhar, ramos dos 4,2% descobertos, asserts fracos, raiz do flake E2E, exceções engolidas em jobs async | Processo (ADR-0017) | — | ✅ |
+| T-1806 | Consolidação: dedupe + priorização → `docs/RELATORIO-AUDITORIA.md` → PORTÃO (mantenedor aprova a lista de correções) | Processo (ADR-0017) | T-1801..1805 | ✅ |
+
+> **Resultado (2026-07-12):** 37 achados brutos → 34 consolidados (`C-01..C-35`,
+> sem C-09): 1 crítico, 5 altos, 14 médios, 14 baixos. Portão aprovado pelo
+> mantenedor nos termos da recomendação do consolidador — correções abaixo;
+> **registrados sem correção neste ciclo:** C-15 (code signing — depende de
+> certificado), C-16 (bump Electron — ciclo próprio, §E.4), C-17 (nltk —
+> aguardar upstream), C-23 (permissões POSIX — sem build POSIX), C-28/C-29
+> (refatoração de complexidade — risco vs benefício num ciclo zero-regressão),
+> C-35 (sem ação por definição).
 
 ## Milestone M19 — Correção dos achados aprovados (ciclo v2.9, ADR-0017)
 
@@ -291,10 +300,24 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 > mudança de comportamento visível exceto correção de bug real, bump de
 > dependência só com smoke do pacote repetido (ADR-0017 §E).
 
-| ID | Task | REQ | Depende | Status |
+> Tasks definidas no portão de 2026-07-12 (achados `C-xx` do
+> `docs/RELATORIO-AUDITORIA.md`). Cada uma exige teste de regressão que
+> **falharia antes** da correção. Executor entre parênteses; ordem pensada para
+> não haver duas tasks tocando os mesmos arquivos ao mesmo tempo.
+
+| ID | Task | Achados | Depende | Status |
 |----|------|-----|---------|--------|
-| T-19xx | (definidas no portão do T-1806) | Processo (ADR-0017) | T-1806 | ⬜ |
-| T-19NN | Fechamento do ciclo: gates, rebuild dos binários, ata `FREEZE.md` v2.9.0 e docs sincronizados | Processo | todas | ⬜ |
+| T-1901 | Validação de entrada na fronteira: `Field(ge=0)` nos campos monetários + clamp no `CampoMoeda`; normalizar `detail` de `RequestValidationError` (lista→string legível); alinhar saídas de `/rubricas` ao contrato (Sonnet) | C-01, C-07, C-32 | portão | ⬜ |
+| T-1902 | Ciclo de vida de processos: Job Object no Windows (mata a árvore no kill duro), shutdown gracioso com prazo no Electron, dreno do stdout pós-handshake; testes cobrem o caminho de kill do runtime (C-18) (Opus) | C-02, C-11, C-24 | portão | ⬜ |
+| T-1903 | Disciplina de lock do runtime LLM: eliminar a corrida da troca de modelo (instância invalidada após `encerrar()`) e não reter o lock durante o boot/health (estado "iniciando") (Opus) | C-03, C-12 | T-1902 | ⬜ |
+| T-1904 | Expurgo de jobs em memória: TTL/limite p/ `_JOBS_IA` e `_JOBS_DOWNLOAD`, descarte no `bloquear()`/auto-lock (PII), cache do hash do catálogo por (caminho, mtime, tamanho) (Opus) | C-04, C-08, C-14 | T-1903 | ⬜ |
+| T-1905 | Caminho de erro não-JSON do IPC: `try/catch` no `resp.json()` do `chamarSidecar` + `exception_handler(Exception)` no sidecar garantindo corpo JSON em todo 500 (Sonnet) | C-06 | T-1902 | ⬜ |
+| T-1906 | Pequenos silenciosos: catraca de cobertura passa a medir `sidecar/`; lock no singleton do OCR; log sem nome de arquivo (PII); `log.warning` no job de IA (Sonnet) | C-05, C-13, C-22, C-34 | T-1904 | ⬜ |
+| T-1907 | Flake E2E: substituir as 7 esperas fixas `waitForTimeout(1_500)` pela condição real esperada (Sonnet) | C-20 | — | ⬜ |
+| T-1908 | Blindagem da DEK: try/except nas execuções `PRAGMA key`/`ATTACH ... KEY` relançando sem a statement; política de stderr do T-1603 MANTIDA e documentada (decisão do portão) (Opus) | C-21 | T-1904 | ⬜ |
+| T-1909 | Limpeza e observabilidade: remover ramo RAG + 4 funções mortas + docstring; helper único de normalização pt-BR; `_gravar_json_atomico` único; `log.debug` nos 18 `except` de degradação P8 (Sonnet) | C-19, C-25, C-26, C-27, C-30, C-31 | T-1906 | ⬜ |
+| T-1910 | Testes de fallback: ramos com decisão de `agent/classificacao.py` e `core/extrator_pdf.py` + teste fixando o truncamento de documento longo (Sonnet) | C-33 (+C-19) | T-1909 | ⬜ |
+| T-1911 | Fechamento do ciclo: gates, rebuild dos binários, ata `FREEZE.md` v2.9.0 e docs sincronizados (orquestrador) | Processo | todas | ⬜ |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -308,11 +331,14 @@ novo: auditoria profunda (5 varreduras especializadas por família de categoria
 mantenedor aprova a lista de correções) → correção com teste de regressão
 obrigatório → ata v2.9.0. Perímetro: Python de primeira parte + fronteira TS.
 Restrições: zero regressão, sem migração de schema/quebra do cofre, sem
-mudança de comportamento visível exceto bug real (ADR-0017 §E). Próxima ação:
-lançar T-1801/T-1802 (Opus) e T-1803/T-1804 (Sonnet) em pares paralelos;
-T-1805 é do orquestrador. Nota: a fase 0 do PaddleOCR-VL foi executada FORA de
-ciclo (2026-07-12) com veredito "manter RapidOCR" — relatório em
-`docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (untracked).
+mudança de comportamento visível exceto bug real (ADR-0017 §E). **M18 COMPLETO
+(2026-07-12):** 5 varreduras + consolidação em `docs/RELATORIO-AUDITORIA.md`
+(34 achados: 1 crítico, 5 altos, 14 médios, 14 baixos) + portão aprovado.
+Próxima ação: executar M19 na ordem T-1901 → … → T-1910 (T-1907 é independente
+e pode intercalar), commit task a task com autorização do mantenedor;
+T-1911 fecha o ciclo com a ata v2.9.0. Nota: a fase 0 do PaddleOCR-VL foi
+executada FORA de ciclo (2026-07-12) com veredito "manter RapidOCR" —
+relatório em `docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (untracked).
 
 ### Histórico do ciclo v2.8 (fechado)
 
