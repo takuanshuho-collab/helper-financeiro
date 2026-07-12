@@ -21,10 +21,25 @@ essa decisão fica na fábrica do provider (`agent/provider.py`), não aqui.
   reinicia — o custo de carregar ~2 GB de pesos não pode ser pago no boot do
   app nem repetido à toa.
 
-- **Lock único.** Um `threading.Lock` serializa start/stop/detecção de morte:
-  o sidecar (FastAPI) atende em múltiplas threads e duas delas não podem tentar
-  subir o servidor ao mesmo tempo (mesmo racional do lock único de
-  `sidecar/sessao.py` e do `Repositorio`).
+- **Dois locks: START serializado, estado com lock CURTO.** O boot do modelo
+  leva dezenas de segundos (carrega ~2 GB); prender um único lock por todo esse
+  tempo congelaria `ativo()` (pollado por `GET /llm/status`) e `encerrar()`
+  (`POST /llm/modelo`) — a UI de Configuração da IA travava (C-12, ADR-0017
+  §M19). Agora `_lock_start` serializa só as tentativas de START entre si
+  (duas threads não sobem o servidor ao mesmo tempo), enquanto `_lock_estado` é
+  um lock CURTO que só protege leitura/escrita dos campos de estado
+  (`_proc`/`_porta`/`_invalidada`) — nunca é retido durante o poll de saúde nem
+  durante o `terminate/wait`. `encerrar()` sinaliza o cancelamento do boot em
+  curso por um `threading.Event` e mata o processo FORA do lock.
+
+- **Instância invalidada não ressobe (C-03).** Quando a troca de modelo
+  (`definir_modelo_ativo` → `encerrar_runtime`) derruba o runtime, a instância
+  que outra thread já obteve fica OBSOLETA (cfg do modelo antigo). `encerrar()`
+  marca a instância como invalidada; `base_url()` numa instância invalidada
+  NÃO reinicia o servidor — levanta `RuntimeLLMInvalidado` — para não ressuscitar
+  o modelo antigo e deixar dois `llama-server` no ar. O chokepoint
+  `agent.provider.base_url_runtime_embarcado` intercepta essa exceção e re-obtém
+  a instância ATUAL (já com o modelo novo) uma única vez.
 
 - **Relógio/health injetáveis.** `agora`, `dormir`, `verificar_saude` e
   `montar_comando` entram pelo construtor para os testes exercitarem
@@ -95,6 +110,18 @@ class RuntimeLLMIndisponivel(RuntimeError):
     (P8). O motivo é textual e SEM PII (só caminhos/estado), seguro para virar
     `ERRO_CONFIG:RuntimeLLMIndisponivel` no grafo e uma instrução na GUI
     ("instale um modelo em Configurações")."""
+
+
+class RuntimeLLMInvalidado(RuntimeLLMIndisponivel):
+    """Instância cujo `encerrar()` já rodou (troca de modelo/shutdown): subir o
+    `llama-server` aqui ressuscitaria o modelo ANTIGO e deixaria dois servidores
+    no ar (C-03).
+
+    É subclasse de `RuntimeLLMIndisponivel` de propósito: quem NÃO sabe re-obter
+    a instância (qualquer chamador ingênuo) ainda degrada com um motivo textual
+    (P8), preservando o contrato. Quem sabe — o chokepoint
+    `agent.provider.base_url_runtime_embarcado` — a intercepta especificamente e
+    re-obtém a instância atual (já com o modelo novo) uma única vez."""
 
 
 # ------------------------------------------------------------ resolução de caminhos
@@ -235,13 +262,23 @@ class RuntimeLLM:
         verificar_saude: Callable[[str], bool] = _saude_ok,
     ) -> None:
         self._cfg = cfg
-        self._lock = threading.Lock()
+        # `_lock_start` serializa TENTATIVAS de subir o servidor; `_lock_estado`
+        # é um lock CURTO só para ler/escrever os campos de estado — nunca é
+        # retido durante o boot/health nem durante o terminate (C-12).
+        self._lock_start = threading.Lock()
+        self._lock_estado = threading.Lock()
         self._montar_comando = montar_comando or self._comando_llama_server
         self._agora = agora
         self._dormir = dormir
         self._verificar_saude = verificar_saude
         self._proc: subprocess.Popen[bytes] | None = None
         self._porta: int | None = None
+        # Marca de instância obsoleta após `encerrar()` (C-03): `base_url()`
+        # recusa reiniciar em vez de ressuscitar o modelo antigo.
+        self._invalidada = False
+        # Evento para interromper o poll de saúde de um boot em curso quando
+        # `encerrar()` chega no meio (fica não-`None` só durante um boot).
+        self._cancelar_boot: threading.Event | None = None
         # Rede de segurança do Windows (C-02): ancora o `llama-server` a um Job
         # Object com KILL_ON_JOB_CLOSE, para que a morte DURA do sidecar
         # (TerminateProcess, que não roda o lifespan) não deixe o neto órfão.
@@ -268,8 +305,13 @@ class RuntimeLLM:
 
     # ------------------------------------------------------------- estado
     def ativo(self) -> bool:
-        """`True` se há um processo vivo (não encerrou/morreu)."""
-        with self._lock:
+        """`True` se há um processo vivo (não encerrou/morreu).
+
+        Responde sob o lock CURTO de estado — nunca fica atrás do boot do
+        modelo (C-12): durante o boot o processo já está no ar (registrado
+        antes do poll de saúde), então devolve `True` imediatamente.
+        """
+        with self._lock_estado:
             return self._processo_vivo_sem_lock()
 
     def _processo_vivo_sem_lock(self) -> bool:
@@ -280,17 +322,46 @@ class RuntimeLLM:
         """Garante o servidor no ar e devolve o endpoint OpenAI-compat (`…/v1`).
 
         Levanta `RuntimeLLMIndisponivel` se faltar binário/modelo ou se o
-        servidor não ficar saudável no prazo — nunca deixa o chamador sem um
-        motivo textual para degradar (P8).
+        servidor não ficar saudável no prazo; `RuntimeLLMInvalidado` (subclasse)
+        se a instância já foi encerrada por uma troca de modelo/shutdown — nunca
+        deixa o chamador sem um motivo textual para degradar (P8).
         """
-        with self._lock:
-            self._garantir_indisponibilidade_sem_lock()
-            if not self._processo_vivo_sem_lock():
-                self._iniciar_sem_lock()
-            return f"http://{self._cfg.host}:{self._porta}/v1"
+        # Caminho rápido: já no ar → devolve o endpoint sob o lock CURTO, sem
+        # tocar em `_lock_start` (que pode estar retido por um boot em curso).
+        with self._lock_estado:
+            self._garantir_disponivel_sem_lock()
+            if self._processo_vivo_sem_lock():
+                return self._endpoint_sem_lock()
+        # Precisa (re)subir: só o START serializa entre si. A ordem de aquisição
+        # é sempre `_lock_start` → `_lock_estado` (nunca o inverso) — sem deadlock
+        # com `ativo()`/`encerrar()`, que só pegam `_lock_estado`.
+        with self._lock_start:
+            with self._lock_estado:
+                self._garantir_disponivel_sem_lock()
+                if self._processo_vivo_sem_lock():
+                    return self._endpoint_sem_lock()  # outra thread já subiu
+            self._iniciar()
+            with self._lock_estado:
+                # Reconfere ANTES de ler a porta: um `encerrar()` que corra
+                # entre o fim do boot e este return já zerou `_porta` — sem a
+                # guarda, devolveríamos a URL malformada `http://…:None/v1`;
+                # com ela, `RuntimeLLMInvalidado` aciona o retry do chokepoint.
+                self._garantir_disponivel_sem_lock()
+                return self._endpoint_sem_lock()
 
-    def _garantir_indisponibilidade_sem_lock(self) -> None:
-        """Traduz a ausência de binário/modelo em `RuntimeLLMIndisponivel`."""
+    def _endpoint_sem_lock(self) -> str:
+        return f"http://{self._cfg.host}:{self._porta}/v1"
+
+    def _garantir_disponivel_sem_lock(self) -> None:
+        """Traduz instância obsoleta / ausência de binário/modelo em exceção.
+
+        A invalidação vem primeiro: uma instância encerrada não deve nem tentar
+        resolver binário/modelo — o chokepoint re-obtém a instância atual.
+        """
+        if self._invalidada:
+            raise RuntimeLLMInvalidado(
+                "RUNTIME_ENCERRADO: instância encerrada por troca de modelo ou "
+                "shutdown — re-obtenha o runtime atual")
         if self._cfg.binario is None:
             raise RuntimeLLMIndisponivel(
                 "BINARIO_AUSENTE: llama-server não encontrado (defina HF_LLAMA_SERVER "
@@ -300,8 +371,16 @@ class RuntimeLLM:
                 "MODELO_AUSENTE: nenhum modelo GGUF instalado (aponte HF_LLM_MODELO "
                 "ou instale um modelo em Configurações)")
 
-    def _iniciar_sem_lock(self) -> None:
-        """Sobe o processo numa porta efêmera e espera o health; limpa se falhar."""
+    def _iniciar(self) -> None:
+        """Sobe o processo numa porta efêmera e espera o health, SEM segurar o
+        lock de estado durante o poll (C-12).
+
+        Chamado só sob `_lock_start` (starts serializados). O boot registra o
+        processo no estado ANTES de esperar a saúde, para que `ativo()` o veja e
+        que um `encerrar()` concorrente possa matá-lo — se `encerrar()` chega no
+        meio, o processo que subia TEM de morrer (aqui ou no ramo de limpeza),
+        nunca fica órfão (também coberto pela âncora do Job Object, C-02).
+        """
         porta = _porta_livre(self._cfg.host)
         comando = self._montar_comando(porta)
         log.info("Iniciando llama-server em %s:%d", self._cfg.host, porta)
@@ -315,21 +394,60 @@ class RuntimeLLM:
         # Ancora ao Job Object ANTES de esperar a saúde: se o sidecar morrer
         # duro durante o boot do modelo, o SO ainda aniquila este processo.
         self._ancora.anexar(proc)
-        self._proc = proc
-        self._porta = porta
-        if not self._esperar_saude_sem_lock(porta):
-            self._encerrar_processo_sem_lock(_PRAZO_ENCERRAR_PADRAO_S)
+        cancelar = threading.Event()
+        invalidado_no_start = False
+        with self._lock_estado:
+            if self._invalidada:
+                # `encerrar()` correu ANTES de registrarmos: não deixe órfão.
+                invalidado_no_start = True
+            else:
+                self._proc = proc
+                self._porta = porta
+                self._cancelar_boot = cancelar
+        if invalidado_no_start:
+            self._matar_direto(proc, _PRAZO_ENCERRAR_PADRAO_S)
+            raise RuntimeLLMInvalidado(
+                "RUNTIME_ENCERRADO: instância encerrada durante o start")
+
+        ok = self._esperar_saude(porta, proc, cancelar)
+
+        encerrado_no_boot = False
+        with self._lock_estado:
+            if self._proc is not proc or self._invalidada:
+                # `encerrar()` correu DURANTE o boot (já zerou `_proc` e/ou pediu
+                # cancelamento). O processo deste boot não é mais o oficial.
+                encerrado_no_boot = True
+            else:
+                self._cancelar_boot = None
+                if not ok:
+                    self._proc = None
+                    self._porta = None
+        if encerrado_no_boot:
+            self._matar_direto(proc, _PRAZO_ENCERRAR_PADRAO_S)  # idempotente
+            raise RuntimeLLMInvalidado(
+                "RUNTIME_ENCERRADO: instância encerrada durante o boot")
+        if not ok:
+            self._matar_direto(proc, _PRAZO_ENCERRAR_PADRAO_S)
             raise RuntimeLLMIndisponivel(
                 f"HEALTH_TIMEOUT: llama-server não respondeu /health em "
                 f"{self._cfg.timeout_health_s:.0f}s")
 
-    def _esperar_saude_sem_lock(self, porta: int) -> bool:
-        """Poll do `/health` até 200 ou estourar o timeout (relógio injetável)."""
+    def _esperar_saude(
+        self, porta: int, proc: subprocess.Popen[bytes], cancelar: threading.Event
+    ) -> bool:
+        """Poll do `/health` até 200, cancelamento ou timeout (relógio injetável).
+
+        Roda SEM o lock de estado; recebe o `proc` deste boot por parâmetro (não
+        lê `self._proc`) e observa o `cancelar` para abortar na hora quando um
+        `encerrar()` concorrente pede a parada.
+        """
         url = f"http://{self._cfg.host}:{porta}/health"
         limite = self._agora() + self._cfg.timeout_health_s
         while self._agora() < limite:
+            if cancelar.is_set():
+                return False
             # Se o processo já morreu (ex.: modelo corrompido), não adianta esperar.
-            if not self._processo_vivo_sem_lock():
+            if proc.poll() is not None:
                 return False
             if self._verificar_saude(url):
                 return True
@@ -338,14 +456,30 @@ class RuntimeLLM:
 
     # ------------------------------------------------------------ shutdown
     def encerrar(self, prazo_s: float = _PRAZO_ENCERRAR_PADRAO_S) -> None:
-        """Encerra o servidor: terminate gentil e, esgotado o prazo, kill."""
-        with self._lock:
-            self._encerrar_processo_sem_lock(prazo_s)
+        """Encerra o servidor e INVALIDA a instância (não ressobe, C-03).
 
-    def _encerrar_processo_sem_lock(self, prazo_s: float) -> None:
-        proc = self._proc
-        self._proc = None
-        self._porta = None
+        Sob o lock CURTO só marca a invalidação, captura o processo e sinaliza o
+        cancelamento de um boot em curso; o `terminate/wait` (que pode custar até
+        o prazo) roda FORA do lock, para não prender `ativo()`/status (C-12).
+        """
+        with self._lock_estado:
+            self._invalidada = True
+            proc = self._proc
+            self._proc = None
+            self._porta = None
+            if self._cancelar_boot is not None:
+                self._cancelar_boot.set()
+        self._matar_direto(proc, prazo_s)
+
+    def _matar_direto(
+        self, proc: subprocess.Popen[bytes] | None, prazo_s: float
+    ) -> None:
+        """Encerra `proc`: terminate gentil e, esgotado o prazo, kill.
+
+        Opera sobre a referência recebida (não sobre `self._proc`) e é
+        idempotente — chamável fora de qualquer lock e mais de uma vez sobre o
+        mesmo processo.
+        """
         if proc is None or proc.poll() is not None:
             return
         proc.terminate()

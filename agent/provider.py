@@ -233,10 +233,19 @@ def base_url_runtime_embarcado() -> str:
     precedência nos três fluxos. Se faltar binário/modelo, levanta
     `RuntimeLLMIndisponivel` (subclasse de `RuntimeError`); cada chamador
     decide como degradar (P8), mas nenhum deixa a exceção virar 500.
-    """
-    from sidecar.runtime_llm import runtime_embarcado
 
-    return runtime_embarcado().base_url()  # inicia sob demanda; loopback + porta efêmera
+    Disciplina de troca de modelo (C-03): se a instância obtida já foi encerrada
+    por um `POST /llm/modelo` concorrente (`RuntimeLLMInvalidado`), NÃO insiste
+    nela — ressubiria o modelo ANTIGO e deixaria dois `llama-server` no ar.
+    Re-obtém a instância ATUAL (já com o modelo novo) e tenta **uma única vez**;
+    uma segunda invalidação (corrida patológica) propaga e degrada (P8).
+    """
+    from sidecar.runtime_llm import RuntimeLLMInvalidado, runtime_embarcado
+
+    try:
+        return runtime_embarcado().base_url()  # inicia sob demanda; loopback + porta efêmera
+    except RuntimeLLMInvalidado:
+        return runtime_embarcado().base_url()  # instância nova, modelo novo — 1 retry só
 
 
 def _provider_runtime_embarcado(cfg: ConfigAgente) -> LLMProvider:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -22,6 +23,7 @@ from sidecar.runtime_llm import (
     ConfigRuntime,
     RuntimeLLM,
     RuntimeLLMIndisponivel,
+    RuntimeLLMInvalidado,
     resolver_binario_llama,
     resolver_modelo,
 )
@@ -260,7 +262,7 @@ def test_health_timeout_encerra_e_degrada(binario_e_modelo):
 # ------------------------------------- kill forçado no shutdown (C-18)
 class _PopenQueIgnoraTerminate:
     """Fake de `Popen` que NÃO morre no `terminate()` — força o ramo
-    `TimeoutExpired → kill()` de `_encerrar_processo_sem_lock` (descoberto por
+    `TimeoutExpired → kill()` de `_matar_direto` (descoberto por
     teste antes desta task, C-18). Cross-platform: no Windows `terminate()` real
     é TerminateProcess (mata na hora) e não exercitaria este caminho."""
 
@@ -369,6 +371,141 @@ def test_obter_provider_embarcado_indisponivel_degrada(monkeypatch, perfil_atenc
     assert res.modo == "degradado"
     assert res.guardrails_violados == ["ERRO_CONFIG:RuntimeLLMIndisponivel"]
     assert res.fatos.saldo_devedor_total > 0  # determinístico intacto
+
+
+# --------------------------------- invalidação na troca de modelo (C-03)
+def test_base_url_apos_encerrar_nao_ressobe(binario_e_modelo, script_servidor):
+    """Uma instância cujo `encerrar()` já rodou (troca de modelo/shutdown) NÃO
+    pode ressubir o `llama-server` — ressuscitaria o modelo antigo e deixaria
+    dois servidores no ar (C-03). ANTES da correção `base_url()` reiniciava o
+    processo com o cfg antigo; agora levanta `RuntimeLLMInvalidado`."""
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0),
+        montar_comando=_comando_fake(script_servidor),
+    )
+    try:
+        runtime.base_url()
+        assert runtime.ativo()
+        runtime.encerrar()  # troca de modelo derruba e invalida a instância
+        assert not runtime.ativo()
+        with pytest.raises(RuntimeLLMInvalidado):
+            runtime.base_url()  # não ressobe: recusa com motivo (P8)
+        assert not runtime.ativo()  # nenhum processo novo no ar
+    finally:
+        runtime.encerrar()
+
+
+def test_chokepoint_reobtem_instancia_apos_invalidacao(monkeypatch):
+    """O chokepoint `base_url_runtime_embarcado` intercepta a instância obsoleta
+    e re-obtém a ATUAL (modelo novo) uma única vez, em vez de propagar o erro —
+    é assim que a operação em voo passa a usar o modelo novo (C-03)."""
+    from agent import provider as prov
+
+    class InstanciaObsoleta:
+        def base_url(self) -> str:
+            raise RuntimeLLMInvalidado("RUNTIME_ENCERRADO: obsoleta (teste)")
+
+    class InstanciaNova:
+        def base_url(self) -> str:
+            return "http://127.0.0.1:5599/v1"
+
+    instancias = iter([InstanciaObsoleta(), InstanciaNova()])
+    monkeypatch.setattr(rt, "runtime_embarcado", lambda: next(instancias))
+    assert prov.base_url_runtime_embarcado() == "http://127.0.0.1:5599/v1"
+
+
+def test_chokepoint_nao_recorre_infinitamente(monkeypatch):
+    """Só UM retry: se a re-obtenção também vier invalidada (corrida patológica),
+    propaga e degrada (P8) — sem recursão infinita."""
+    from agent import provider as prov
+
+    class SempreObsoleta:
+        def base_url(self) -> str:
+            raise RuntimeLLMInvalidado("RUNTIME_ENCERRADO: obsoleta (teste)")
+
+    monkeypatch.setattr(rt, "runtime_embarcado", lambda: SempreObsoleta())
+    with pytest.raises(RuntimeLLMInvalidado):
+        prov.base_url_runtime_embarcado()
+
+
+# ----------------------------- lock não retido durante o boot (C-12)
+def _boot_lento(binario_e_modelo):
+    """Runtime cujo poll de saúde BLOQUEIA até o teste liberar — simula o boot
+    de dezenas de segundos de um modelo real, de forma controlável. Devolve
+    (runtime, liberar, saude_chamada)."""
+    binario, modelo = binario_e_modelo
+    liberar = threading.Event()
+    saude_chamada = threading.Event()
+
+    def saude_lenta(_url: str) -> bool:
+        saude_chamada.set()
+        liberar.wait(timeout=10)  # segura o boot no meio do poll
+        return True
+
+    def comando_dummy(_porta):
+        # Processo real e matável, sem abrir porta (não precisamos do HTTP: a
+        # saúde é injetada). `time.sleep` longo p/ o teste controlar a morte.
+        return [sys.executable, "-c", "import time; time.sleep(30)"]
+
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0,
+                      intervalo_poll_s=0.01),
+        montar_comando=comando_dummy,
+        verificar_saude=saude_lenta,
+    )
+    return runtime, liberar, saude_chamada
+
+
+def test_ativo_responde_durante_o_boot_sem_bloquear(binario_e_modelo):
+    """`ativo()` (pollado por `GET /llm/status`) responde JÁ durante o boot —
+    não fica preso atrás do lock enquanto o modelo carrega (C-12). ANTES da
+    correção `base_url` segurava `self._lock` no poll e `ativo()` bloqueava."""
+    runtime, liberar, saude_chamada = _boot_lento(binario_e_modelo)
+    t = threading.Thread(target=runtime.base_url)
+    t.start()
+    try:
+        assert saude_chamada.wait(timeout=5), "o boot não chegou ao poll de saúde"
+        inicio = time.monotonic()
+        vivo = runtime.ativo()
+        decorrido = time.monotonic() - inicio
+        assert decorrido < 1.0, f"ativo() bloqueou {decorrido:.1f}s atrás do lock"
+        assert vivo  # o processo do boot já está no ar
+    finally:
+        liberar.set()
+        t.join(timeout=10)
+        runtime.encerrar()
+
+
+def test_encerrar_durante_o_boot_mata_o_processo(binario_e_modelo):
+    """`encerrar()` no meio do boot mata o processo que subia sem esperar o
+    health timeout (C-12) e o boot em voo termina invalidado — o processo NÃO
+    fica órfão. ANTES `encerrar()` bloqueava atrás do lock retido pelo poll."""
+    runtime, liberar, saude_chamada = _boot_lento(binario_e_modelo)
+    resultado: dict[str, BaseException] = {}
+
+    def correr() -> None:
+        try:
+            runtime.base_url()
+        except BaseException as exc:  # noqa: BLE001 - captura p/ inspeção no teste
+            resultado["exc"] = exc
+
+    t = threading.Thread(target=correr)
+    t.start()
+    try:
+        assert saude_chamada.wait(timeout=5), "o boot não chegou ao poll de saúde"
+        proc = runtime._proc
+        assert proc is not None and proc.poll() is None  # boot no ar
+        inicio = time.monotonic()
+        runtime.encerrar()  # durante o boot
+        decorrido = time.monotonic() - inicio
+        assert decorrido < 3.0, f"encerrar() esperou {decorrido:.1f}s (timeout do boot)"
+    finally:
+        liberar.set()
+        t.join(timeout=10)
+    assert proc.poll() is not None  # o processo do boot morreu
+    assert not runtime.ativo()
+    assert isinstance(resultado.get("exc"), RuntimeLLMInvalidado)
 
 
 # ------------------------------------------------------- real (opt-in)
