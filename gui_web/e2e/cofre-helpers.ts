@@ -59,6 +59,13 @@ async function totpSemReplay(win: Page, segredoBase32: string): Promise<string> 
   let agora = Date.now()
   let passo = Math.floor(agora / 1000 / 30)
   if (passo <= ultimoPassoUsado) {
+    // Espera fixa LEGÍTIMA (não é o padrão do achado C-20 da auditoria v2.9):
+    // não há nenhuma condição observável para fazer poll — o passo TOTP é o
+    // relógio de parede em si (RFC 6238, janelas de 30s), e o servidor
+    // rejeita por anti-replay um código gerado no mesmo passo já usado. O
+    // valor não é um "chute" como 1.500ms fixos: é calculado exatamente até
+    // a borda do PRÓXIMO passo (+100ms de margem), então dorme o mínimo
+    // necessário e nada mais.
     const esperaMs = (ultimoPassoUsado + 1) * 30_000 - agora + 100
     await win.waitForTimeout(Math.max(0, esperaMs))
     agora = Date.now()

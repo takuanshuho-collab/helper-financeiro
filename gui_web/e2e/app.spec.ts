@@ -18,6 +18,8 @@ import {
   type Page,
 } from '@playwright/test'
 
+import type { EstadoOut } from '../src/hf/contract'
+
 import { cadastrarCofreELogin, desbloquearCofre } from './cofre-helpers'
 
 const RAIZ_GUI = path.resolve(__dirname, '..')
@@ -86,6 +88,30 @@ async function preencher(rotulo: string, valor: string) {
 
 function aba(nome: string) {
   return win.locator('.nav-item', { hasText: nome })
+}
+
+/**
+ * Espera o auto-save do App.tsx (debounce de 600 ms) persistir no SQLite,
+ * consultando a condição REAL em vez de dormir um tempo fixo (achado C-20 da
+ * auditoria v2.9): faz poll do mesmo `GET /estado` que a hidratação do app
+ * usa, até `verificar` bater com o que acabou de ser gravado. O passo
+ * seguinte (reabrir o app, comparar histórico etc.) só depende do banco, não
+ * de nenhum sinal de UI — e o App.tsx não expõe um indicador de "salvo", o
+ * que descarta `waitForFunction` sobre o DOM/estado do renderer.
+ */
+async function aguardarAutoSave(
+  verificar: (estado: EstadoOut) => boolean,
+  timeout = 5_000,
+): Promise<void> {
+  const inicio = Date.now()
+  for (;;) {
+    const estado = await win.evaluate(() => window.hf!.invoke<EstadoOut>('/estado'))
+    if (verificar(estado)) return
+    if (Date.now() - inicio > timeout) {
+      throw new Error('aguardarAutoSave: o auto-save não persistiu a tempo')
+    }
+    await win.waitForTimeout(100)
+  }
 }
 
 test.beforeAll(async () => {
@@ -224,8 +250,9 @@ test('persistência: o perfil editado sobrevive à reabertura do app', async () 
       .locator('.secao', { hasText: 'Renda líquida mensal' })
       .locator('.secao-total'),
   ).toContainText('7.777,00', { timeout: 5_000 })
-  // Dá tempo do auto-save (debounce de 600 ms) chegar ao SQLite.
-  await win.waitForTimeout(1_500)
+  // Espera o auto-save (debounce de 600 ms) chegar ao SQLite de verdade,
+  // consultando o próprio GET /estado (achado C-20 — nada de sleep fixo).
+  await aguardarAutoSave((e) => e.perfil?.renda?.salario_liquido === 7777)
 
   // Reabre o app inteiro: a hidratação (GET /estado) restaura o que foi salvo.
   await app.close()
@@ -235,7 +262,7 @@ test('persistência: o perfil editado sobrevive à reabertura do app', async () 
 
   // Volta ao seed para a próxima rodada não depender desta.
   await preencher('Salário/benefício líquido', '5000')
-  await win.waitForTimeout(1_500)
+  await aguardarAutoSave((e) => e.perfil?.renda?.salario_liquido === 5000)
 })
 
 test('planilha: rubricas detalham o campo e o roll-up vem do core', async () => {
@@ -287,7 +314,7 @@ test('planilha: rubricas detalham o campo e o roll-up vem do core', async () => 
   await expect(grupo2.locator('.plan-linha')).toHaveCount(0)
   await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
   await preencher('Contas da casa', '500')
-  await win.waitForTimeout(1_500)
+  await aguardarAutoSave((e) => e.perfil?.fixas?.contas_casa === 500)
 })
 
 test('histórico: arquivar competência e comparar com o orçamento vivo', async () => {
@@ -302,7 +329,7 @@ test('histórico: arquivar competência e comparar com o orçamento vivo', async
   // O mercado sobe no orçamento vivo (espera o auto-save chegar ao banco).
   await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
   await preencher('Mercado', '900')
-  await win.waitForTimeout(1_500)
+  await aguardarAutoSave((e) => e.perfil?.variaveis?.mercado === 900)
 
   // Compara o mês arquivado com o orçamento atual: +R$ 100 (+12,5%).
   await win.locator('.btn-add', { hasText: 'Detalhar orçamento' }).click()
@@ -378,7 +405,7 @@ test('importação: CSV do extrato vira rubricas após revisão', async () => {
   await expect(grupo.locator('.plan-linha')).toHaveCount(0)
   await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
   await preencher('Contas da casa', '500')
-  await win.waitForTimeout(1_500)
+  await aguardarAutoSave((e) => e.perfil?.fixas?.contas_casa === 500)
 })
 
 test('importação por OCR: comprovante escaneado vira rubricas (T-1405)', async () => {
@@ -417,7 +444,7 @@ test('importação por OCR: comprovante escaneado vira rubricas (T-1405)', async
   await expect(grupo.locator('.plan-linha')).toHaveCount(0)
   await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
   await preencher('Contas da casa', '500')
-  await win.waitForTimeout(1_500)
+  await aguardarAutoSave((e) => e.perfil?.fixas?.contas_casa === 500)
 })
 
 test('evolução: gráfico das competências arquivadas com zoom por campo', async () => {
