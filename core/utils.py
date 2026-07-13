@@ -8,6 +8,24 @@ interno e o que o usuário digita/lê (ex.: "1.234,56" e "2%").
 from __future__ import annotations
 
 
+def _normalizar_texto_monetario(limpo: str) -> str:
+    """Normaliza um texto pt-BR de dinheiro/percentual para o formato que
+    `float()` entende (C-26: única cópia da regra, usada por `parse_valor` e
+    `texto_numerico_valido`).
+
+    Remove símbolos de moeda/percentual/espaços e resolve o separador
+    decimal: padrão BR usa ponto como separador de milhar e vírgula como
+    decimal — se há vírgula, os pontos são milhar (removidos) e a vírgula
+    vira o ponto decimal; sem vírgula, assume-se que já é decimal no padrão
+    internacional.
+    """
+    for simbolo in ("R$", "r$", "%", " ", "\u00a0"):
+        limpo = limpo.replace(simbolo, "")
+    if "," in limpo:
+        limpo = limpo.replace(".", "").replace(",", ".")
+    return limpo
+
+
 def parse_valor(texto: str | float | int | None) -> float:
     """Converte texto em padrão brasileiro para float.
 
@@ -23,18 +41,8 @@ def parse_valor(texto: str | float | int | None) -> float:
     if not limpo:
         return 0.0
 
-    # Remove símbolos de moeda, espaços e o "%" (se houver)
-    for simbolo in ("R$", "r$", "%", " ", "\u00a0"):
-        limpo = limpo.replace(simbolo, "")
-
-    # Padrão BR: ponto é separador de milhar, vírgula é decimal.
-    # Se tem vírgula, tratamos a vírgula como decimal e removemos os pontos.
-    if "," in limpo:
-        limpo = limpo.replace(".", "").replace(",", ".")
-    # Se só tem ponto, assumimos que já é decimal no padrão internacional.
-
     try:
-        return float(limpo)
+        return float(_normalizar_texto_monetario(limpo))
     except ValueError:
         return 0.0
 
@@ -75,12 +83,8 @@ def texto_numerico_valido(texto: str | None) -> bool:
     limpo = str(texto).strip()
     if not limpo:
         return True
-    for simbolo in ("R$", "r$", "%", " ", "\u00a0"):
-        limpo = limpo.replace(simbolo, "")
-    if "," in limpo:
-        limpo = limpo.replace(".", "").replace(",", ".")
     try:
-        float(limpo)
+        float(_normalizar_texto_monetario(limpo))
     except ValueError:
         return False
     return True

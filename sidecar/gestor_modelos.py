@@ -31,7 +31,6 @@ import hmac
 import json
 import logging
 import os
-import secrets
 import threading
 import urllib.error
 import urllib.request
@@ -39,6 +38,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+
+from .arquivos import gravar_json_atomico
 
 log = logging.getLogger("helper_financeiro.gestor_modelos")
 
@@ -228,13 +229,8 @@ def caminho_parcial(item: ModeloCatalogo, ambiente: Mapping[str, str] | None = N
 
 # --------------------------------------------------------------- llm.json
 def _salvar_atomico(caminho: Path, dados: dict) -> None:
-    """Escrita atômica temp+`os.replace` — mesmo padrão do `auth.json`."""
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    texto = json.dumps(dados, ensure_ascii=False, indent=2)
-    temporario = caminho.with_name(
-        f"{caminho.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
-    temporario.write_text(texto, encoding="utf-8")
-    os.replace(temporario, caminho)
+    """Escrita atômica temp+`os.replace` (C-27) — mesmo padrão do `auth.json`."""
+    gravar_json_atomico(caminho, dados)
 
 
 def ler_llm_config(ambiente: Mapping[str, str] | None = None) -> dict:
@@ -286,13 +282,6 @@ def _validar_gguf(caminho: str | os.PathLike[str]) -> Path:
     if p.suffix.lower() != ".gguf":
         raise ModeloLocalInvalido(f"Não é um arquivo .gguf: {p}")
     return p
-
-
-def apontar_gguf_local(caminho: str | os.PathLike[str],
-                       ambiente: Mapping[str, str] | None = None) -> Path:
-    """Aponta um `.gguf` já presente no disco como modelo ativo — SEM copiar
-    o arquivo, só referencia o caminho (REQ-F-028)."""
-    return definir_modelo_ativo(caminho, ambiente)
 
 
 # --------------------------------------------------------------- estado

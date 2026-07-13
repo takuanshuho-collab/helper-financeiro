@@ -20,6 +20,7 @@ degrada para classificação manual (P8): mapa vazio + motivos.
 """
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -33,6 +34,8 @@ from core.rubricas import CAMPOS_POR_CATEGORIA, ROTULO_CAMPO
 from .config import ConfigAgente, carregar_config
 from .prompts import SYSTEM_PROMPT_CLASSIFICACAO, montar_prompt_classificacao
 from .provider import NUM_CTX, _post_json
+
+log = logging.getLogger("helper_financeiro.classificacao")
 
 # Classificação quer determinismo, não criatividade.
 TEMPERATURA_CLASSIFICACAO = 0.0
@@ -212,6 +215,7 @@ def classificar_grupos(grupos: Sequence[tuple[str, str]],
         try:
             classificador = obter_classificador(conf)
         except Exception as e:  # noqa: BLE001 — P8: sem LLM ⇒ classificação manual
+            log.debug("Falha ao obter classificador (config): %s", type(e).__name__)
             return ResultadoClassificacao(
                 motivos=[f"ERRO_CONFIG:{type(e).__name__}"])
 
@@ -223,6 +227,8 @@ def classificar_grupos(grupos: Sequence[tuple[str, str]],
             motivos = ["REQ-LLM-002:SCHEMA"]
             continue
         except Exception as e:  # noqa: BLE001 — P8: falhou ⇒ manual, com o motivo
+            # Só o tipo: `grupos` traz nomes de estabelecimento (PII do extrato).
+            log.debug("Falha ao classificar grupos: %s", type(e).__name__)
             motivos = [f"ERRO_PROVIDER:{type(e).__name__}"]
             continue
         return _validar_itens(classificacao, grupos)

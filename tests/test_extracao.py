@@ -334,3 +334,11 @@ def test_contexto_curto_vai_inteiro_sem_embeddings():
     """Documento pequeno não passa por retrieval (offline por construção)."""
     assert len(DOC_CONTRATO) <= LIMITE_DIRETO_CHARS
     assert preparar_contexto(DOC_CONTRATO, CFG_TESTE) == DOC_CONTRATO
+
+
+def test_contexto_longo_e_truncado_sem_retrieval():
+    """C-19: documento > LIMITE_DIRETO_CHARS é truncado, sem ramo RAG."""
+    longo = "x" * (LIMITE_DIRETO_CHARS + 500)
+    resultado = preparar_contexto(longo, CFG_TESTE)
+    assert resultado == longo[:LIMITE_DIRETO_CHARS]
+    assert len(resultado) == LIMITE_DIRETO_CHARS

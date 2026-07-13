@@ -13,9 +13,12 @@ não o código. Texto anotado é mais fácil de citar e de verificar.
 """
 from __future__ import annotations
 
+import logging
 import re
 from enum import Enum
 from pathlib import PurePath
+
+log = logging.getLogger("helper_financeiro.documento")
 
 
 class FonteDocumento(Enum):
@@ -92,7 +95,9 @@ def classificar_documento_bytes(dados: bytes, nome: str) -> FonteDocumento:
         with pdfplumber.open(io.BytesIO(dados)) as pdf:
             paginas = len(pdf.pages)
             texto = "\n".join(p.extract_text() or "" for p in pdf.pages)
-    except Exception:  # noqa: BLE001 — melhor esforço; PDF quebrado vira candidato a OCR
+    except Exception as e:  # noqa: BLE001 — melhor esforço; PDF quebrado vira candidato a OCR
+        # C-31: só o tipo — `dados` é o documento do usuário (PII), nunca no log.
+        log.debug("Falha ao sondar PDF (candidato a OCR): %s", type(e).__name__)
         return FonteDocumento.ESCANEADO
 
     return classificar_fonte(nome, texto, paginas)

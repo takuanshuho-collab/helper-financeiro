@@ -283,6 +283,7 @@ def _no_extrair(state: EstadoExtracao,
         try:
             ctx.extrator = obter_extrator(ctx.cfg)
         except Exception as e:  # noqa: BLE001
+            log.debug("Falha ao obter extrator (config): %s", type(e).__name__)
             return {"motivos": [f"ERRO_CONFIG:{type(e).__name__}"],
                     "tentativas": MAX_TENTATIVAS}
     tentativas = state.get("tentativas", 0) + 1
@@ -291,6 +292,8 @@ def _no_extrair(state: EstadoExtracao,
     except ValidationError:
         return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
     except Exception as e:  # noqa: BLE001 — P8 na entrada: falhou ⇒ fallback regex do chamador
+        # Só o tipo: `state["documento"]` é o contrato do usuário (PII).
+        log.debug("Falha ao extrair do documento: %s", type(e).__name__)
         return {"motivos": [f"ERRO_PROVIDER:{type(e).__name__}"],
                 "tentativas": tentativas}
     return {"extracao": extracao.model_dump(), "motivos": [],

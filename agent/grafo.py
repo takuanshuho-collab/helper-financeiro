@@ -138,6 +138,7 @@ def chamar_llm(state: EstadoAnalise,
         try:
             ctx.provider = obter_provider(ctx.cfg)
         except Exception as e:  # noqa: BLE001
+            log.debug("Falha ao obter provider (config): %s", type(e).__name__)
             return {"motivos": [f"ERRO_CONFIG:{type(e).__name__}"],
                     "tentativas": MAX_TENTATIVAS}
 
@@ -154,6 +155,8 @@ def chamar_llm(state: EstadoAnalise,
     except ValidationError:
         return {"motivos": ["REQ-LLM-002:SCHEMA"], "tentativas": tentativas}
     except Exception as e:  # noqa: BLE001 — qualquer falha do LLM degrada com segurança
+        # Só o tipo: `_fatos_de(state)` carrega dados financeiros do usuário.
+        log.debug("Falha ao chamar o provider de análise: %s", type(e).__name__)
         return {"motivos": [f"ERRO_PROVIDER:{type(e).__name__}"],
                 "tentativas": tentativas}
     if not isinstance(candidata, AnaliseAgente):

@@ -13,9 +13,12 @@ precisariam de OCR. A função avisa quando o PDF não tem texto extraível.
 """
 from __future__ import annotations
 
+import logging
 import re
 
 from .utils import parse_taxa, parse_valor
+
+log = logging.getLogger("helper_financeiro.extrator_pdf")
 
 
 def _texto_das_paginas(pdf: object) -> str:
@@ -62,7 +65,10 @@ def extrair_markdown_pdf_bytes(dados: bytes) -> str:
     try:
         with pymupdf.open(stream=dados, filetype="pdf") as doc:
             return pymupdf4llm.to_markdown(doc)
-    except Exception:  # noqa: BLE001 — melhor esforço; o fallback é o texto plano
+    except Exception as e:  # noqa: BLE001 — melhor esforço; o fallback é o texto plano
+        # C-31: só o tipo — `dados` é o documento do usuário (PII), nunca no log.
+        log.debug("Falha ao converter PDF em Markdown (fallback texto plano): %s",
+                  type(e).__name__)
         return ""
 
 

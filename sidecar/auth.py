@@ -60,6 +60,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from .arquivos import gravar_json_atomico
+
 # Versão do formato do auth.json — sobe se o layout dos metadados mudar.
 FORMATO_AUTH = 1
 
@@ -320,15 +322,9 @@ class Cofre:
         return dados
 
     def _salvar(self, dados: dict) -> None:
-        """Escrita atômica: grava num temporário e faz `os.replace` (nunca deixa
-        um auth.json truncado se o processo morrer no meio)."""
-        self._caminho.parent.mkdir(parents=True, exist_ok=True)
-        texto = json.dumps(dados, ensure_ascii=False, indent=2)
-        temporario = self._caminho.with_name(
-            f"{self._caminho.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
-        )
-        temporario.write_text(texto, encoding="utf-8")
-        os.replace(temporario, self._caminho)
+        """Escrita atômica (C-27): grava num temporário e faz `os.replace` —
+        nunca deixa um auth.json truncado se o processo morrer no meio."""
+        gravar_json_atomico(self._caminho, dados)
 
     # ---------------------------------------------------- anti-brute-force
     def _espera_pendente(self, dados: dict) -> float:

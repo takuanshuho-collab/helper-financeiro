@@ -1128,35 +1128,33 @@ def _form_para_lista(form: dict) -> list[dict]:
     ]
 
 
-# O retrieval (embeddings via LlamaIndex) só existe no Ollama (`/api/embed`).
-# Servidores locais OpenAI-compatible (LM Studio/llama.cpp) não têm embeddings
-# compatíveis — tentar o retrieval bate num endpoint inexistente e ainda joga o
-# documento inteiro no prompt (lento no modelo local). Nesses casos, truncamos.
+# C-19: `preparar_contexto` (agent/ingestao.py) não faz mais retrieval — o ramo
+# RAG por embeddings foi removido no portão M19 (código quase-morto, sem teste
+# offline). O gate abaixo já não é "quem tem embeddings": Ollama/local ganham o
+# teto mais folgado de `LIMITE_DIRETO_CHARS` (6000, de `preparar_contexto`);
+# os demais (OpenAI-compat local — LM Studio/llama.cpp) ficam no teto mais
+# curto de `LIMITE_EXTRACAO_LLM` (4000) — CPU paga o custo no PROCESSAMENTO DO
+# PROMPT, então um contexto mais curto acelera a extração sem perder os campos
+# (ficam nas primeiras páginas). Os dois tetos continuam distintos DE PROPÓSITO:
+# colapsá-los num só mudaria o valor efetivo já aplicado hoje num dos dois
+# caminhos — mantidos separados por decisão consciente (C-19/C-26).
 _PROVIDERS_COM_EMBEDDINGS = {"local", "ollama"}
 
-# Teto de caracteres do documento entregue à LLM na extração. Bem abaixo do
-# `LIMITE_DIRETO_CHARS` (6000) do retrieval: modelos locais em CPU pagam o custo
-# no PROCESSAMENTO DO PROMPT (~min p/ milhares de tokens), então um contexto mais
-# curto — os dados do contrato ficam nas primeiras páginas — acelera a extração
-# sem perder os campos. Documento longo de verdade deve usar Ollama + embeddings.
 LIMITE_EXTRACAO_LLM = 4000
 
 
 def _contexto_seguro(texto: str, cfg: ConfigAgente | None) -> str:
-    """Prepara o contexto p/ a extração: retrieval no Ollama; truncagem no resto.
+    """Prepara o contexto p/ a extração, truncando por provider (C-19).
 
-    Documento curto vai inteiro. Documento longo: só o Ollama faz retrieval por
-    embeddings; para OpenAI-compat local, trunca em `LIMITE_EXTRACAO_LLM` —
-    determinístico, sem `/api/embed` e com um prompt enxuto (crucial em modelos
-    locais lentos).
+    Documento curto vai inteiro nos dois caminhos. Documento longo: Ollama/local
+    usa o teto de `preparar_contexto` (`LIMITE_DIRETO_CHARS`, 6000); os demais
+    truncam em `LIMITE_EXTRACAO_LLM` (4000). Truncagem pura, sem I/O de rede —
+    não há mais "melhor esforço" a proteger com try/except.
     """
     conf = cfg or carregar_config()
     if conf.provider.strip().lower() not in _PROVIDERS_COM_EMBEDDINGS:
         return texto[:LIMITE_EXTRACAO_LLM]
-    try:
-        return preparar_contexto(texto, conf)
-    except Exception:  # noqa: BLE001 — sem embeddings ⇒ melhor esforço (texto direto)
-        return texto[:LIMITE_EXTRACAO_LLM]
+    return preparar_contexto(texto, conf)
 
 
 def _diag_llm(cfg: ConfigAgente | None) -> dict:

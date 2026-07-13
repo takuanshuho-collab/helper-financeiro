@@ -43,11 +43,6 @@ def _interpretacoes(bruto: str) -> list[float]:
     return cands
 
 
-def _to_float(bruto: str) -> float:
-    """Interpretação pt-BR (mantida para compatibilidade/depuração)."""
-    return float(bruto.replace(".", "").replace(",", "."))
-
-
 def _numeros_permitidos(fatos: FatosFinanceiros) -> set[float]:
     """Monta o conjunto de números legítimos a partir dos fatos.
 
@@ -88,16 +83,6 @@ def _bate(valor: float, permitidos: set[float]) -> bool:
         if abs(valor - p) < 0.5:   # contagens (meses/parcelas) ~ exatas
             return True
     return False
-
-
-def extrair_numeros(texto: str) -> list[float]:
-    """Interpretação pt-BR (primária) de cada token numérico do texto."""
-    numeros = []
-    for m in _RE_NUMERO.findall(texto):
-        interps = _interpretacoes(m)
-        if interps:
-            numeros.append(interps[0])
-    return numeros
 
 
 def coletar_textos(analise: AnaliseAgente) -> list[str]:
