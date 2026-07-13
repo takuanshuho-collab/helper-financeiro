@@ -11,9 +11,11 @@ from __future__ import annotations
 import secrets
 import sqlite3
 import threading
+import traceback
 from pathlib import Path
 
 import pytest
+import sqlcipher3
 
 from sidecar import persistencia
 from sidecar.persistencia import (
@@ -404,3 +406,102 @@ def test_migracao_falha_na_verificacao_preserva_original(tmp_path, monkeypatch):
     repo2 = Repositorio(caminho, dek=None)
     assert repo2.carregar_estado("perfil") is not None
     repo2.fechar()
+
+
+# ------------------------- blindagem da DEK na statement SQL (C-21, T-1908)
+# A DEK é interpolada inline no `PRAGMA key`/`ATTACH ... KEY` (raw key, sem KDF —
+# ADR-0016 §B). Se uma dessas execuções explodir ecoando a statement, o hex do
+# segredo-mestre poderia subir no traceback → stderr → terminal (o `main.ts` ecoa
+# o stderr do sidecar sem scrub; a política do T-1603 de NÃO filtrar é mantida —
+# por isso a defesa nasce na fonte). Estes testes provam que NENHUMA exceção que
+# sai do módulo carrega o hex — nem no texto, nem na cadeia `__cause__`/
+# `__context__`. Antes da correção (execuções sem try/except) eles FALHAM.
+
+# DEK fixa e reconhecível para estes testes (hex 000102…1f) — facilita ver o
+# vazamento se um dia reaparecer no output do pytest.
+_DEK_C21 = bytes(range(32))
+
+
+class _ConexaoQueEcoaAStatement:
+    """Conexão SQLCipher FALSA cujo `execute` explode ECOANDO a statement.
+
+    É o pior caso do C-21: se o hex da DEK aparece no SQL (o `PRAGMA key`/
+    `ATTACH` com a chave inline), levanta um erro cuja mensagem contém a própria
+    statement — exatamente o traceback que, sem a blindagem, chegaria ao stderr
+    com o segredo dentro. As demais statements não são exercidas neste cenário.
+    """
+
+    def __init__(self, *_a, **_k) -> None:
+        self.row_factory = None
+
+    def execute(self, sql, *_params):
+        if _DEK_C21.hex() in sql:
+            raise sqlcipher3.Error(f'near "{sql}": syntax error')
+        return self
+
+    def fetchone(self):
+        return None
+
+    def fetchall(self):
+        return []
+
+    def close(self) -> None:
+        pass
+
+
+def _texto_de_toda_a_cadeia(exc: BaseException) -> str:
+    """str/repr/args de `exc` e de TODA a sua cadeia (`__cause__` e `__context__`,
+    recursivamente). Varre o grafo bruto: uma correção de vazamento tem de deixar
+    o hex ausente em QUALQUER nó da cadeia, não só suprimido na impressão."""
+    partes: list[str] = []
+    vistos: set[int] = set()
+    pilha: list[BaseException | None] = [exc]
+    while pilha:
+        atual = pilha.pop()
+        if atual is None or id(atual) in vistos:
+            continue
+        vistos.add(id(atual))
+        partes.append(str(atual))
+        partes.append(repr(atual))
+        partes.extend(repr(a) for a in atual.args)
+        pilha.append(atual.__cause__)
+        pilha.append(atual.__context__)
+    return "\n".join(partes)
+
+
+def _assert_sem_hex_da_dek(exc: BaseException) -> None:
+    hexdek = _DEK_C21.hex()
+    # 1) Nada em str/repr/args de toda a cadeia de exceções.
+    assert hexdek not in _texto_de_toda_a_cadeia(exc)
+    # 2) E — o vetor real do C-21 — nada no traceback formatado que iria ao stderr.
+    formatado = "".join(
+        traceback.format_exception(type(exc), exc, exc.__traceback__)
+    )
+    assert hexdek not in formatado
+
+
+def test_pragma_key_que_explode_nao_vaza_a_dek(tmp_path, monkeypatch):
+    # Força o `PRAGMA key`/sanidade a explodir ecoando a statement com o hex.
+    monkeypatch.setattr(
+        persistencia.sqlcipher3, "connect",
+        lambda *a, **k: _ConexaoQueEcoaAStatement(),
+    )
+    with pytest.raises(ChaveInvalida) as exc:
+        persistencia._conectar(tmp_path / "dados.db", _DEK_C21)
+    _assert_sem_hex_da_dek(exc.value)
+    # A exceção que sai é a tipada, com mensagem fixa (não a statement crua).
+    assert "cofre" in str(exc.value).lower()
+
+
+def test_attach_que_explode_nao_vaza_a_dek(tmp_path, monkeypatch):
+    # Força o `ATTACH ... KEY` da exportação a explodir ecoando o hex.
+    monkeypatch.setattr(
+        persistencia.sqlcipher3, "connect",
+        lambda *a, **k: _ConexaoQueEcoaAStatement(),
+    )
+    with pytest.raises(ErroMigracao) as exc:
+        persistencia._exportar_para_cofre(
+            tmp_path / "claro.db", tmp_path / "cofre.db", _DEK_C21
+        )
+    _assert_sem_hex_da_dek(exc.value)
+    assert "cofre" in str(exc.value).lower()

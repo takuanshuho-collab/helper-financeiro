@@ -96,6 +96,18 @@ class ErroMigracao(RuntimeError):
 
 
 # --------------------------------------------------------- helpers de cofre
+# INVARIANTE DE SEGURANÇA (C-21, REQ-SEC-001/006): nenhuma exceção que atravesse
+# este módulo pode carregar a statement SQL que embute a DEK — nem no texto, nem
+# na cadeia `__cause__`/`__context__`. A chave só aparece inline no `PRAGMA key`/
+# `ATTACH ... KEY` montados aqui; se uma dessas execuções explodir, a exceção
+# original (cujos `args` podem ecoar a statement com o hex) é SEVERADA e trocada
+# por um erro de mensagem fixa. Severar de verdade exige levantar o erro limpo
+# FORA do `except` que capturou a original: `raise ... from None` apenas SUPRIME
+# o contexto na impressão, mas `__context__` continua apontando para a exceção
+# com o hex. Isso é o cinto: a política do cofre (T-1603, revalidada no portão do
+# C-21) é NÃO filtrar o stderr do SQLCipher globalmente — logo a defesa tem de
+# nascer na fonte, aqui, antes que qualquer traceback chegue ao stderr que o
+# Electron ecoa (`main.ts`).
 def _blob_key(dek: bytes) -> str:
     """Representa a DEK como blob literal SQL `x'<hex>'` — raw key, sem KDF interno.
 
@@ -119,13 +131,24 @@ def _conectar(caminho: Path, dek: bytes | None) -> sqlite3.Connection:
         return con
     cifrada = sqlcipher3.connect(str(caminho), check_same_thread=False)
     cifrada.row_factory = sqlcipher3.Row
-    cifrada.execute(f'PRAGMA key = "{_blob_key(dek)}"')
+    # O `PRAGMA key` (que embute o hex da DEK) e a leitura de sanidade compartilham
+    # o MESMO tratamento: chave errada só falha na PRIMEIRA leitura, mas um erro no
+    # próprio `PRAGMA key` — ou um traceback que ecoe a statement — carregaria o hex.
+    # Capturamos `Exception` (largo de propósito: a fonte do erro não importa, o que
+    # importa é que NADA derivado da chave escape) e trocamos por `ChaveInvalida` de
+    # mensagem fixa. A exceção limpa é criada aqui mas LEVANTADA FORA do `except`
+    # (ver abaixo): `raise ... from None` só SUPRIME o contexto — o `__context__`
+    # ainda apontaria para a exceção original com o hex; levantar sem um `except`
+    # ativo nasce com `__context__ = None`, severando o vínculo de verdade.
+    erro_de_chave: ChaveInvalida | None = None
     try:
+        cifrada.execute(f'PRAGMA key = "{_blob_key(dek)}"')
         cifrada.execute("SELECT count(*) FROM sqlite_master").fetchone()
-    except sqlcipher3.DatabaseError:
+    except Exception:
         cifrada.close()
-        # Sem detalhe com a chave: a exceção não pode virar vetor de vazamento.
-        raise ChaveInvalida("Não foi possível abrir o cofre com a chave fornecida.") from None
+        erro_de_chave = ChaveInvalida("Não foi possível abrir o cofre com a chave fornecida.")
+    if erro_de_chave is not None:
+        raise erro_de_chave
     # sqlcipher3.Connection espelha a DBAPI do sqlite3; o cast diz "mesma interface".
     return cast("sqlite3.Connection", cifrada)
 
@@ -165,7 +188,18 @@ def _exportar_para_cofre(origem: Path, destino: Path, dek: bytes) -> None:
     """
     con = sqlcipher3.connect(str(origem), isolation_level=None)
     try:
-        con.execute(f'ATTACH DATABASE ? AS cofre KEY "{_blob_key(dek)}"', (str(destino),))
+        # Só o ATTACH embute a chave (destino vai por bind; a KEY é inline). Mesma
+        # invariante do `_conectar`: se explodir, a statement com o hex não pode
+        # subir. Trocamos por `ErroMigracao` (erro apropriado deste fluxo) criada no
+        # `except` e LEVANTADA fora dele, para `__context__` nascer None e severar a
+        # exceção original que ecoaria a statement (não só suprimi-la como `from None`).
+        erro_attach: ErroMigracao | None = None
+        try:
+            con.execute(f'ATTACH DATABASE ? AS cofre KEY "{_blob_key(dek)}"', (str(destino),))
+        except Exception:
+            erro_attach = ErroMigracao("Falha ao anexar o cofre cifrado para exportação.")
+        if erro_attach is not None:
+            raise erro_attach
         con.execute("SELECT sqlcipher_export('cofre')").fetchall()
         # Preserva o user_version (não usado hoje — versionamos pela tabela
         # `esquema` — mas copiar é barato e à prova de futuro).
