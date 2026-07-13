@@ -6,6 +6,8 @@ determinísticas (índice existe, campo existe no core, natureza coerente).
 Item que viole qualquer trava é descartado; sem LLM, o resultado degrada
 para "classificação manual" com o motivo (P8), nunca com exceção.
 """
+from pydantic import ValidationError
+
 from agent.classificacao import (
     OllamaClassificador,
     OpenAICompatClassificador,
@@ -151,3 +153,94 @@ def test_fabrica_sem_hf_base_url_cai_no_runtime_embarcado(monkeypatch):
     classificador = obter_classificador(ConfigAgente(provider="local"))
     assert isinstance(classificador, OpenAICompatClassificador)
     assert classificador.url == "http://127.0.0.1:5599/v1/chat/completions"
+
+
+def _validation_error() -> ValidationError:
+    """Gera um ValidationError real (não um mock) — mesmo tipo que
+    `model_validate_json` levanta quando a LLM devolve algo fora do schema."""
+    try:
+        ItemClassificado(indice="não-é-índice", categoria=1, campo_pai=None)
+    except ValidationError as e:
+        return e
+    raise AssertionError("esperava ValidationError")
+
+
+def test_resposta_fora_do_schema_degrada_apos_esgotar_as_tentativas():
+    # C-33: as duas tentativas (REQ-LLM-002) devolvem algo não-parseável ⇒
+    # degradação para classificação manual com o motivo do schema, sem itens.
+    fake = FakeClassificador(erro=_validation_error())
+    resultado = classificar_grupos(GRUPOS, classificador=fake)
+    assert fake.chamadas == 2
+    assert resultado.por_indice == {}
+    assert resultado.descartes == []
+    assert resultado.motivos == ["REQ-LLM-002:SCHEMA"]
+
+
+def test_resposta_fora_do_schema_recupera_na_segunda_tentativa():
+    # A primeira resposta não bate o schema; a segunda (retry) é válida —
+    # REQ-LLM-002 permite 1 recuperação, e o resultado final não carrega motivo.
+    class FakeComRecuperacao:
+        def __init__(self):
+            self.chamadas = 0
+
+        def classificar(self, grupos):
+            self.chamadas += 1
+            if self.chamadas == 1:
+                raise _validation_error()
+            return classificacao_fiel()
+
+    fake = FakeComRecuperacao()
+    resultado = classificar_grupos(GRUPOS, classificador=fake)
+    assert fake.chamadas == 2
+    assert resultado.por_indice == {
+        0: ("renda", "salario_liquido"),
+        1: ("fixas", "contas_casa"),
+        2: ("fixas", "transporte"),
+    }
+    assert resultado.motivos == []
+
+
+def test_openai_compat_classificador_sem_api_key_nao_envia_authorization(monkeypatch):
+    # Sem api_key configurada, o header Authorization não deve ser enviado
+    # (servidor local sem autenticação — caso comum de LM Studio/llama-server).
+    capturado = {}
+
+    def fake_post_json(url, payload, *, headers, timeout_s):
+        capturado["headers"] = headers
+        return {"choices": [{"message": {
+            "content": classificacao_fiel().model_dump_json()}}]}
+
+    monkeypatch.setattr("agent.classificacao._post_json", fake_post_json)
+    cfg = ConfigAgente(provider="openai_compat",
+                       base_url="http://127.0.0.1:1234/v1", api_key=None)
+    resultado = OpenAICompatClassificador(cfg).classificar(GRUPOS)
+    assert capturado["headers"] == {}
+    assert resultado == classificacao_fiel()
+
+
+def test_openai_compat_classificador_com_api_key_envia_bearer(monkeypatch):
+    capturado = {}
+
+    def fake_post_json(url, payload, *, headers, timeout_s):
+        capturado["headers"] = headers
+        return {"choices": [{"message": {
+            "content": classificacao_fiel().model_dump_json()}}]}
+
+    monkeypatch.setattr("agent.classificacao._post_json", fake_post_json)
+    cfg = ConfigAgente(provider="openai_compat",
+                       base_url="http://127.0.0.1:1234/v1", api_key="chave-x")
+    OpenAICompatClassificador(cfg).classificar(GRUPOS)
+    assert capturado["headers"] == {"Authorization": "Bearer chave-x"}
+
+
+def test_ollama_classificador_usa_api_nativa_e_parseia_message_content(monkeypatch):
+    # Dialeto nativo do Ollama: content vem em resposta["message"]["content"],
+    # diferente do dialeto OpenAI-compatible (resposta["choices"][0][...]).
+    def fake_post_json(url, payload, *, headers, timeout_s):
+        assert url.endswith("/api/chat")
+        return {"message": {"content": classificacao_fiel().model_dump_json()}}
+
+    monkeypatch.setattr("agent.classificacao._post_json", fake_post_json)
+    cfg = ConfigAgente(provider="local", base_url="http://localhost:11434/v1")
+    resultado = OllamaClassificador(cfg).classificar(GRUPOS)
+    assert resultado == classificacao_fiel()
