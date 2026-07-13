@@ -307,17 +307,17 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | Achados | Depende | Status |
 |----|------|-----|---------|--------|
-| T-1901 | Validação de entrada na fronteira: `Field(ge=0)` nos campos monetários + clamp no `CampoMoeda`; normalizar `detail` de `RequestValidationError` (lista→string legível); alinhar saídas de `/rubricas` ao contrato (Sonnet) | C-01, C-07, C-32 | portão | ⬜ |
-| T-1902 | Ciclo de vida de processos: Job Object no Windows (mata a árvore no kill duro), shutdown gracioso com prazo no Electron, dreno do stdout pós-handshake; testes cobrem o caminho de kill do runtime (C-18) (Opus) | C-02, C-11, C-24 | portão | ⬜ |
-| T-1903 | Disciplina de lock do runtime LLM: eliminar a corrida da troca de modelo (instância invalidada após `encerrar()`) e não reter o lock durante o boot/health (estado "iniciando") (Opus) | C-03, C-12 | T-1902 | ⬜ |
-| T-1904 | Expurgo de jobs em memória: TTL/limite p/ `_JOBS_IA` e `_JOBS_DOWNLOAD`, descarte no `bloquear()`/auto-lock (PII), cache do hash do catálogo por (caminho, mtime, tamanho) (Opus) | C-04, C-08, C-14 | T-1903 | ⬜ |
-| T-1905 | Caminho de erro não-JSON do IPC: `try/catch` no `resp.json()` do `chamarSidecar` + `exception_handler(Exception)` no sidecar garantindo corpo JSON em todo 500 (Sonnet) | C-06 | T-1902 | ⬜ |
-| T-1906 | Pequenos silenciosos: catraca de cobertura passa a medir `sidecar/`; lock no singleton do OCR; log sem nome de arquivo (PII); `log.warning` no job de IA (Sonnet) | C-05, C-13, C-22, C-34 | T-1904 | ⬜ |
-| T-1907 | Flake E2E: substituir as 7 esperas fixas `waitForTimeout(1_500)` pela condição real esperada (Sonnet) | C-20 | — | ⬜ |
-| T-1908 | Blindagem da DEK: try/except nas execuções `PRAGMA key`/`ATTACH ... KEY` relançando sem a statement; política de stderr do T-1603 MANTIDA e documentada (decisão do portão) (Opus) | C-21 | T-1904 | ⬜ |
-| T-1909 | Limpeza e observabilidade: remover ramo RAG + 4 funções mortas + docstring; helper único de normalização pt-BR; `_gravar_json_atomico` único; `log.debug` nos 18 `except` de degradação P8 (Sonnet) | C-19, C-25, C-26, C-27, C-30, C-31 | T-1906 | ⬜ |
-| T-1910 | Testes de fallback: ramos com decisão de `agent/classificacao.py` e `core/extrator_pdf.py` + teste fixando o truncamento de documento longo (Sonnet) | C-33 (+C-19) | T-1909 | ⬜ |
-| T-1911 | Fechamento do ciclo: gates, rebuild dos binários, ata `FREEZE.md` v2.9.0 e docs sincronizados (orquestrador) | Processo | todas | ⬜ |
+| T-1901 | Validação de entrada na fronteira: `Field(ge=0)` nos campos monetários + clamp no `CampoMoeda`; normalizar `detail` de `RequestValidationError` (lista→string legível); alinhar saídas de `/rubricas` ao contrato (Sonnet) | C-01, C-07, C-32 | portão | ✅ `0eefba5` |
+| T-1902 | Ciclo de vida de processos: Job Object no Windows (mata a árvore no kill duro), shutdown gracioso com prazo no Electron, dreno do stdout pós-handshake; testes cobrem o caminho de kill do runtime (C-18) (Opus) | C-02, C-11, C-24 | portão | ✅ `81372b5` |
+| T-1903 | Disciplina de lock do runtime LLM: eliminar a corrida da troca de modelo (instância invalidada após `encerrar()`) e não reter o lock durante o boot/health (estado "iniciando") (Opus) | C-03, C-12 | T-1902 | ✅ `837f57b` |
+| T-1904 | Expurgo de jobs em memória: TTL/limite p/ `_JOBS_IA` e `_JOBS_DOWNLOAD`, descarte no `bloquear()`/auto-lock (PII), cache do hash do catálogo por (caminho, mtime, tamanho) (Opus) | C-04, C-08, C-14 | T-1903 | ✅ `f7fac65` |
+| T-1905 | Caminho de erro não-JSON do IPC: `try/catch` no `resp.json()` do `chamarSidecar` + `exception_handler(Exception)` no sidecar garantindo corpo JSON em todo 500 (Sonnet) | C-06 | T-1902 | ✅ `89dc338` |
+| T-1906 | Pequenos silenciosos: catraca de cobertura passa a medir `sidecar/`; lock no singleton do OCR; log sem nome de arquivo (PII); `log.warning` no job de IA (Sonnet) | C-05, C-13, C-22, C-34 | T-1904 | ✅ `ee51fe3` |
+| T-1907 | Flake E2E: substituir as 7 esperas fixas `waitForTimeout(1_500)` pela condição real esperada (Sonnet) | C-20 | — | ✅ `fd32081` |
+| T-1908 | Blindagem da DEK: try/except nas execuções `PRAGMA key`/`ATTACH ... KEY` relançando sem a statement; política de stderr do T-1603 MANTIDA e documentada (decisão do portão) (Opus) | C-21 | T-1904 | ✅ `bfb24c5` |
+| T-1909 | Limpeza e observabilidade: remover ramo RAG + 4 funções mortas + docstring; helper único de normalização pt-BR; `_gravar_json_atomico` único; `log.debug` nos 18 `except` de degradação P8 (Sonnet) | C-19, C-25, C-26, C-27, C-30, C-31 | T-1906 | ✅ `f980be7` |
+| T-1910 | Testes de fallback: ramos com decisão de `agent/classificacao.py` e `core/extrator_pdf.py` + teste fixando o truncamento de documento longo (Sonnet) | C-33 (+C-19) | T-1909 | ✅ `982a75c` |
+| T-1911 | Fechamento do ciclo: gates, rebuild dos binários, ata `FREEZE.md` v2.9.0 e docs sincronizados (orquestrador) | Processo | todas | ✅ (este commit) |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -325,20 +325,19 @@ harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
 ## Próxima ação recomendada
-**Ciclo v2.9 ABERTO (ADR-0017, M18+M19) — saúde de código.** Nenhum recurso
-novo: auditoria profunda (5 varreduras especializadas por família de categoria
-+ consolidação em `docs/RELATORIO-AUDITORIA.md`) → **portão humano** (o
-mantenedor aprova a lista de correções) → correção com teste de regressão
-obrigatório → ata v2.9.0. Perímetro: Python de primeira parte + fronteira TS.
-Restrições: zero regressão, sem migração de schema/quebra do cofre, sem
-mudança de comportamento visível exceto bug real (ADR-0017 §E). **M18 COMPLETO
-(2026-07-12):** 5 varreduras + consolidação em `docs/RELATORIO-AUDITORIA.md`
-(34 achados: 1 crítico, 5 altos, 14 médios, 14 baixos) + portão aprovado.
-Próxima ação: executar M19 na ordem T-1901 → … → T-1910 (T-1907 é independente
-e pode intercalar), commit task a task com autorização do mantenedor;
-T-1911 fecha o ciclo com a ata v2.9.0. Nota: a fase 0 do PaddleOCR-VL foi
-executada FORA de ciclo (2026-07-12) com veredito "manter RapidOCR" —
-relatório em `docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (untracked).
+**Ciclo v2.9 FECHADO (ADR-0017, M18+M19) — saúde de código, 2026-07-13.**
+M18: 5 varreduras + consolidação em `docs/RELATORIO-AUDITORIA.md` (34 achados:
+1 crítico, 5 altos, 14 médios, 14 baixos) + portão aprovado em 2026-07-12.
+M19: T-1901..T-1910 corrigiram 26 achados com teste de regressão obrigatório
+(desfecho por achado na seção final do relatório); cobertura 95,8% → 96,6%.
+T-1911: deps `llama-index-*` órfãs removidas (decisão do mantenedor; −43
+pacotes, incl. `nltk` → C-17 resolvido de fato), bump 2.9.0, build oficial,
+smoke do pacote e ata `docs/FREEZE.md` v2.9.0. **Registrados para ciclos
+futuros:** C-10, C-15 (code signing), C-16 (bump Electron), C-23, C-28/C-29
+(complexidade), C-35. Nota: a fase 0 do PaddleOCR-VL foi executada FORA de
+ciclo (2026-07-12) com veredito "manter RapidOCR" — relatório em
+`docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (untracked). Próximo ciclo: a
+definir pelo mantenedor (candidatos: registrados acima).
 
 ### Histórico do ciclo v2.8 (fechado)
 

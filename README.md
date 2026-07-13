@@ -24,7 +24,12 @@ recuperação (sem backdoor), banco local cifrado com **SQLCipher** e auto-lock 
 e a **IA local deixou de exigir programa de terceiros**: o `llama-server`
 (llama.cpp) vem embarcado e o próprio app baixa o modelo (catálogo verificado
 por SHA-256) ou aceita um `.gguf` seu; quem já usa Ollama/LM Studio continua
-podendo apontar para ele (`HF_BASE_URL`).
+podendo apontar para ele (`HF_BASE_URL`). O ciclo v2.9 (ADR-0017) foi de
+**saúde de código**: auditoria completa (34 achados), 26 correções com teste
+de regressão — destaque para o **Job Object** que garante que nenhum
+`llama-server` fica órfão nem num encerramento forçado — e dependências
+órfãs removidas (instalador ~21 MB menor). Nenhum recurso novo, zero
+mudança de comportamento visível.
 
 ---
 
@@ -117,8 +122,8 @@ uv run python main.py --tkinter
 
 ## 📦 Como gerar o `.exe` (PyInstaller, T-401)
 
-Uma linha, usando o próprio ambiente do uv (o spike T-257 provou que
-langgraph/llama-index congelam sem `--collect` extra; só o `pdfplumber` e o
+Uma linha, usando o próprio ambiente do uv (o spike T-257 provou que o
+langgraph congela sem `--collect` extra; só o `pdfplumber` e o
 `python-docx` carregam dados que o PyInstaller não detecta sozinho):
 
 ```bash

@@ -12,11 +12,12 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0016) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0017) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
-| 12 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
+| 12 | [`RELATORIO-AUDITORIA.md`](RELATORIO-AUDITORIA.md) | Auditoria de saúde de código do ciclo v2.9 (M18) + desfecho do M19 |
+| 13 | [`FREEZE.md`](FREEZE.md) | Ata de congelamento com SHA-256 |
 
 ## Fluxo Spec-Driven
 ```
@@ -112,7 +113,17 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   REQ-F-027/028. `HF_BASE_URL` definido preserva o servidor do usuário
   (ADR-0002). Sem migração de schema relacional (o banco inteiro passou a ser
   cifrado; migração atômica no cadastro do cofre).
-- **Mudanças nos artefatos congelados (v2.8.0) exigem nova ADR + incremento de
+- **Ciclo v2.9 FECHADO (`FREEZE.md` v2.9.0, ADR-0017, M18+M19):** ciclo de
+  **saúde de código** — nenhum recurso novo. M18: 5 varreduras somente-leitura
+  + consolidação (`RELATORIO-AUDITORIA.md`, 34 achados) + portão humano. M19:
+  26 achados corrigidos com teste de regressão obrigatório (Job Object mata a
+  árvore do `llama-server` em kill duro; disciplina de locks do runtime LLM;
+  TTL + descarte de PII dos jobs em memória; blindagem da DEK na cadeia de
+  exceções; handlers de validação/500 sempre JSON; remoção do ramo RAG morto e
+  das deps `llama-index-*` órfãs — −43 pacotes; E2E sem esperas fixas).
+  Cobertura 95,8% → 96,6% com o `sidecar/` medido. Zero regressão, sem
+  migração de schema (ADR-0017 §E).
+- **Mudanças nos artefatos congelados (v2.9.0) exigem nova ADR + incremento de
   versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar

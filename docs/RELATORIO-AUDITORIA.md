@@ -549,3 +549,53 @@ A recomendação aprovada, na íntegra:
 Me diga, por achado ou por grupo, o que vira task de correção (T-19xx) e o que
 fica registrado. A partir daí monto o plano do M19 com teste de regressão
 obrigatório para cada correção aprovada.
+
+---
+
+## Desfecho do ciclo (M19) — 2026-07-13
+
+Fechamento da T-1911. Cada achado com sua resolução final e o commit que a
+entregou. Todas as correções têm teste de regressão que falharia antes da
+mudança (exigência ADR-0017 §E).
+
+| Achado | Desfecho | Task / commit |
+|---|---|---|
+| C-01 | **Corrigido** — `Field(ge=0)` em todos os campos monetários de entrada | T-1901 `0eefba5` |
+| C-02 | **Corrigido** — Job Object do Windows (`job_windows.py`) mata a árvore em qualquer morte do sidecar | T-1902 `81372b5` |
+| C-03 | **Corrigido** — disciplina `_lock_start`/`_lock_estado` + `RuntimeLLMInvalidado` + retry no chokepoint | T-1903 `837f57b` |
+| C-04 | **Corrigido** — TTL 600 s + descarte de PII no bloqueio (manual e auto-lock), com guarda anti-ressurreição | T-1904 `f7fac65` |
+| C-05 | **Corrigido** — catraca de cobertura passa a medir `sidecar/` (96,6% no fechamento) | T-1906 `ee51fe3` |
+| C-06 | **Corrigido** — `chamarSidecar` trata resposta não-JSON com status real | T-1905 `89dc338` |
+| C-07 | **Corrigido** — handler de `RequestValidationError` converte `detail` lista→string | T-1901 `0eefba5` |
+| C-08 | **Corrigido** — expurgo comum de jobs terminais (dicts paralelos, contrato JSON intacto) | T-1904 `f7fac65` |
+| C-10 | **Registrado sem correção** — escapou do portão (não entrou em task nem na lista de registrados). Risco contido: `metodo` vem apenas do preload tipado, nunca de entrada do usuário. Candidato ao próximo ciclo. | — |
+| C-11 | **Corrigido** — shutdown gracioso `POST /encerrar` + `Promise.race` com prazo de 3 s | T-1902 `81372b5` |
+| C-12 | **Corrigido** — boot fora do lock de estado; `base_url()` reconfere disponibilidade antes de ler a porta | T-1903 `837f57b` |
+| C-13 | **Corrigido** — singleton do motor OCR sob `_LOCK_MOTOR_OCR` | T-1906 `ee51fe3` |
+| C-14 | **Corrigido** — cache de SHA-256 por `(caminho, mtime_ns, tamanho)` | T-1904 `f7fac65` |
+| C-15 | **Registrado** — code signing depende de certificado (ciclo dedicado) | — |
+| C-16 | **Registrado** — bump do Electron é major breaking (ciclo próprio, §E.4) | — |
+| C-17 | **Resolvido de fato na T-1911** — a remoção das deps `llama-index-*` órfãs eliminou o `nltk` da árvore de dependências; PYSEC-2026-597 não se aplica mais. | T-1911 |
+| C-18 | **Corrigido** — caminhos sensíveis agora exercitados por teste (Job Object, kill duro, invalidação do runtime) | T-1902/T-1903 |
+| C-19 | **Corrigido** — ramo RAG removido; `preparar_contexto` vira truncagem pura com assinatura compatível | T-1909 `f980be7` |
+| C-20 | **Corrigido** — 6 `waitForTimeout` substituídos por poll da condição real (`aguardarAutoSave`); espera do TOTP mantida (relógio de parede RFC 6238) | T-1907 `fd32081` |
+| C-21 | **Corrigido** — exceção limpa criada no `except` e levantada fora dele nos 2 pontos com DEK inline; política de stderr do T-1603 mantida por decisão do portão. Nota técnica: `raise ... from None` NÃO bastaria (`__context__` persiste); o padrão adotado é estritamente mais forte. | T-1908 `bfb24c5` |
+| C-22 | **Corrigido** — logs de OCR usam só a extensão (`Path(...).suffix`), sem nome do arquivo | T-1906 `ee51fe3` |
+| C-23 | **Registrado** — permissões POSIX só importam se houver build não-Windows | — |
+| C-24 | **Corrigido** — `stdout.resume()` após o handshake | T-1902 `81372b5` |
+| C-25 | **Parcialmente corrigido** — 3 das 4 funções removidas (`extrair_numeros` + bônus `_to_float`, `apontar_gguf_local`, `carregar_documento`). `resetar_sessao` foi MANTIDA: a T-1904 (posterior à varredura) lhe deu um chamador real em `tests/test_sessao.py` — o achado estava correto na época, ficou desatualizado pelo próprio ciclo. | T-1909 `f980be7` |
+| C-26 | **Corrigido** — `_normalizar_texto_monetario` único em `core/utils.py` (`_interpretacoes` mantida: semântica distinta) | T-1909 `f980be7` |
+| C-27 | **Corrigido** — `gravar_json_atomico` único em `sidecar/arquivos.py`, usado por `auth.py` e `gestor_modelos.py` | T-1909 `f980be7` |
+| C-28 | **Registrado** — refatoração de `gerar_relatorio` fica para ciclo próprio | — |
+| C-29 | **Registrado** — hotspots secundários, idem | — |
+| C-30 | **Superado** — a docstring deixou de ser mentirosa: `resetar_sessao` agora TEM teste que a usa (ver C-25) | — |
+| C-31 | **Corrigido** — `log.debug`/`log.warning` antes dos fallbacks P8 onde já havia logger | T-1909 `f980be7` |
+| C-32 | **Corrigido** — rotas `/rubricas` devolvem exatamente `{rubricas, perfil}` | T-1901 `0eefba5` |
+| C-33 | **Corrigido** — `classificacao.py` e `extrator_pdf.py` a 100% de cobertura nos ramos de fallback | T-1910 `982a75c` |
+| C-34 | **Corrigido** — `_rodar_job_ia` loga `log.warning` com o tipo da exceção (sem PII) | T-1906 `ee51fe3` |
+| C-35 | **Registrado** — sem ação por definição (falsos positivos/estilo) | — |
+
+**Placar do fechamento:** 26 corrigidos (incl. o parcial C-25 e o C-17
+resolvido de fato), 8 sem correção neste ciclo (C-10, C-15, C-16, C-23, C-28,
+C-29, C-35 registrados; C-30 superado), cobertura 95,8% → **96,6%**, deps
+órfãs removidas (−43 pacotes na árvore, incl. `nltk`).

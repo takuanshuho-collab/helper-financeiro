@@ -58,9 +58,10 @@ arestas explícitas, LLM só nas pontas (Code-First):
 `agent/extracao.py` + `agent/ingestao.py` (ADR-0007). O modelo **extrai**
 variáveis (`capital`, `taxa`, `prazo`...), o código **verifica** e **calcula**:
 
-1. `ingestao.carregar_documento()` lê o PDF/extrato (texto = entrada NÃO
-   confiável, H5); `preparar_contexto()` faz retrieval top-k se o texto não
-   couber na janela (LlamaIndex `as_retriever`, nunca `as_query_engine`).
+1. O texto do PDF/extrato chega como entrada NÃO confiável (H5);
+   `ingestao.preparar_contexto()` **trunca** ao limite direto da janela
+   (desde o v2.9/T-1909 — o retrieval LlamaIndex da ADR-0007 nunca era
+   exercido no produto e foi removido).
 2. Nó `extrair`: LLM local (cloud é RECUSADA — o documento bruto tem PII, H2)
    devolve `ExtracaoContrato` com **citação verbatim obrigatória** por campo.
 3. Nó `verificar` (código puro): quote-check (trecho existe? o valor está no
@@ -85,7 +86,7 @@ variáveis (`capital`, `taxa`, `prazo`...), o código **verifica** e **calcula**
 | Schemas | pydantic v2 | contratos tipados |
 | LLM (structured) | JSON Schema nativo (Ollama `format` / `response_format`) + Pydantic, via stdlib | ADR-0005: sem SDK/framework |
 | Orquestração | LangGraph (StateGraph + interrupt + InMemorySaver) | ADR-0006: fluxo rígido, pausa p/ humano |
-| Ingestão/RAG | LlamaIndex core (retriever-only) + embeddings via Ollama | ADR-0007: local, sem torch |
+| Ingestão | leitura direta + truncagem (`agent/ingestao.py`) | ADR-0007 revogada no v2.9 (ADR-0017): o retrieval nunca era exercido; deps removidas |
 | LLM local | Ollama (`/api/chat`) OU OpenAI-compatible local (LM Studio/llama.cpp, `/v1`) — loopback | ADR-0010: local por endpoint |
 | LLM embarcada | `llama-server` (llama.cpp, CPU + Vulkan) gerido pelo sidecar; modelo GGUF via catálogo curado (SHA-256 travado) ou arquivo local | ADR-0016: padrão de fábrica sem terceiros; OpenAI-compat |
 | Cofre (repouso) | SQLCipher (`sqlcipher3`) + Argon2id (`argon2-cffi`) + AES-GCM (`cryptography`) — envelope DEK/KEK | ADR-0016: dados cifrados em repouso |

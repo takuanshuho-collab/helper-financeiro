@@ -1,6 +1,6 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.7.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.9.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
@@ -9,6 +9,13 @@
 
 O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 `REQ-GRD-*` ou `REQ-LLM-*` é considerado pronto sem um teste verde aqui.
+
+> **v2.9 (ADR-0017):** a medição de cobertura passou a incluir o pacote
+> `sidecar/` (antes fora da catraca — achado C-05); toda correção do M19
+> exigiu teste de regressão que falharia antes da mudança. Novos arquivos:
+> `tests/test_job_windows.py` (Job Object do Windows mata a árvore do
+> `llama-server` no kill duro, par prova/controle). Estado no fechamento:
+> 472 testes offline, cobertura 96,6% (piso de 90% no CI).
 
 ---
 

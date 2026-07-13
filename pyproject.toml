@@ -1,6 +1,6 @@
 [project]
 name = "helper-financeiro"
-version = "2.8.0"
+version = "2.9.0"
 description = "Diagnóstico de dívidas com estratégias de quitação, saídas em xlsx/docx e agente financeiro (LLM) sob guardrails"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,9 +12,6 @@ dependencies = [
     "pymupdf4llm>=0.0.17",  # PDF -> Markdown p/ a LLM de extração (ADR-0010; AGPL, uso não-comercial)
     "pydantic>=2.0",      # contratos tipados determinístico ↔ agente (v2)
     "langgraph>=1.2.7",                      # orquestração em grafo + interrupt (ADR-0006)
-    "llama-index-core>=0.14.23",             # ingestão/retrieval local (ADR-0007)
-    "llama-index-embeddings-ollama>=0.9.0",  # embeddings via Ollama, sem torch (ADR-0007)
-    "llama-index-readers-file>=0.6.0",       # leitura de PDF/docx na ingestão
     "fastapi>=0.139.0",
     "uvicorn>=0.50.0",
     "rapidocr>=3.9.1",   # OCR local: PaddleOCR PP-OCRv6 em ONNX (ADR-0015; H2/H7)
@@ -73,7 +70,7 @@ check_untyped_defs = true
 no_implicit_optional = true
 # GUI tkinter tem tipagem dinâmica pesada; endurecer na Fase 3 (AppController)
 [[tool.mypy.overrides]]
-module = ["pdfplumber.*", "openpyxl.*", "docx.*", "llama_index.*",
+module = ["pdfplumber.*", "openpyxl.*", "docx.*",
           "pymupdf.*", "pymupdf4llm.*", "rapidocr.*", "onnxruntime.*", "cv2.*"]
 ignore_missing_imports = true
 

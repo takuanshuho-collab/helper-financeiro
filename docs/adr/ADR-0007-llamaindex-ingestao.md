@@ -1,6 +1,9 @@
 # ADR-0007 — LlamaIndex como camada de ingestão local (retriever-only)
 
-- **Status:** Aceita · **Data:** 2026-07-04
+- **Status:** **Revogada no ciclo v2.9** (ADR-0017/T-1909, 2026-07-13: o ramo
+  de retrieval nunca era exercido no produto — a extração usa o texto direto
+  truncado — e as deps `llama-index-*` foram removidas na T-1911) ·
+  originalmente Aceita · **Data:** 2026-07-04
 - **Relacionada a:** REQ-GRD-001/002/005, REQ-NF-002, H1/H2/H5, T-254/T-255/T-256
 
 ## Contexto
