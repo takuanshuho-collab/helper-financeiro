@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.11.0 (ciclo ABERTO — ADR-0019; v2.10.0 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.12.0 (ciclo ABERTO — ADR-0020; v2.11.0 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -360,7 +360,23 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-2201 | Golden-master dos outputs: `tests/test_golden_outputs.py` com extratores determinísticos (`.docx` → `(estilo, texto)`; `.xlsx` → por aba `(coordenada, valor_ou_fórmula)`), goldens JSON em `tests/golden/` das fixtures do harness; regeneração SÓ com `HF_REGENERAR_GOLDEN=1` fora do CI; máscara de campo volátil no extrator (Opus) | C-28/C-29 (régua) | M21 | ✅ `f71270a` |
 | T-2202 | Refatoração `gerar_relatorio` (`outputs/relatorio.py`) por extração de seções; golden idêntico + C901 da função abaixo do teto (Opus) | C-28 | T-2201 | ✅ `3bef65c` |
 | T-2203 | Refatoração `_aba_evolucao` (`outputs/planilha.py`) e `baixar_modelo` (`sidecar/gestor_modelos.py`), mesmo contrato do T-2202 (Sonnet) | C-29 | T-2201 | ✅ `4ffb5f8` |
-| T-2204 | Fechamento do ciclo: medir pior C901 → fixar `max-complexity` e ativar `C901` no ruff (catraca permanente); gates, auditoria de deps (ADR-0018 §5), ata `FREEZE.md` v2.11.0; smoke NSIS dispensado (§E.4 não dispara — decisão registrada na ADR-0019 e na ata) (orquestrador) | Processo | todas | ✅ (este commit) |
+| T-2204 | Fechamento do ciclo: medir pior C901 → fixar `max-complexity` e ativar `C901` no ruff (catraca permanente); gates, auditoria de deps (ADR-0018 §5), ata `FREEZE.md` v2.11.0; smoke NSIS dispensado (§E.4 não dispara — decisão registrada na ADR-0019 e na ata) (orquestrador) | Processo | todas | ✅ `9ff25fd` |
+
+## Milestone M23 — Build/release v2.12 (ciclo v2.12, ADR-0020)
+
+> Reconstrói os binários oficiais incorporando o código v2.11 e fecha o
+> risco aceito da ata v2.11.0 (`setuptools` PYSEC-2026-3447). Design validado
+> em brainstorming com o mantenedor em 2026-07-14 (Decision Log na
+> **ADR-0020**). Sequência rígida: bumps → caronas de harness → build +
+> smokes (§E.4 dispara: bump de deps ⇒ smoke do pacote repetido) →
+> fechamento com **pip-audit obrigatoriamente 0**. Majors proibidos (§E).
+
+| ID | Task | Alvo | Depende | Status |
+|----|------|-----|---------|--------|
+| T-2301 | Bumps dirigidos: `setuptools` 83.0.0 (fecha PYSEC-2026-3447), Electron 43.1.1 (patch), `langgraph` 1.2.9, `uvicorn` 0.51; gates completos + E2E dev completo (Sonnet) | risco aceito v2.11.0 | ADR-0020 | ⬜ |
+| T-2302 | Caronas de harness: smoke do auto-update (`e2e/empacotado-update.spec.ts`, feed local, escada HTTPS: CA de teste → fallback loopback-only) + blindagem T-1907 do cenário "recuperação por código de uso único" (Sonnet) | riscos residuais v2.10/v2.11 | T-2301 | ⬜ |
+| T-2303 | Build oficial (PyInstaller + NSIS 2.12.0) + bateria contra o pacote real: smoke NSIS, smoke do órfão, smoke do auto-update (orquestrador) | §E.4 | T-2302 | ⬜ |
+| T-2304 | Fechamento: auditoria de deps com pip-audit = 0 obrigatório, ata `FREEZE.md` v2.12.0 com hashes dos binários novos, docs sincronizados (orquestrador) | Processo | todas | ⬜ |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -407,7 +423,11 @@ Auditoria de deps: npm audit 0; pip-audit acusou `setuptools` 82.0.1
 (PYSEC-2026-3447, transitiva do PyInstaller/build, vetor macOS-sdist — risco
 aceito na ata). Sem build oficial neste ciclo (§E.4 não dispara). Ata
 `FREEZE.md` v2.11.0. **Fora do ciclo:** C-15 (aguarda decisão de custo do
-certificado). Próximo ciclo: a definir (começa por ADR).
+certificado). **Ciclo v2.12 ABERTO (ADR-0020, M23, 2026-07-14):**
+build/release — bumps dirigidos (setuptools 83, Electron 43.1.1, langgraph
+1.2.9, uvicorn 0.51), caronas de harness (smoke do auto-update + blindagem
+do flake do cofre) e rebuild oficial com os 3 smokes do pacote; fechamento
+exige pip-audit = 0.
 
 ### Histórico do ciclo v2.8 (fechado)
 

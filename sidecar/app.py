@@ -120,7 +120,7 @@ async def _ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
     encerrar_runtime()
 
 
-app = FastAPI(title="Helper Financeiro — sidecar", version="2.11.0",
+app = FastAPI(title="Helper Financeiro — sidecar", version="2.12.0",
              lifespan=_ciclo_de_vida)
 
 # Chaves do resumo que carregam objetos `Divida` (precisam de serialização).
