@@ -255,20 +255,8 @@ def _aba_orcamento(wb, rubricas: Sequence[Rubrica]):
     return ws
 
 
-def _aba_evolucao(wb, evolucao: dict):
-    """Aba "Evolução mensal": campos × competências arquivadas (ADR-0014).
-
-    Os valores dos campos são entradas editáveis e o total de cada seção é
-    fórmula =SUM por coluna (planilha viva). Um bloco-resumo referencia os
-    totais e alimenta o gráfico de linhas nativo do Excel.
-    """
-    meses: list[str] = evolucao["meses"]
-    ultima_col = 1 + len(meses)
-
-    ws = wb.create_sheet("Evolução mensal")
-    _mesclar_titulo(ws, "A1", "EVOLUÇÃO MENSAL DO ORÇAMENTO",
-                    get_column_letter(max(ultima_col, 2)))
-
+def _aba_evolucao_cabecalho(ws, meses: list[str], ultima_col: int) -> int:
+    """Escreve a linha de cabeçalho (campo + competências) e retorna sua linha."""
     linha_cab = 3
     ws.cell(linha_cab, 1, "Campo do orçamento")
     for j, mes in enumerate(meses, start=2):
@@ -277,10 +265,19 @@ def _aba_evolucao(wb, evolucao: dict):
         cell.font = _cabecalho
         cell.fill = _fill_cab
         cell.alignment = Alignment(horizontal="center")
+    return linha_cab
 
+
+def _aba_evolucao_secoes(ws, secoes, linha_cab: int,
+                          ultima_col: int) -> tuple[int, list[tuple[str, int]]]:
+    """Escreve as seções (campos editáveis + fórmula =SUM de total por coluna).
+
+    Retorna a próxima linha livre e a lista (rótulo, linha do total) de cada
+    seção — insumo do bloco-resumo que alimenta o gráfico.
+    """
     linha = linha_cab + 1
     totais_por_secao: list[tuple[str, int]] = []  # (rótulo, linha do total)
-    for secao in evolucao["secoes"]:
+    for secao in secoes:
         if not secao["campos"]:
             continue  # seção zerada em todo o período: fora (ruído)
         ws.cell(linha, 1, secao["rotulo"]).font = _negrito
@@ -302,8 +299,15 @@ def _aba_evolucao(wb, evolucao: dict):
             c.number_format = MOEDA
         totais_por_secao.append((secao["rotulo"], linha))
         linha += 2
+    return linha, totais_por_secao
 
-    # Bloco-resumo (referencia os totais) — é a fonte do gráfico de linhas.
+
+def _aba_evolucao_resumo(ws, totais_por_secao: list[tuple[str, int]], linha: int,
+                          ultima_col: int) -> tuple[int, int, int]:
+    """Bloco-resumo (referencia os totais) — é a fonte do gráfico de linhas.
+
+    Retorna (primeira linha do resumo, última linha do resumo, próxima linha livre).
+    """
     resumo_primeira = linha
     for rotulo, linha_total in totais_por_secao:
         ws.cell(linha, 1, rotulo).font = _normal
@@ -313,7 +317,12 @@ def _aba_evolucao(wb, evolucao: dict):
             c.number_format = MOEDA
         linha += 1
     resumo_ultima = linha - 1
+    return resumo_primeira, resumo_ultima, linha
 
+
+def _aba_evolucao_grafico(ws, resumo_primeira: int, resumo_ultima: int, linha_cab: int,
+                           ultima_col: int, linha: int) -> None:
+    """Monta o gráfico de linhas nativo a partir do bloco-resumo."""
     chart = LineChart()
     chart.title = "Evolução por seção"
     dados = Reference(ws, min_col=1, max_col=ultima_col,
@@ -324,6 +333,27 @@ def _aba_evolucao(wb, evolucao: dict):
     chart.height = 8
     chart.width = 18
     ws.add_chart(chart, f"A{linha + 2}")
+
+
+def _aba_evolucao(wb, evolucao: dict):
+    """Aba "Evolução mensal": campos × competências arquivadas (ADR-0014).
+
+    Os valores dos campos são entradas editáveis e o total de cada seção é
+    fórmula =SUM por coluna (planilha viva). Um bloco-resumo referencia os
+    totais e alimenta o gráfico de linhas nativo do Excel.
+    """
+    meses: list[str] = evolucao["meses"]
+    ultima_col = 1 + len(meses)
+
+    ws = wb.create_sheet("Evolução mensal")
+    _mesclar_titulo(ws, "A1", "EVOLUÇÃO MENSAL DO ORÇAMENTO",
+                    get_column_letter(max(ultima_col, 2)))
+
+    linha_cab = _aba_evolucao_cabecalho(ws, meses, ultima_col)
+    linha, totais_por_secao = _aba_evolucao_secoes(ws, evolucao["secoes"], linha_cab, ultima_col)
+    resumo_primeira, resumo_ultima, linha = _aba_evolucao_resumo(
+        ws, totais_por_secao, linha, ultima_col)
+    _aba_evolucao_grafico(ws, resumo_primeira, resumo_ultima, linha_cab, ultima_col, linha)
 
     ws.column_dimensions["A"].width = 30
     for j in range(2, ultima_col + 1):

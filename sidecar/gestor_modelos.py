@@ -355,35 +355,36 @@ def listar_catalogo_com_estado(ambiente: Mapping[str, str] | None = None) -> lis
 
 
 # --------------------------------------------------------------- download
-def baixar_modelo(
+def _preparar_download_parcial(
     item: ModeloCatalogo,
-    *,
-    ambiente: Mapping[str, str] | None = None,
-    destino_dir: Path | None = None,
-    cancelado: Callable[[], bool] = lambda: False,
-    progresso: Callable[[int, int], None] | None = None,
-    abrir_url: Callable[..., Any] = urllib.request.urlopen,
-) -> Path:
-    """Baixa `item.url` para `HF_MODELOS_DIR`, com retomada via `Range` e
-    verificação de SHA-256 obrigatória antes de promover o arquivo (REQ-F-028).
+    ambiente: Mapping[str, str] | None,
+    destino_dir: Path | None,
+) -> tuple[Path, int]:
+    """Garante o diretório do `.parcial` e calcula o offset de retomada.
 
-    Única exceção de rede do app (REQ-NF-007): só roda por chamada explícita
-    (o endpoint `/llm/baixar` só dispara com um clique do usuário). Escreve em
-    `<arquivo>.parcial`; se já existir um `.parcial` de uma tentativa anterior,
-    tenta retomar com o cabeçalho `Range` — se o servidor não honrar (não
-    devolve 206), recomeça do zero. `cancelado()` é checado a cada bloco
-    (cancelamento cooperativo, sem `.parcial` incompleto virar lixo silencioso:
-    ele fica no disco para retomar depois). Hash divergente apaga o `.parcial`
-    e levanta `ModeloHashInvalido` — nunca promove um arquivo corrompido.
+    Se já existir um `.parcial` de uma tentativa anterior, o offset é o
+    tamanho já baixado (retomada via `Range`); senão começa do zero.
     """
-    final = caminho_final(item, ambiente, destino_dir)
-    if final.is_file() and _sha256_arquivo(final) == item.sha256:
-        return final  # idempotente: já baixado e íntegro
-
     parcial = caminho_parcial(item, ambiente, destino_dir)
     parcial.parent.mkdir(parents=True, exist_ok=True)
     offset = parcial.stat().st_size if parcial.exists() else 0
+    return parcial, offset
 
+
+def _executar_download(
+    item: ModeloCatalogo,
+    parcial: Path,
+    offset: int,
+    cancelado: Callable[[], bool],
+    progresso: Callable[[int, int], None] | None,
+    abrir_url: Callable[..., Any],
+) -> None:
+    """Baixa o conteúdo para `parcial`, tentando retomar via `Range` a partir
+    de `offset` — se o servidor não honrar (não devolve 206), recomeça do
+    zero. `cancelado()` é checado a cada bloco (cancelamento cooperativo, sem
+    `.parcial` incompleto virar lixo silencioso: ele fica no disco para
+    retomar depois).
+    """
     headers = {"Range": f"bytes={offset}-"} if offset else {}
     req = urllib.request.Request(item.url, headers=headers)
     try:
@@ -413,6 +414,13 @@ def baixar_modelo(
         raise ModeloDownloadFalhou(
             f"Falha ao baixar {item.id!r}: {type(e).__name__}: {e}") from e
 
+
+def _promover_download(parcial: Path, final: Path, item: ModeloCatalogo) -> None:
+    """Verifica o SHA-256 do `.parcial` e só então promove para `final`.
+
+    Hash divergente apaga o `.parcial` e levanta `ModeloHashInvalido` — nunca
+    promove um arquivo corrompido.
+    """
     hash_obtido = _sha256_arquivo(parcial)
     if not hmac.compare_digest(hash_obtido, item.sha256):
         parcial.unlink(missing_ok=True)
@@ -421,4 +429,34 @@ def baixar_modelo(
             f"(esperado {item.sha256[:12]}…, obtido {hash_obtido[:12]}…) — "
             "arquivo descartado.")
     os.replace(parcial, final)
+
+
+def baixar_modelo(
+    item: ModeloCatalogo,
+    *,
+    ambiente: Mapping[str, str] | None = None,
+    destino_dir: Path | None = None,
+    cancelado: Callable[[], bool] = lambda: False,
+    progresso: Callable[[int, int], None] | None = None,
+    abrir_url: Callable[..., Any] = urllib.request.urlopen,
+) -> Path:
+    """Baixa `item.url` para `HF_MODELOS_DIR`, com retomada via `Range` e
+    verificação de SHA-256 obrigatória antes de promover o arquivo (REQ-F-028).
+
+    Única exceção de rede do app (REQ-NF-007): só roda por chamada explícita
+    (o endpoint `/llm/baixar` só dispara com um clique do usuário). Escreve em
+    `<arquivo>.parcial`; se já existir um `.parcial` de uma tentativa anterior,
+    tenta retomar com o cabeçalho `Range` — se o servidor não honrar (não
+    devolve 206), recomeça do zero. `cancelado()` é checado a cada bloco
+    (cancelamento cooperativo, sem `.parcial` incompleto virar lixo silencioso:
+    ele fica no disco para retomar depois). Hash divergente apaga o `.parcial`
+    e levanta `ModeloHashInvalido` — nunca promove um arquivo corrompido.
+    """
+    final = caminho_final(item, ambiente, destino_dir)
+    if final.is_file() and _sha256_arquivo(final) == item.sha256:
+        return final  # idempotente: já baixado e íntegro
+
+    parcial, offset = _preparar_download_parcial(item, ambiente, destino_dir)
+    _executar_download(item, parcial, offset, cancelado, progresso, abrir_url)
+    _promover_download(parcial, final, item)
     return final
