@@ -49,6 +49,8 @@ from typing import cast
 
 import sqlcipher3  # driver do banco cifrado (ADR-0016 §B); em claro seguimos no sqlite3
 
+from .arquivos import endurecer_arquivo, endurecer_pasta
+
 VERSAO_ESQUEMA = 1
 
 # Seções do orçamento que aceitam rubricas (ADR-0012: saldos ficam de fora).
@@ -290,8 +292,17 @@ class Repositorio:
         """
         self._caminho = caminho if caminho is not None else caminho_banco()
         self._caminho.parent.mkdir(parents=True, exist_ok=True)
+        # Endurecimento POSIX (C-23): no fallback `~/.helper_financeiro` a pasta
+        # e o banco nasceriam com a umask padrão (0755/0644), legíveis por outra
+        # conta local — força-bruta offline do Argon2id sobre o cofre. Fechamos
+        # para 0o700/0o600. No Windows (`%APPDATA%`, ACL herdada) ambos são
+        # no-op — o guard vive em `arquivos._e_posix`.
+        endurecer_pasta(self._caminho.parent)
         # check_same_thread=False: o lock (e não o driver) serializa o acesso.
         self._conn = _conectar(self._caminho, dek)
+        # `_conectar` acaba de criar o arquivo do banco (sqlite3/sqlcipher3):
+        # restringe já na criação, antes de qualquer escrita de dados.
+        endurecer_arquivo(self._caminho)
         self._lock = threading.Lock()
         self._migrar()
 
