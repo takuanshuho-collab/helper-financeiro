@@ -53,10 +53,20 @@ select = [
     "B",        # bugbear
     "UP",       # pyupgrade
     "SIM",      # simplificações
+    "C901",     # complexidade ciclomática — catraca do T-2204 (ADR-0019)
 ]
 ignore = [
     "E501",     # linhas longas: o formatador cuida; docstrings pedagógicas ficam livres
 ]
+
+[tool.ruff.lint.mccabe]
+# Catraca de complexidade (C-28/C-29, ADR-0019): o teto é o PIOR caso existente
+# no fechamento do v2.11 (`gui/app.py:_extrair_pdf` = 13, casca tkinter
+# congelada) — impede crescer, não pune o legado. Mesma filosofia do piso de
+# cobertura: recalibração futura SÓ para baixo (função nova acima do teto é
+# regressão, não motivo de afrouxar). Referência pós-refatoração:
+# `gerar_relatorio` = 3, `_aba_evolucao` = 2, `baixar_modelo` = 2.
+max-complexity = 13
 
 [tool.ruff.lint.per-file-ignores]
 # clareza > concisão em testes; ARG001 (C-35): fixtures pytest (ex.: `repo_tmp`)

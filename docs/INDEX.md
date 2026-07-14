@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0017) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0019) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
@@ -131,7 +131,15 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   histórico do E2E "planilha" (v2.4..v2.8) foi diagnosticado como corrida do
   próprio teste e encerrado pelo padrão T-1907. Regra permanente nova:
   auditoria de deps registrada na ata em todo fechamento de ciclo.
-- **Mudanças nos artefatos congelados (v2.10.0) exigem nova ADR + incremento
+- **Ciclo v2.11 FECHADO (`FREEZE.md` v2.11.0, ADR-0019, M21+M22):** higiene e
+  complexidade. C-23 endurecido dormente (cofre `0o600`/`0o700` no ramo POSIX,
+  no-op no Windows); C-35 fechado item a item (84 ocorrências, veredito
+  triplo, nenhum bug real); C-28/C-29 refatorados por **extração sob
+  golden-master** (9 goldens JSON fixam os `.docx`/`.xlsx`; `gerar_relatorio`
+  C901 16→3, `_aba_evolucao` e `baixar_modelo` →2) e **catraca `C901`
+  permanente** no ruff (teto 13 = pior caso legado; só aperta). Sem build
+  oficial no ciclo (nenhuma dep subiu — §E.4 não dispara).
+- **Mudanças nos artefatos congelados (v2.11.0) exigem nova ADR + incremento
   de versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar

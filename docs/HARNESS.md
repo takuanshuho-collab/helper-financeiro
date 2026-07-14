@@ -1,6 +1,6 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.9.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.11.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
@@ -22,6 +22,15 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 > registrado na ata FREEZE (não bloqueante; CVE sem fix upstream = risco
 > registrado). E2E ganhou o cenário C-10 (IPC rejeita `metodo` sem `/`) e a
 > asserção intermediária que encerrou o flake histórico do "planilha".
+
+> **v2.11 (ADR-0019):** duas réguas permanentes novas. (1) **Golden-master
+> dos outputs** (`tests/test_golden_outputs.py` + 9 JSONs em `tests/golden/`):
+> extratores determinísticos fixam texto, estilos, ordem, coordenadas e
+> fórmulas dos `.docx`/`.xlsx`; regeneração SÓ com `HF_REGENERAR_GOLDEN=1`
+> fora do CI (com `CI` setado a regeneração é RECUSADA); campo volátil (data)
+> mascarado no extrator. (2) **Catraca de complexidade `C901`** no ruff do
+> pre-commit/CI, teto 13 (pior caso legado) — só aperta, como o piso de
+> cobertura. Estado no fechamento: 489 testes offline, cobertura ≥ 96,6%.
 
 ---
 

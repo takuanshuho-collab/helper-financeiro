@@ -357,10 +357,10 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | Achados | Depende | Status |
 |----|------|-----|---------|--------|
-| T-2201 | Golden-master dos outputs: `tests/test_golden_outputs.py` com extratores determinísticos (`.docx` → `(estilo, texto)`; `.xlsx` → por aba `(coordenada, valor_ou_fórmula)`), goldens JSON em `tests/golden/` das fixtures do harness; regeneração SÓ com `HF_REGENERAR_GOLDEN=1` fora do CI; máscara de campo volátil no extrator (Opus) | C-28/C-29 (régua) | M21 | ⬜ |
-| T-2202 | Refatoração `gerar_relatorio` (`outputs/relatorio.py`) por extração de seções; golden idêntico + C901 da função abaixo do teto (Opus) | C-28 | T-2201 | ⬜ |
-| T-2203 | Refatoração `_aba_evolucao` (`outputs/planilha.py`) e `baixar_modelo` (`sidecar/gestor_modelos.py`), mesmo contrato do T-2202 (Sonnet) | C-29 | T-2201 | ⬜ |
-| T-2204 | Fechamento do ciclo: medir pior C901 → fixar `max-complexity` e ativar `C901` no ruff (catraca permanente); gates, auditoria de deps (ADR-0018 §5), ata `FREEZE.md` v2.11.0; smoke NSIS dispensado (§E.4 não dispara — decisão registrada na ADR-0019 e na ata) (orquestrador) | Processo | todas | ⬜ |
+| T-2201 | Golden-master dos outputs: `tests/test_golden_outputs.py` com extratores determinísticos (`.docx` → `(estilo, texto)`; `.xlsx` → por aba `(coordenada, valor_ou_fórmula)`), goldens JSON em `tests/golden/` das fixtures do harness; regeneração SÓ com `HF_REGENERAR_GOLDEN=1` fora do CI; máscara de campo volátil no extrator (Opus) | C-28/C-29 (régua) | M21 | ✅ `f71270a` |
+| T-2202 | Refatoração `gerar_relatorio` (`outputs/relatorio.py`) por extração de seções; golden idêntico + C901 da função abaixo do teto (Opus) | C-28 | T-2201 | ✅ `3bef65c` |
+| T-2203 | Refatoração `_aba_evolucao` (`outputs/planilha.py`) e `baixar_modelo` (`sidecar/gestor_modelos.py`), mesmo contrato do T-2202 (Sonnet) | C-29 | T-2201 | ✅ `4ffb5f8` |
+| T-2204 | Fechamento do ciclo: medir pior C901 → fixar `max-complexity` e ativar `C901` no ruff (catraca permanente); gates, auditoria de deps (ADR-0018 §5), ata `FREEZE.md` v2.11.0; smoke NSIS dispensado (§E.4 não dispara — decisão registrada na ADR-0019 e na ata) (orquestrador) | Processo | todas | ✅ (este commit) |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -397,10 +397,17 @@ aprovado alcançado — o falso "bloqueio" do 43 era o flake histórico do
 via `lastUsedPath`. Regra permanente nova: auditoria de deps em todo
 fechamento (seção acima). Ata `FREEZE.md` v2.10.0. **Pendentes para ciclos
 futuros:** C-15 (code signing — certificado), C-23 (POSIX), C-28/C-29
-(complexidade), C-35 (sem ação). **Ciclo v2.11 ABERTO (ADR-0019, M21+M22,
-2026-07-14):** C-23 dormente + C-35 item a item (M21, paralelas) e C-28/C-29
-sob golden-master com catraca C901 no fechamento (M22). Fora do ciclo: C-15
-(aguarda decisão de custo do certificado).
+(complexidade), C-35 (sem ação). **Ciclo v2.11 FECHADO (ADR-0019, M21+M22,
+2026-07-14):** C-23 endurecido dormente (T-2101), C-35 fechado item a item —
+84 ocorrências, nenhum bug real (T-2102), C-28/C-29 refatorados por extração
+sob **golden-master** (T-2201..T-2203: 9 goldens JSON, `gerar_relatorio`
+16→3, `_aba_evolucao` e `baixar_modelo` →2) e **catraca `C901` permanente**
+no ruff (teto 13 = pior caso legado, `gui/app.py:_extrair_pdf`; só aperta).
+Auditoria de deps: npm audit 0; pip-audit acusou `setuptools` 82.0.1
+(PYSEC-2026-3447, transitiva do PyInstaller/build, vetor macOS-sdist — risco
+aceito na ata). Sem build oficial neste ciclo (§E.4 não dispara). Ata
+`FREEZE.md` v2.11.0. **Fora do ciclo:** C-15 (aguarda decisão de custo do
+certificado). Próximo ciclo: a definir (começa por ADR).
 
 ### Histórico do ciclo v2.8 (fechado)
 

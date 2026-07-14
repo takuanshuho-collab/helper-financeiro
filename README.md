@@ -31,7 +31,12 @@ de regressão — destaque para o **Job Object** que garante que nenhum
 órfãs removidas (instalador ~21 MB menor). Nenhum recurso novo, zero
 mudança de comportamento visível. O ciclo v2.10 (ADR-0018) atualizou o
 **Electron para a versão atual (43)** — dez majors de uma vez, eliminando os
-CVEs conhecidos — mantendo tudo como estava para o usuário.
+CVEs conhecidos — mantendo tudo como estava para o usuário. O ciclo v2.11
+(ADR-0019) fechou os achados restantes da auditoria: permissões restritivas
+do cofre no ramo POSIX (dormente), higiene de linter item a item e os
+hotspots de complexidade refatorados sob **golden-master** (a saída
+`.docx`/`.xlsx` é comparada byte de conteúdo a byte de conteúdo com uma
+régua versionada), com catraca permanente de complexidade no lint.
 
 ---
 
