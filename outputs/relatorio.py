@@ -90,19 +90,12 @@ def _secao_ia(doc, secao: SecaoIA, numero: int) -> None:
         r.font.color.rgb = CINZA
 
 
-def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
-                    extra_mensal: float = 0.0, taxa_alvo_mensal: float = 0.018,
-                    nome_usuario: str = "",
-                    secao_ia: SecaoIA | None = None) -> str:
-    diag = resumo_diagnostico(perfil)
-    doc = Document()
+def _capa(doc, nome_usuario: str) -> None:
+    """Renderiza a capa/cabeçalho (título + linha de emissão datada).
 
-    # Fonte padrão
-    style = doc.styles["Normal"]
-    style.font.name = "Calibri"
-    style.font.size = Pt(11)
-
-    # --- Capa / cabeçalho ---
+    A data vem de ``date.today()``: é o único campo volátil do relatório e por
+    isso é mascarada na régua golden — não deve receber tratamento especial aqui.
+    """
     cab = doc.add_paragraph()
     cab.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = cab.add_run("Relatório de Saúde Financeira")
@@ -119,7 +112,13 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
     r.font.color.rgb = CINZA
     r.font.size = Pt(10)
 
-    # --- Resumo executivo ---
+
+def _secao_resumo(doc, diag: dict) -> None:
+    """Renderiza "1. Resumo executivo" com o alerta de déficit quando aplicável.
+
+    O alerta em vermelho só entra se o fluxo de caixa está negativo, para
+    destacar que ele precede qualquer estratégia (P8/leitura do usuário).
+    """
     _titulo(doc, "1. Resumo executivo")
     classe = diag["classificacao"]
     p = doc.add_paragraph()
@@ -139,7 +138,9 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
         run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
         run.bold = True
 
-    # --- Diagnóstico ---
+
+def _secao_diagnostico(doc, diag: dict) -> None:
+    """Renderiza "2. Diagnóstico" — tabela de indicadores determinísticos (H1)."""
     _titulo(doc, "2. Diagnóstico")
     _tabela_indicadores(doc, [
         ("Renda líquida mensal", formatar_brl(diag["renda_liquida"])),
@@ -151,7 +152,13 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
         ("Comprometimento de renda", formatar_pct(diag["comprometimento_renda"])),
     ])
 
-    # --- Ranking de dívidas ---
+
+def _secao_ranking(doc, perfil: PerfilFinanceiro, diag: dict) -> None:
+    """Renderiza "3. Suas dívidas..." — tabela ordenada do ranking do diagnóstico.
+
+    Sem dívidas cadastradas, degrada para uma linha textual em vez de tabela
+    vazia (mantém o relatório coerente para perfis saudáveis, P8).
+    """
     _titulo(doc, "3. Suas dívidas, da mais cara para a mais barata")
     if perfil.dividas:
         tab = doc.add_table(rows=1, cols=5)
@@ -170,7 +177,13 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
     else:
         doc.add_paragraph("Nenhuma dívida cadastrada.")
 
-    # --- Estratégia ---
+
+def _secao_estrategia(doc, perfil: PerfilFinanceiro, extra_mensal: float) -> None:
+    """Renderiza "4. Estratégia de quitação" (avalanche × bola de neve).
+
+    A nota de transparência do modelo é obrigatória (SPEC REQ-F-003, F-10): a
+    simulação é simplificada e serve só para comparar as estratégias entre si.
+    """
     _titulo(doc, "4. Estratégia de quitação")
     doc.add_paragraph(
         f"Considerando um pagamento extra de {formatar_brl(extra_mensal)} por mês "
@@ -218,33 +231,49 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
                 "das quitações rápidas da bola de neve."
             )
 
-    # --- Portabilidade ---
-    ops = oportunidades_portabilidade(perfil, taxa_alvo_mensal)
-    if ops:
-        _titulo(doc, "5. Oportunidades de portabilidade")
-        doc.add_paragraph(
-            f"Migrando as dívidas caras para uma taxa de "
-            f"{formatar_pct(taxa_alvo_mensal)} a.m., a economia estimada seria:"
-        )
-        tab = doc.add_table(rows=1, cols=3)
-        tab.style = "Light Grid Accent 1"
-        hdr = tab.rows[0].cells
-        for i, txt in enumerate(["Credor", "Economia mensal", "Economia total"]):
-            hdr[i].text = txt
-            hdr[i].paragraphs[0].runs[0].bold = True
-        for o in ops:
-            c = tab.add_row().cells
-            c[0].text = o["credor"]
-            c[1].text = formatar_brl(o["economia_mensal"])
-            c[2].text = formatar_brl(o["economia_total"])
 
-    # --- Recomendações ---
-    _titulo(doc, f"{6 if ops else 5}. Recomendações")
+def _secao_portabilidade(doc, ops: list, taxa_alvo_mensal: float) -> None:
+    """Renderiza "5. Oportunidades de portabilidade".
+
+    Só é chamada quando há oportunidades (``ops`` não vazio); a ausência dela
+    desloca a numeração das seções seguintes — comportamento fixado no golden
+    ``relatorio_saudavel_sem_portabilidade``.
+    """
+    _titulo(doc, "5. Oportunidades de portabilidade")
+    doc.add_paragraph(
+        f"Migrando as dívidas caras para uma taxa de "
+        f"{formatar_pct(taxa_alvo_mensal)} a.m., a economia estimada seria:"
+    )
+    tab = doc.add_table(rows=1, cols=3)
+    tab.style = "Light Grid Accent 1"
+    hdr = tab.rows[0].cells
+    for i, txt in enumerate(["Credor", "Economia mensal", "Economia total"]):
+        hdr[i].text = txt
+        hdr[i].paragraphs[0].runs[0].bold = True
+    for o in ops:
+        c = tab.add_row().cells
+        c[0].text = o["credor"]
+        c[1].text = formatar_brl(o["economia_mensal"])
+        c[2].text = formatar_brl(o["economia_total"])
+
+
+def _secao_recomendacoes(doc, perfil: PerfilFinanceiro, diag: dict, numero: int) -> None:
+    """Renderiza a seção "Recomendações" com número dinâmico (5 ou 6).
+
+    O ``numero`` é calculado pelo chamador porque depende da presença da seção
+    de portabilidade, que pode não existir.
+    """
+    _titulo(doc, f"{numero}. Recomendações")
     for rec in gerar_recomendacoes(perfil, diag):
         doc.add_paragraph(rec, style="List Bullet")
 
-    # --- Próximos passos ---
-    _titulo(doc, f"{7 if ops else 6}. Próximos passos")
+
+def _secao_proximos_passos(doc, numero: int) -> None:
+    """Renderiza a seção "Próximos passos" com número dinâmico (6 ou 7).
+
+    Lista fixa de ações; o ``numero`` acompanha o deslocamento da portabilidade.
+    """
+    _titulo(doc, f"{numero}. Próximos passos")
     for passo in [
         "Solicite a cada credor o saldo devedor atualizado, por escrito.",
         "Simule a portabilidade nos concorrentes e use as propostas como alavanca.",
@@ -253,14 +282,9 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
     ]:
         doc.add_paragraph(passo, style="List Number")
 
-    # --- Análise do Agente (IA) — T-301 ---
-    # Seção SEPARADA das tabelas determinísticas (REQ-GRD-003): só entra quando
-    # a análise passou por todos os guardrails (modo "completo"); em modo
-    # degradado o relatório sai apenas com o determinístico (P8).
-    if secao_ia is not None and secao_ia.modo == "completo":
-        _secao_ia(doc, secao_ia, numero=8 if ops else 7)
 
-    # --- Aviso ---
+def _aviso_final(doc) -> None:
+    """Renderiza o parágrafo de aviso legal que encerra o relatório."""
     doc.add_paragraph()
     aviso = doc.add_paragraph()
     r = aviso.add_run(
@@ -272,6 +296,43 @@ def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
     r.italic = True
     r.font.size = Pt(9)
     r.font.color.rgb = CINZA
+
+
+def gerar_relatorio(perfil: PerfilFinanceiro, caminho_saida: str,
+                    extra_mensal: float = 0.0, taxa_alvo_mensal: float = 0.018,
+                    nome_usuario: str = "",
+                    secao_ia: SecaoIA | None = None) -> str:
+    diag = resumo_diagnostico(perfil)
+    doc = Document()
+
+    # Fonte padrão
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(11)
+
+    _capa(doc, nome_usuario)
+    _secao_resumo(doc, diag)
+    _secao_diagnostico(doc, diag)
+    _secao_ranking(doc, perfil, diag)
+    _secao_estrategia(doc, perfil, extra_mensal)
+
+    # A portabilidade só entra quando há oportunidade; sua presença desloca a
+    # numeração das seções seguintes (fixada no golden sem portabilidade).
+    ops = oportunidades_portabilidade(perfil, taxa_alvo_mensal)
+    if ops:
+        _secao_portabilidade(doc, ops, taxa_alvo_mensal)
+
+    _secao_recomendacoes(doc, perfil, diag, numero=6 if ops else 5)
+    _secao_proximos_passos(doc, numero=7 if ops else 6)
+
+    # --- Análise do Agente (IA) — T-301 ---
+    # Seção SEPARADA das tabelas determinísticas (REQ-GRD-003): só entra quando
+    # a análise passou por todos os guardrails (modo "completo"); em modo
+    # degradado o relatório sai apenas com o determinístico (P8).
+    if secao_ia is not None and secao_ia.modo == "completo":
+        _secao_ia(doc, secao_ia, numero=8 if ops else 7)
+
+    _aviso_final(doc)
 
     doc.save(caminho_saida)
     return caminho_saida
