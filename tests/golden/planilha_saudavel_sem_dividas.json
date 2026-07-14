@@ -1,0 +1,244 @@
+{
+  "abas": [
+    {
+      "aba": "Diagnóstico",
+      "celulas": [
+        [
+          "A1",
+          "DIAGNÓSTICO FINANCEIRO"
+        ],
+        [
+          "A3",
+          "Renda líquida mensal"
+        ],
+        [
+          "B3",
+          8000
+        ],
+        [
+          "A4",
+          "Despesas fixas"
+        ],
+        [
+          "B4",
+          3000
+        ],
+        [
+          "A5",
+          "Despesas variáveis"
+        ],
+        [
+          "B5",
+          1200
+        ],
+        [
+          "A6",
+          "Reserva de emergência"
+        ],
+        [
+          "B6",
+          15000
+        ],
+        [
+          "A7",
+          "Saldo de FGTS"
+        ],
+        [
+          "B7",
+          20000
+        ],
+        [
+          "A8",
+          "Total de parcelas/mês"
+        ],
+        [
+          "B8",
+          "=SUM('Dívidas'!F4:F3)"
+        ],
+        [
+          "A9",
+          "Despesas totais"
+        ],
+        [
+          "B9",
+          "=B4+B5"
+        ],
+        [
+          "A10",
+          "Fluxo de caixa (sobra/mês)"
+        ],
+        [
+          "B10",
+          "=B3-B9-B8"
+        ],
+        [
+          "A11",
+          "Saldo devedor total"
+        ],
+        [
+          "B11",
+          "=SUM('Dívidas'!C4:C3)"
+        ],
+        [
+          "A12",
+          "Comprometimento de renda"
+        ],
+        [
+          "B12",
+          "=B8/B3"
+        ],
+        [
+          "A14",
+          "Células em amarelo são entradas: altere-as e os indicadores recalculam automaticamente ao abrir no Excel."
+        ]
+      ]
+    },
+    {
+      "aba": "Dívidas",
+      "celulas": [
+        [
+          "A1",
+          "DÍVIDAS"
+        ],
+        [
+          "A3",
+          "Credor"
+        ],
+        [
+          "B3",
+          "Tipo"
+        ],
+        [
+          "C3",
+          "Saldo devedor"
+        ],
+        [
+          "D3",
+          "Taxa a.m."
+        ],
+        [
+          "E3",
+          "Taxa a.a."
+        ],
+        [
+          "F3",
+          "Parcela"
+        ],
+        [
+          "G3",
+          "Parc. restantes"
+        ],
+        [
+          "H3",
+          "Custo total restante"
+        ],
+        [
+          "I3",
+          "Juros restantes"
+        ],
+        [
+          "B4",
+          "TOTAL"
+        ],
+        [
+          "C4",
+          "=SUM(C4:C3)"
+        ],
+        [
+          "F4",
+          "=SUM(F4:F3)"
+        ],
+        [
+          "H4",
+          "=SUM(H4:H3)"
+        ],
+        [
+          "I4",
+          "=SUM(I4:I3)"
+        ]
+      ]
+    },
+    {
+      "aba": "Estratégias",
+      "celulas": [
+        [
+          "A1",
+          "ESTRATÉGIAS DE QUITAÇÃO"
+        ],
+        [
+          "A3",
+          "Pagamento extra considerado por mês:"
+        ],
+        [
+          "B3",
+          0
+        ],
+        [
+          "A5",
+          "Método"
+        ],
+        [
+          "B5",
+          "Meses até quitar"
+        ],
+        [
+          "C5",
+          "Total de juros pagos"
+        ],
+        [
+          "D5",
+          "Ordem de ataque"
+        ],
+        [
+          "A6",
+          "Avalanche (maior juro primeiro)"
+        ],
+        [
+          "B6",
+          0
+        ],
+        [
+          "C6",
+          0
+        ],
+        [
+          "A7",
+          "Bola de neve (menor saldo primeiro)"
+        ],
+        [
+          "B7",
+          0
+        ],
+        [
+          "C7",
+          0
+        ],
+        [
+          "A8",
+          "Portabilidade — economia se migrar para 1.80% a.m."
+        ],
+        [
+          "A10",
+          "Credor"
+        ],
+        [
+          "B10",
+          "Tipo"
+        ],
+        [
+          "C10",
+          "Parcela atual"
+        ],
+        [
+          "D10",
+          "Parcela nova"
+        ],
+        [
+          "E10",
+          "Economia total"
+        ]
+      ]
+    }
+  ],
+  "formato": "xlsx"
+}

@@ -344,8 +344,8 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | Achados | Depende | Status |
 |----|------|-----|---------|--------|
-| T-2101 | Endurecimento POSIX dormente: `0o600` nos arquivos e `0o700` nas pastas do cofre no ramo POSIX (`sidecar/arquivos.py` `gravar_json_atomico` + criação de pasta/banco em `sidecar/persistencia.py`); no-op no Windows; unit tests provam os flags via monkeypatch (Sonnet) | C-23 | ADR-0019 | ⬜ |
-| T-2102 | Mini-varredura C-35: reavaliação item a item dos grupos ARG001/ERA001/S608/PLW0603/FURB122 com veredito triplo; `ruff check` com as regras ativadas limpo ou 100% justificado em código (Sonnet) | C-35 | ADR-0019 | ⬜ |
+| T-2101 | Endurecimento POSIX dormente: `0o600` nos arquivos e `0o700` nas pastas do cofre no ramo POSIX (`sidecar/arquivos.py` `gravar_json_atomico` + criação de pasta/banco em `sidecar/persistencia.py`); no-op no Windows; unit tests provam os flags via monkeypatch (Sonnet) | C-23 | ADR-0019 | ✅ `93a956f` |
+| T-2102 | Mini-varredura C-35: reavaliação item a item dos grupos ARG001/ERA001/S608/PLW0603/FURB122 com veredito triplo; `ruff check` com as regras ativadas limpo ou 100% justificado em código (Sonnet) | C-35 | ADR-0019 | ✅ `f13c6ce` |
 
 ## Milestone M22 — Complexidade sob catraca (ciclo v2.11, ADR-0019)
 

@@ -1,0 +1,277 @@
+{
+  "formato": "docx",
+  "itens": [
+    [
+      "Normal",
+      "Relatório de Saúde Financeira"
+    ],
+    [
+      "Normal",
+      "Fulano de Tal — Emitido em <DATA>"
+    ],
+    [
+      "Heading 1",
+      "1. Resumo executivo"
+    ],
+    [
+      "Normal",
+      "Situação: Atenção. As parcelas já pesam; margem de manobra pequena. O comprometimento de renda com parcelas é de 39,00%, e o fluxo de caixa mensal é de R$ 50,00."
+    ],
+    [
+      "Heading 1",
+      "2. Diagnóstico"
+    ],
+    [
+      "Normal",
+      "Renda líquida mensal"
+    ],
+    [
+      "Normal",
+      "R$ 5.000,00"
+    ],
+    [
+      "Normal",
+      "Despesas totais"
+    ],
+    [
+      "Normal",
+      "R$ 3.000,00"
+    ],
+    [
+      "Normal",
+      "Total de parcelas/mês"
+    ],
+    [
+      "Normal",
+      "R$ 1.950,00"
+    ],
+    [
+      "Normal",
+      "Fluxo de caixa (sobra/mês)"
+    ],
+    [
+      "Normal",
+      "R$ 50,00"
+    ],
+    [
+      "Normal",
+      "Saldo devedor total"
+    ],
+    [
+      "Normal",
+      "R$ 34.000,00"
+    ],
+    [
+      "Normal",
+      "Juros futuros embutidos"
+    ],
+    [
+      "Normal",
+      "R$ 9.000,00"
+    ],
+    [
+      "Normal",
+      "Comprometimento de renda"
+    ],
+    [
+      "Normal",
+      "39,00%"
+    ],
+    [
+      "Heading 1",
+      "3. Suas dívidas, da mais cara para a mais barata"
+    ],
+    [
+      "Normal",
+      "Credor"
+    ],
+    [
+      "Normal",
+      "Tipo"
+    ],
+    [
+      "Normal",
+      "Saldo"
+    ],
+    [
+      "Normal",
+      "Taxa a.m."
+    ],
+    [
+      "Normal",
+      "Parcela"
+    ],
+    [
+      "Normal",
+      "Cartão Banco A"
+    ],
+    [
+      "Normal",
+      "Cartão de crédito"
+    ],
+    [
+      "Normal",
+      "R$ 8.000,00"
+    ],
+    [
+      "Normal",
+      "12,00%"
+    ],
+    [
+      "Normal",
+      "R$ 900,00"
+    ],
+    [
+      "Normal",
+      "CDC Veículo"
+    ],
+    [
+      "Normal",
+      "CDC (Crédito Direto ao Consumidor)"
+    ],
+    [
+      "Normal",
+      "R$ 20.000,00"
+    ],
+    [
+      "Normal",
+      "2,50%"
+    ],
+    [
+      "Normal",
+      "R$ 700,00"
+    ],
+    [
+      "Normal",
+      "Consignado Servidor"
+    ],
+    [
+      "Normal",
+      "Consignado"
+    ],
+    [
+      "Normal",
+      "R$ 6.000,00"
+    ],
+    [
+      "Normal",
+      "1,80%"
+    ],
+    [
+      "Normal",
+      "R$ 350,00"
+    ],
+    [
+      "Heading 1",
+      "4. Estratégia de quitação"
+    ],
+    [
+      "Normal",
+      "Considerando um pagamento extra de R$ 500,00 por mês além das parcelas mínimas, comparamos os dois métodos clássicos:"
+    ],
+    [
+      "List Bullet",
+      "Avalanche (ataca o maior juro): quita em 28 meses, pagando R$ 16.659,33 em juros. Matematicamente é o caminho mais barato."
+    ],
+    [
+      "List Bullet",
+      "Bola de neve (ataca o menor saldo): quita em 34 meses, pagando R$ 27.398,34 em juros. Custa um pouco mais, mas entrega vitórias rápidas que ajudam a manter a disciplina."
+    ],
+    [
+      "Normal",
+      "Nota: a simulação usa um modelo simplificado (juros compostos sobre o saldo, parcela constante) e serve para comparar as estratégias entre si; o prazo exato pode diferir do cronograma contratual do banco."
+    ],
+    [
+      "Normal",
+      "Recomendação: a avalanche economiza R$ 10.739,01 em juros. Prefira-a, a menos que você precise do impulso psicológico das quitações rápidas da bola de neve."
+    ],
+    [
+      "Heading 1",
+      "5. Oportunidades de portabilidade"
+    ],
+    [
+      "Normal",
+      "Migrando as dívidas caras para uma taxa de 1,80% a.m., a economia estimada seria:"
+    ],
+    [
+      "Normal",
+      "Credor"
+    ],
+    [
+      "Normal",
+      "Economia mensal"
+    ],
+    [
+      "Normal",
+      "Economia total"
+    ],
+    [
+      "Normal",
+      "Cartão Banco A"
+    ],
+    [
+      "Normal",
+      "R$ 544,28"
+    ],
+    [
+      "Normal",
+      "R$ 6.531,34"
+    ],
+    [
+      "Normal",
+      "CDC Veículo"
+    ],
+    [
+      "Normal",
+      "R$ 89,35"
+    ],
+    [
+      "Normal",
+      "R$ 3.216,78"
+    ],
+    [
+      "Heading 1",
+      "6. Recomendações"
+    ],
+    [
+      "List Bullet",
+      "O comprometimento de renda está em 39% (atenção). Evite contrair novas dívidas e concentre esforços em quitar as caras."
+    ],
+    [
+      "List Bullet",
+      "A dívida mais cara é 'Cartão Banco A' (12.0% a.m.). Dívidas acima de ~4% a.m. (típico de cartão rotativo e cheque especial) devem ser o primeiro alvo."
+    ],
+    [
+      "List Bullet",
+      "Você não tem reserva de emergência. Após controlar as dívidas caras, montar uma reserva evita recorrer a crédito caro no próximo imprevisto."
+    ],
+    [
+      "Heading 1",
+      "7. Próximos passos"
+    ],
+    [
+      "List Number",
+      "Solicite a cada credor o saldo devedor atualizado, por escrito."
+    ],
+    [
+      "List Number",
+      "Simule a portabilidade nos concorrentes e use as propostas como alavanca."
+    ],
+    [
+      "List Number",
+      "Negocie primeiro as dívidas mais caras (maior taxa/CET)."
+    ],
+    [
+      "List Number",
+      "Registre todo acordo por escrito (protocolo ou Consumidor.gov.br)."
+    ],
+    [
+      "Normal",
+      ""
+    ],
+    [
+      "Normal",
+      "Aviso: este relatório é uma ferramenta de apoio à decisão baseada nos dados informados. Não constitui aconselhamento financeiro ou de investimento personalizado. As taxas de mercado e as regras de programas de renegociação mudam; confirme os números vigentes antes de decidir."
+    ]
+  ]
+}

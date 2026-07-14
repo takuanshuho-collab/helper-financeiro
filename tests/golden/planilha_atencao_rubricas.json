@@ -1,0 +1,477 @@
+{
+  "abas": [
+    {
+      "aba": "Diagnóstico",
+      "celulas": [
+        [
+          "A1",
+          "DIAGNÓSTICO FINANCEIRO"
+        ],
+        [
+          "A3",
+          "Renda líquida mensal"
+        ],
+        [
+          "B3",
+          5000
+        ],
+        [
+          "A4",
+          "Despesas fixas"
+        ],
+        [
+          "B4",
+          2200
+        ],
+        [
+          "A5",
+          "Despesas variáveis"
+        ],
+        [
+          "B5",
+          800
+        ],
+        [
+          "A6",
+          "Reserva de emergência"
+        ],
+        [
+          "B6",
+          0
+        ],
+        [
+          "A7",
+          "Saldo de FGTS"
+        ],
+        [
+          "B7",
+          3000
+        ],
+        [
+          "A8",
+          "Total de parcelas/mês"
+        ],
+        [
+          "B8",
+          "=SUM('Dívidas'!F4:F6)"
+        ],
+        [
+          "A9",
+          "Despesas totais"
+        ],
+        [
+          "B9",
+          "=B4+B5"
+        ],
+        [
+          "A10",
+          "Fluxo de caixa (sobra/mês)"
+        ],
+        [
+          "B10",
+          "=B3-B9-B8"
+        ],
+        [
+          "A11",
+          "Saldo devedor total"
+        ],
+        [
+          "B11",
+          "=SUM('Dívidas'!C4:C6)"
+        ],
+        [
+          "A12",
+          "Comprometimento de renda"
+        ],
+        [
+          "B12",
+          "=B8/B3"
+        ],
+        [
+          "A14",
+          "Células em amarelo são entradas: altere-as e os indicadores recalculam automaticamente ao abrir no Excel."
+        ]
+      ]
+    },
+    {
+      "aba": "Dívidas",
+      "celulas": [
+        [
+          "A1",
+          "DÍVIDAS"
+        ],
+        [
+          "A3",
+          "Credor"
+        ],
+        [
+          "B3",
+          "Tipo"
+        ],
+        [
+          "C3",
+          "Saldo devedor"
+        ],
+        [
+          "D3",
+          "Taxa a.m."
+        ],
+        [
+          "E3",
+          "Taxa a.a."
+        ],
+        [
+          "F3",
+          "Parcela"
+        ],
+        [
+          "G3",
+          "Parc. restantes"
+        ],
+        [
+          "H3",
+          "Custo total restante"
+        ],
+        [
+          "I3",
+          "Juros restantes"
+        ],
+        [
+          "A4",
+          "Cartão Banco A"
+        ],
+        [
+          "B4",
+          "Cartão de crédito"
+        ],
+        [
+          "C4",
+          8000
+        ],
+        [
+          "D4",
+          0.12
+        ],
+        [
+          "E4",
+          "=(1+D4)^12-1"
+        ],
+        [
+          "F4",
+          900
+        ],
+        [
+          "G4",
+          12
+        ],
+        [
+          "H4",
+          "=F4*G4"
+        ],
+        [
+          "I4",
+          "=MAX(H4-C4,0)"
+        ],
+        [
+          "A5",
+          "CDC Veículo"
+        ],
+        [
+          "B5",
+          "CDC (Crédito Direto ao Consumidor)"
+        ],
+        [
+          "C5",
+          20000
+        ],
+        [
+          "D5",
+          0.025
+        ],
+        [
+          "E5",
+          "=(1+D5)^12-1"
+        ],
+        [
+          "F5",
+          700
+        ],
+        [
+          "G5",
+          36
+        ],
+        [
+          "H5",
+          "=F5*G5"
+        ],
+        [
+          "I5",
+          "=MAX(H5-C5,0)"
+        ],
+        [
+          "A6",
+          "Consignado Servidor"
+        ],
+        [
+          "B6",
+          "Consignado"
+        ],
+        [
+          "C6",
+          6000
+        ],
+        [
+          "D6",
+          0.018
+        ],
+        [
+          "E6",
+          "=(1+D6)^12-1"
+        ],
+        [
+          "F6",
+          350
+        ],
+        [
+          "G6",
+          20
+        ],
+        [
+          "H6",
+          "=F6*G6"
+        ],
+        [
+          "I6",
+          "=MAX(H6-C6,0)"
+        ],
+        [
+          "B7",
+          "TOTAL"
+        ],
+        [
+          "C7",
+          "=SUM(C4:C6)"
+        ],
+        [
+          "F7",
+          "=SUM(F4:F6)"
+        ],
+        [
+          "H7",
+          "=SUM(H4:H6)"
+        ],
+        [
+          "I7",
+          "=SUM(I4:I6)"
+        ]
+      ]
+    },
+    {
+      "aba": "Estratégias",
+      "celulas": [
+        [
+          "A1",
+          "ESTRATÉGIAS DE QUITAÇÃO"
+        ],
+        [
+          "A3",
+          "Pagamento extra considerado por mês:"
+        ],
+        [
+          "B3",
+          0
+        ],
+        [
+          "A5",
+          "Método"
+        ],
+        [
+          "B5",
+          "Meses até quitar"
+        ],
+        [
+          "C5",
+          "Total de juros pagos"
+        ],
+        [
+          "D5",
+          "Ordem de ataque"
+        ],
+        [
+          "A6",
+          "Avalanche (maior juro primeiro)"
+        ],
+        [
+          "B6",
+          "não quita c/ este valor"
+        ],
+        [
+          "C6",
+          1.660890383106173e+32
+        ],
+        [
+          "D6",
+          "Cartão Banco A → CDC Veículo → Consignado Servidor"
+        ],
+        [
+          "A7",
+          "Bola de neve (menor saldo primeiro)"
+        ],
+        [
+          "B7",
+          "não quita c/ este valor"
+        ],
+        [
+          "C7",
+          1.660890383106173e+32
+        ],
+        [
+          "D7",
+          "Consignado Servidor → Cartão Banco A → CDC Veículo"
+        ],
+        [
+          "A8",
+          "Portabilidade — economia se migrar para 1.80% a.m."
+        ],
+        [
+          "A10",
+          "Credor"
+        ],
+        [
+          "B10",
+          "Tipo"
+        ],
+        [
+          "C10",
+          "Parcela atual"
+        ],
+        [
+          "D10",
+          "Parcela nova"
+        ],
+        [
+          "E10",
+          "Economia total"
+        ],
+        [
+          "A11",
+          "Cartão Banco A"
+        ],
+        [
+          "B11",
+          "Cartão de crédito"
+        ],
+        [
+          "C11",
+          1291.49
+        ],
+        [
+          "D11",
+          747.22
+        ],
+        [
+          "E11",
+          6531.34
+        ],
+        [
+          "A12",
+          "CDC Veículo"
+        ],
+        [
+          "B12",
+          "CDC (Crédito Direto ao Consumidor)"
+        ],
+        [
+          "C12",
+          849.03
+        ],
+        [
+          "D12",
+          759.68
+        ],
+        [
+          "E12",
+          3216.78
+        ]
+      ]
+    },
+    {
+      "aba": "Orçamento detalhado",
+      "celulas": [
+        [
+          "A1",
+          "ORÇAMENTO DETALHADO (RUBRICAS)"
+        ],
+        [
+          "A3",
+          "Campo do orçamento"
+        ],
+        [
+          "B3",
+          "Rubrica"
+        ],
+        [
+          "C3",
+          "Valor"
+        ],
+        [
+          "A4",
+          "Renda líquida mensal · Renda extra/autônoma"
+        ],
+        [
+          "B4",
+          "Freela"
+        ],
+        [
+          "C4",
+          800
+        ],
+        [
+          "B5",
+          "Subtotal — Renda extra/autônoma"
+        ],
+        [
+          "C5",
+          "=SUM(C4:C4)"
+        ],
+        [
+          "A7",
+          "Despesas fixas · Contas da casa"
+        ],
+        [
+          "B7",
+          "Conta de luz"
+        ],
+        [
+          "C7",
+          180
+        ],
+        [
+          "A8",
+          "Despesas fixas · Contas da casa"
+        ],
+        [
+          "B8",
+          "Internet"
+        ],
+        [
+          "C8",
+          120
+        ],
+        [
+          "B9",
+          "Subtotal — Contas da casa"
+        ],
+        [
+          "C9",
+          "=SUM(C7:C8)"
+        ],
+        [
+          "A11",
+          "Este campo aparece com o subtotal na aba Diagnóstico; no app, o campo detalhado vale a soma das rubricas."
+        ]
+      ]
+    }
+  ],
+  "formato": "xlsx"
+}

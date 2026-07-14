@@ -1,0 +1,145 @@
+{
+  "formato": "docx",
+  "itens": [
+    [
+      "Normal",
+      "Relatório de Saúde Financeira"
+    ],
+    [
+      "Normal",
+      "Emitido em <DATA>"
+    ],
+    [
+      "Heading 1",
+      "1. Resumo executivo"
+    ],
+    [
+      "Normal",
+      "Situação: Saudável. As parcelas cabem no orçamento com folga. O comprometimento de renda com parcelas é de 0,00%, e o fluxo de caixa mensal é de R$ 3.800,00."
+    ],
+    [
+      "Heading 1",
+      "2. Diagnóstico"
+    ],
+    [
+      "Normal",
+      "Renda líquida mensal"
+    ],
+    [
+      "Normal",
+      "R$ 8.000,00"
+    ],
+    [
+      "Normal",
+      "Despesas totais"
+    ],
+    [
+      "Normal",
+      "R$ 4.200,00"
+    ],
+    [
+      "Normal",
+      "Total de parcelas/mês"
+    ],
+    [
+      "Normal",
+      "R$ 0,00"
+    ],
+    [
+      "Normal",
+      "Fluxo de caixa (sobra/mês)"
+    ],
+    [
+      "Normal",
+      "R$ 3.800,00"
+    ],
+    [
+      "Normal",
+      "Saldo devedor total"
+    ],
+    [
+      "Normal",
+      "R$ 0,00"
+    ],
+    [
+      "Normal",
+      "Juros futuros embutidos"
+    ],
+    [
+      "Normal",
+      "R$ 0,00"
+    ],
+    [
+      "Normal",
+      "Comprometimento de renda"
+    ],
+    [
+      "Normal",
+      "0,00%"
+    ],
+    [
+      "Heading 1",
+      "3. Suas dívidas, da mais cara para a mais barata"
+    ],
+    [
+      "Normal",
+      "Nenhuma dívida cadastrada."
+    ],
+    [
+      "Heading 1",
+      "4. Estratégia de quitação"
+    ],
+    [
+      "Normal",
+      "Considerando um pagamento extra de R$ 0,00 por mês além das parcelas mínimas, comparamos os dois métodos clássicos:"
+    ],
+    [
+      "List Bullet",
+      "Avalanche (ataca o maior juro): quita em 0 meses, pagando R$ 0,00 em juros. Matematicamente é o caminho mais barato."
+    ],
+    [
+      "List Bullet",
+      "Bola de neve (ataca o menor saldo): quita em 0 meses, pagando R$ 0,00 em juros. Custa um pouco mais, mas entrega vitórias rápidas que ajudam a manter a disciplina."
+    ],
+    [
+      "Normal",
+      "Nota: a simulação usa um modelo simplificado (juros compostos sobre o saldo, parcela constante) e serve para comparar as estratégias entre si; o prazo exato pode diferir do cronograma contratual do banco."
+    ],
+    [
+      "Heading 1",
+      "5. Recomendações"
+    ],
+    [
+      "List Bullet",
+      "Sua situação está sob controle. Mantenha o comprometimento de renda baixo e considere antecipar a quitação das dívidas mais caras."
+    ],
+    [
+      "Heading 1",
+      "6. Próximos passos"
+    ],
+    [
+      "List Number",
+      "Solicite a cada credor o saldo devedor atualizado, por escrito."
+    ],
+    [
+      "List Number",
+      "Simule a portabilidade nos concorrentes e use as propostas como alavanca."
+    ],
+    [
+      "List Number",
+      "Negocie primeiro as dívidas mais caras (maior taxa/CET)."
+    ],
+    [
+      "List Number",
+      "Registre todo acordo por escrito (protocolo ou Consumidor.gov.br)."
+    ],
+    [
+      "Normal",
+      ""
+    ],
+    [
+      "Normal",
+      "Aviso: este relatório é uma ferramenta de apoio à decisão baseada nos dados informados. Não constitui aconselhamento financeiro ou de investimento personalizado. As taxas de mercado e as regras de programas de renegociação mudam; confirme os números vigentes antes de decidir."
+    ]
+  ]
+}

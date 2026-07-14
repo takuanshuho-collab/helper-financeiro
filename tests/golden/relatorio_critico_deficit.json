@@ -1,0 +1,265 @@
+{
+  "formato": "docx",
+  "itens": [
+    [
+      "Normal",
+      "Relatório de Saúde Financeira"
+    ],
+    [
+      "Normal",
+      "Emitido em <DATA>"
+    ],
+    [
+      "Heading 1",
+      "1. Resumo executivo"
+    ],
+    [
+      "Normal",
+      "Situação: Crítico. As parcelas consomem grande parte da renda; risco alto. O comprometimento de renda com parcelas é de 76,67%, e o fluxo de caixa mensal é de -R$ 2.200,00."
+    ],
+    [
+      "Normal",
+      "⚠ Atenção: o fluxo de caixa está negativo. As saídas superam as entradas, o que precisa ser resolvido antes de qualquer estratégia."
+    ],
+    [
+      "Heading 1",
+      "2. Diagnóstico"
+    ],
+    [
+      "Normal",
+      "Renda líquida mensal"
+    ],
+    [
+      "Normal",
+      "R$ 3.000,00"
+    ],
+    [
+      "Normal",
+      "Despesas totais"
+    ],
+    [
+      "Normal",
+      "R$ 2.900,00"
+    ],
+    [
+      "Normal",
+      "Total de parcelas/mês"
+    ],
+    [
+      "Normal",
+      "R$ 2.300,00"
+    ],
+    [
+      "Normal",
+      "Fluxo de caixa (sobra/mês)"
+    ],
+    [
+      "Normal",
+      "-R$ 2.200,00"
+    ],
+    [
+      "Normal",
+      "Saldo devedor total"
+    ],
+    [
+      "Normal",
+      "R$ 14.000,00"
+    ],
+    [
+      "Normal",
+      "Juros futuros embutidos"
+    ],
+    [
+      "Normal",
+      "R$ 4.200,00"
+    ],
+    [
+      "Normal",
+      "Comprometimento de renda"
+    ],
+    [
+      "Normal",
+      "76,67%"
+    ],
+    [
+      "Heading 1",
+      "3. Suas dívidas, da mais cara para a mais barata"
+    ],
+    [
+      "Normal",
+      "Credor"
+    ],
+    [
+      "Normal",
+      "Tipo"
+    ],
+    [
+      "Normal",
+      "Saldo"
+    ],
+    [
+      "Normal",
+      "Taxa a.m."
+    ],
+    [
+      "Normal",
+      "Parcela"
+    ],
+    [
+      "Normal",
+      "Cartão X"
+    ],
+    [
+      "Normal",
+      "Cartão de crédito"
+    ],
+    [
+      "Normal",
+      "R$ 9.000,00"
+    ],
+    [
+      "Normal",
+      "14,00%"
+    ],
+    [
+      "Normal",
+      "R$ 1.100,00"
+    ],
+    [
+      "Normal",
+      "Cheque Especial"
+    ],
+    [
+      "Normal",
+      "Cheque especial"
+    ],
+    [
+      "Normal",
+      "R$ 5.000,00"
+    ],
+    [
+      "Normal",
+      "8,00%"
+    ],
+    [
+      "Normal",
+      "R$ 1.200,00"
+    ],
+    [
+      "Heading 1",
+      "4. Estratégia de quitação"
+    ],
+    [
+      "Normal",
+      "Considerando um pagamento extra de R$ 0,00 por mês além das parcelas mínimas, comparamos os dois métodos clássicos:"
+    ],
+    [
+      "List Bullet",
+      "Avalanche (ataca o maior juro): com esse valor extra, as parcelas mínimas não conseguem quitar a dívida (os juros crescem mais rápido). É preciso aumentar o aporte ou renegociar as taxas."
+    ],
+    [
+      "List Bullet",
+      "Bola de neve (ataca o menor saldo): com esse valor extra, as parcelas mínimas não conseguem quitar a dívida (os juros crescem mais rápido). É preciso aumentar o aporte ou renegociar as taxas."
+    ],
+    [
+      "Normal",
+      "Nota: a simulação usa um modelo simplificado (juros compostos sobre o saldo, parcela constante) e serve para comparar as estratégias entre si; o prazo exato pode diferir do cronograma contratual do banco."
+    ],
+    [
+      "Heading 1",
+      "5. Oportunidades de portabilidade"
+    ],
+    [
+      "Normal",
+      "Migrando as dívidas caras para uma taxa de 1,80% a.m., a economia estimada seria:"
+    ],
+    [
+      "Normal",
+      "Credor"
+    ],
+    [
+      "Normal",
+      "Economia mensal"
+    ],
+    [
+      "Normal",
+      "Economia total"
+    ],
+    [
+      "Normal",
+      "Cartão X"
+    ],
+    [
+      "Normal",
+      "R$ 733,94"
+    ],
+    [
+      "Normal",
+      "R$ 7.339,39"
+    ],
+    [
+      "Normal",
+      "Cheque Especial"
+    ],
+    [
+      "Normal",
+      "R$ 194,96"
+    ],
+    [
+      "Normal",
+      "R$ 1.169,78"
+    ],
+    [
+      "Heading 1",
+      "6. Recomendações"
+    ],
+    [
+      "List Bullet",
+      "Seu fluxo de caixa está NEGATIVO: as saídas superam as entradas. Antes de qualquer estratégia de quitação, é preciso cortar despesas ou aumentar a renda para gerar sobra mensal."
+    ],
+    [
+      "List Bullet",
+      "O comprometimento de renda está em 77% (crítico). Priorize renegociar ou portar as dívidas mais caras para reduzir a parcela mensal e recuperar fôlego."
+    ],
+    [
+      "List Bullet",
+      "A dívida mais cara é 'Cartão X' (14.0% a.m.). Dívidas acima de ~4% a.m. (típico de cartão rotativo e cheque especial) devem ser o primeiro alvo."
+    ],
+    [
+      "List Bullet",
+      "Você tem dívida cara mas nenhum consignado. Se tiver margem consignável disponível, trocar dívida cara por consignado (juros menores) costuma reduzir bastante o custo — confirme a margem vigente."
+    ],
+    [
+      "List Bullet",
+      "Você não tem reserva de emergência. Após controlar as dívidas caras, montar uma reserva evita recorrer a crédito caro no próximo imprevisto."
+    ],
+    [
+      "Heading 1",
+      "7. Próximos passos"
+    ],
+    [
+      "List Number",
+      "Solicite a cada credor o saldo devedor atualizado, por escrito."
+    ],
+    [
+      "List Number",
+      "Simule a portabilidade nos concorrentes e use as propostas como alavanca."
+    ],
+    [
+      "List Number",
+      "Negocie primeiro as dívidas mais caras (maior taxa/CET)."
+    ],
+    [
+      "List Number",
+      "Registre todo acordo por escrito (protocolo ou Consumidor.gov.br)."
+    ],
+    [
+      "Normal",
+      ""
+    ],
+    [
+      "Normal",
+      "Aviso: este relatório é uma ferramenta de apoio à decisão baseada nos dados informados. Não constitui aconselhamento financeiro ou de investimento personalizado. As taxas de mercado e as regras de programas de renegociação mudam; confirme os números vigentes antes de decidir."
+    ]
+  ]
+}
