@@ -19,6 +19,25 @@ let sidecar: ChildProcess | null = null
 let sidecarPort = 0
 let sidecarToken = ''
 
+// Última pasta usada nos diálogos de arquivo, mantida SÓ em memória e por sessão
+// (ADR-0018, regra 2). O Electron 43 mudou o default de `showSaveDialog`/
+// `showOpenDialog`: sem `defaultPath` explícito eles passam a abrir em Downloads
+// em vez de lembrar a última pasta. Para preservar o comportamento antigo — o
+// diálogo reabrir onde o usuário mexeu por último — guardamos aqui o diretório
+// da última escolha não-cancelada e o injetamos como `defaultPath`. Nunca vai a
+// disco: é um caminho pessoal (potencial PII), então some ao fechar o app.
+let ultimoDiretorio = ''
+
+// Monta o `defaultPath` do diálogo de salvar. A `sugestao` é sempre um nome de
+// arquivo (ex.: "diagnostico_financeiro.xlsx"); se algum dia vier um caminho
+// absoluto, o chamador está mandando a pasta e o respeitamos como está. Do
+// contrário, ancoramos a sugestão no último diretório da sessão para reabrir
+// onde o usuário salvou por último (comportamento pré-Electron 43).
+function caminhoPadraoSalvar(sugestao: string): string {
+  if (path.isAbsolute(sugestao)) return sugestao
+  return ultimoDiretorio ? path.join(ultimoDiretorio, sugestao) : sugestao
+}
+
 // A extração por LLM local em CPU pode levar minutos. O undici (fetch do Node)
 // aborta no headersTimeout/bodyTimeout padrão (~300s), cortando uma extração
 // lenta-mas-funcional. Damos folga generosa aqui; o teto real é o HF_TIMEOUT do
@@ -290,13 +309,17 @@ void app.whenReady().then(async () => {
     ) => {
       const win = BrowserWindow.getFocusedWindow()
       const escolha = {
-        defaultPath: opcoes.sugestao,
+        defaultPath: caminhoPadraoSalvar(opcoes.sugestao),
         filters: [{ name: opcoes.filtroNome, extensions: opcoes.extensoes }],
       }
       const r = win
         ? await dialog.showSaveDialog(win, escolha)
         : await dialog.showSaveDialog(escolha)
-      return r.canceled || !r.filePath ? null : r.filePath
+      const caminho = r.canceled || !r.filePath ? null : r.filePath
+      // Lembra a pasta escolhida para o próximo diálogo da sessão (ver
+      // `ultimoDiretorio`). Só na escolha efetiva; cancelar não mexe.
+      if (caminho) ultimoDiretorio = path.dirname(caminho)
+      return caminho
     },
   )
   // Gestor de modelos GGUF (T-1702): aponta um `.gguf` já baixado pelo
@@ -309,11 +332,18 @@ void app.whenReady().then(async () => {
       const escolha = {
         properties: ['openFile'] as Array<'openFile'>,
         filters: [{ name: opcoes.filtroNome, extensions: opcoes.extensoes }],
+        // Sem sugestão de nome aqui: injetamos só o último diretório da sessão
+        // quando houver, para reabrir onde o usuário apontou por último
+        // (comportamento pré-Electron 43). Vazio ⇒ default do SO.
+        ...(ultimoDiretorio ? { defaultPath: ultimoDiretorio } : {}),
       }
       const r = win
         ? await dialog.showOpenDialog(win, escolha)
         : await dialog.showOpenDialog(escolha)
-      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]
+      const caminho =
+        r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]
+      if (caminho) ultimoDiretorio = path.dirname(caminho)
+      return caminho
     },
   )
 

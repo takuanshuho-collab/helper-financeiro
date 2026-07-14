@@ -309,7 +309,12 @@ test('planilha: rubricas detalham o campo e o roll-up vem do core', async () => 
   // editável (ADR-0012); restaura o seed (500) para as rodadas seguintes.
   await detalhado.click()
   const grupo2 = win.locator('.plan-grupo', { hasText: 'Contas da casa' })
+  // Afirma a remoção da 1ª linha ANTES do 2º clique (condição real, padrão
+  // T-1907): sem isto o 2º `.first()` resolve no meio do re-render do React e
+  // o clique se perde — o flake histórico do "planilha" (atas v2.4..v2.8),
+  // quase determinístico no Chromium do Electron 43.
   await grupo2.locator('.btn-remover').first().click()
+  await expect(grupo2.locator('.plan-linha')).toHaveCount(1)
   await grupo2.locator('.btn-remover').first().click()
   await expect(grupo2.locator('.plan-linha')).toHaveCount(0)
   await win.locator('.btn-add', { hasText: 'Voltar ao Perfil' }).click()
