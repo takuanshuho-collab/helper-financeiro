@@ -94,7 +94,7 @@ def test_linhas_do_resultado_formato_classico_e_none():
     assert _linhas_do_resultado(None) == []
 
 
-# --------------------------------------------------------- ocr_documento (fake)
+# --------------------------------------------------------- ocr_documento (fake)  # noqa: ERA001 — cabeçalho de seção, não código comentado
 def test_ocr_documento_imagem_usa_bytes_direto():
     motor = MotorFalso([_linha("Recibo", topo=10, esquerda=10)])
     resultado = ocr_documento(b"\x89PNG-falso", "recibo.png", motor=motor)
@@ -124,7 +124,7 @@ def test_imagens_do_documento_imagem_nao_abre_arquivo():
     assert _imagens_do_documento(b"lixo", "foto.jpg") == [b"lixo"]
 
 
-# ------------------------------------------------------------- degradação (P8)
+# ------------------------------------------------------------- degradação (P8)  # noqa: ERA001 — cabeçalho de seção, não código comentado
 def test_obter_motor_ausente_levanta_ocr_indisponivel(monkeypatch):
     def _falha(self, params=None):
         raise ImportError("No module named 'rapidocr'")

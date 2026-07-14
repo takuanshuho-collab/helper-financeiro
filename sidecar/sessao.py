@@ -274,7 +274,7 @@ def sessao() -> SessaoCofre:
     Criada sob demanda, mesmo padrão do antigo singleton `_REPO`: lê
     `HF_AUTO_LOCK_MIN` uma vez, na primeira chamada.
     """
-    global _SESSAO
+    global _SESSAO  # noqa: PLW0603 — singleton lazy
     if _SESSAO is None:
         _SESSAO = SessaoCofre()
     return _SESSAO
@@ -287,7 +287,7 @@ def resetar_sessao() -> None:
     `dependency_overrides` — a maioria isola via override, como o
     `Repositorio` sempre fez.
     """
-    global _SESSAO
+    global _SESSAO  # noqa: PLW0603 — singleton lazy
     if _SESSAO is not None:
         _SESSAO.fechar()
     _SESSAO = None

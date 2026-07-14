@@ -166,7 +166,7 @@ def chamar_llm(state: EstadoAnalise,
 
 
 def validar_guardrails(state: EstadoAnalise,
-                       runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+                       runtime: Runtime[ContextoAnalise]) -> dict[str, object]:  # noqa: ARG001 — nome exigido p/ injeção do LangGraph (RunnableCallable casa por nome de parâmetro)
     """H1 (números fabricados) + H6 (conteúdo indevido) — as travas críticas."""
     analise_dump = state.get("analise")
     assert analise_dump is not None  # rota garante: só chega aqui com análise
@@ -202,7 +202,7 @@ def aprovar(state: EstadoAnalise,
 
 
 def sanear(state: EstadoAnalise,
-           runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+           runtime: Runtime[ContextoAnalise]) -> dict[str, object]:  # noqa: ARG001 — idem validar_guardrails
     """Último recurso antes de degradar (ADR-0011): redação determinística.
 
     Remove as FRASES com números órfãos e revalida. Se o que sobra continua
@@ -222,7 +222,7 @@ def sanear(state: EstadoAnalise,
 
 
 def degradar(state: EstadoAnalise,
-             runtime: Runtime[ContextoAnalise]) -> dict[str, object]:
+             runtime: Runtime[ContextoAnalise]) -> dict[str, object]:  # noqa: ARG001 — idem validar_guardrails
     """P8: entrega o determinístico intacto, com os motivos registrados."""
     motivos = state.get("motivos") or ["ERRO_PROVIDER:Desconhecido"]
     log.warning("Modo degradado. Guardrails/erros: %s", motivos)
@@ -300,7 +300,7 @@ _grafo: GrafoAnalise | None = None
 
 def grafo_analise() -> GrafoAnalise:
     """Grafo compilado (singleton — a compilação não é de graça)."""
-    global _grafo
+    global _grafo  # noqa: PLW0603 — singleton lazy
     if _grafo is None:
         _grafo = _construir()
     return _grafo

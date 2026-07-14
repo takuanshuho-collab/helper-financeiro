@@ -202,7 +202,7 @@ def test_quote_check_ignora_tags_ecoadas_na_citacao():
     assert not any(d.startswith("saldo_devedor:") for d in v.descartados)
 
 
-# ------------------------------------------------------------- grafo (interrupt)
+# ------------------------------------------------------------- grafo (interrupt)  # noqa: ERA001 — cabeçalho de seção, não código comentado
 def test_fluxo_pausa_para_confirmacao_e_retoma():
     """O grafo extrai, verifica, PAUSA (interrupt) e retoma com a confirmação."""
     fake = FakeExtrator()

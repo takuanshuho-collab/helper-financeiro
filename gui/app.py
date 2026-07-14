@@ -376,7 +376,7 @@ class HelperFinanceiroApp(tk.Tk):
         frame = ttk.Frame(self.abas)
         self.abas.add(frame, text="  2. Dívidas  ")
 
-        # Lista (Treeview)
+        # Lista (Treeview)  # noqa: ERA001 — comentário descritivo, não código comentado
         colunas = ("credor", "tipo", "saldo", "taxa", "parcela", "restantes")
         self.tree = ttk.Treeview(frame, columns=colunas, show="headings",
                                  height=8)

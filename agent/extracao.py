@@ -301,7 +301,7 @@ def _no_extrair(state: EstadoExtracao,
 
 
 def _no_verificar(state: EstadoExtracao,
-                  runtime: Runtime[ContextoExtracao]) -> dict[str, object]:
+                  runtime: Runtime[ContextoExtracao]) -> dict[str, object]:  # noqa: ARG001 — nome exigido p/ injeção do LangGraph (RunnableCallable casa por nome de parâmetro)
     extracao_dump = state.get("extracao")
     assert extracao_dump is not None
     extracao = ExtracaoContrato.model_validate(extracao_dump)
@@ -310,7 +310,7 @@ def _no_verificar(state: EstadoExtracao,
 
 
 def _no_confirmar(state: EstadoExtracao,
-                  runtime: Runtime[ContextoExtracao]) -> dict[str, object]:
+                  runtime: Runtime[ContextoExtracao]) -> dict[str, object]:  # noqa: ARG001 — idem _no_verificar
     """Pausa o grafo até o humano conferir (interrupt + checkpointer, ADR-0006).
 
     O payload é o que a GUI (M3) mostra pré-preenchido — mesmo fluxo "confira
@@ -328,7 +328,7 @@ def _no_confirmar(state: EstadoExtracao,
 
 
 def _no_falhar(state: EstadoExtracao,
-               runtime: Runtime[ContextoExtracao]) -> dict[str, object]:
+               runtime: Runtime[ContextoExtracao]) -> dict[str, object]:  # noqa: ARG001 — idem _no_verificar
     """P8 na entrada: extração indisponível ⇒ chamador cai no extrator regex."""
     motivos = state.get("motivos") or ["ERRO_PROVIDER:Desconhecido"]
     log.warning("Extração degradada: %s", motivos)
@@ -366,7 +366,7 @@ _grafo: GrafoExtracao | None = None
 
 
 def grafo_extracao() -> GrafoExtracao:
-    global _grafo
+    global _grafo  # noqa: PLW0603 — singleton lazy (compilação do grafo não é de graça)
     if _grafo is None:
         _grafo = _construir()
     return _grafo

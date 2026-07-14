@@ -503,7 +503,7 @@ def runtime_embarcado() -> RuntimeLLM:
     ou modelo, devolve uma instância — é `base_url()` que levanta
     `RuntimeLLMIndisponivel` com o motivo, mantendo um ponto único de decisão.
     """
-    global _RUNTIME
+    global _RUNTIME  # noqa: PLW0603 — singleton lazy sob lock
     with _LOCK_SINGLETON:
         if _RUNTIME is None:
             _RUNTIME = RuntimeLLM(
@@ -522,7 +522,7 @@ def encerrar_runtime() -> None:
     A ser chamado no shutdown do sidecar (o T-1702 liga isto no ciclo de vida
     do `app.py`, fora do perímetro desta task).
     """
-    global _RUNTIME
+    global _RUNTIME  # noqa: PLW0603 — singleton lazy sob lock
     with _LOCK_SINGLETON:
         if _RUNTIME is not None:
             _RUNTIME.encerrar()

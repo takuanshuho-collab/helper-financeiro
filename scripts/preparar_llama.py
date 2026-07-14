@@ -161,8 +161,7 @@ def baixar_zip(
     req = urllib.request.Request(asset.url)
     try:
         with abrir_url(req, timeout=300) as resp, open(parcial, "wb") as f:
-            for bloco in iter(lambda: resp.read(_TAMANHO_BLOCO), b""):
-                f.write(bloco)
+            f.writelines(iter(lambda: resp.read(_TAMANHO_BLOCO), b""))
     except OSError as e:
         raise ErroPrepararLlama(f"Falha ao baixar {asset.nome_zip}: {e}") from e
 

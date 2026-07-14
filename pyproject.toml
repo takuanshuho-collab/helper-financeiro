@@ -59,7 +59,17 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["SIM"]  # clareza > concisão em testes
+# clareza > concisão em testes; ARG001 (C-35): fixtures pytest (ex.: `repo_tmp`)
+# e stubs/fakes que imitam a assinatura de um provider real são
+# estruturalmente "não usados" — o valor está em existir, não em ser lido.
+# Suprimir arquivo a arquivo evitaria dezenas de `noqa` quase idênticos.
+"tests/*" = ["SIM", "ARG001"]
+# S608 (C-35): as duas ocorrências (contagem de linhas por tabela, migração)
+# interpolam nomes de tabela vindos de uma tupla fixa no próprio módulo
+# (`_TABELAS_MIGRACAO`), nunca de entrada externa — falso positivo do S608.
+# Arquivo fora do escopo de edição desta task (outra task mexe nele agora);
+# suprimido aqui em vez de tocar `sidecar/persistencia.py`.
+"sidecar/persistencia.py" = ["S608"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]

@@ -571,7 +571,7 @@ def historico_comparar(entrada: CompararMesesIn,
             "comparacao": comparar_orcamentos(antes, depois)}
 
 
-# ---------------------------------------------------------- rubricas (T-1103)
+# ---------------------------------------------------------- rubricas (T-1103)  # noqa: ERA001 — cabeçalho de seção, não código comentado
 # Toda mutação devolve a lista atualizada E o perfil recalculado: a GUI
 # hidrata os dois estados numa resposta só, sem janela de inconsistência.
 @app.get("/rubricas", dependencies=[Depends(exigir_token)])
@@ -738,7 +738,7 @@ def estrategias(entrada: EstrategiasIn) -> dict:
     return comparar_estrategias(perfil, entrada.extra)
 
 
-# ------------------------------------------------------------ análise (T-902)
+# ------------------------------------------------------------ análise (T-902)  # noqa: ERA001 — cabeçalho de seção, não código comentado
 @app.post("/analise", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def analise(entrada: AnaliseIn) -> dict:
     """Pacote determinístico da tela Análise (REQ-F-015).
@@ -892,7 +892,7 @@ def analise_ia_status(job_id: str) -> dict:
     return {"job_id": job_id, **job}
 
 
-# ------------------------------------------------------- exportações (T-902)
+# ------------------------------------------------------- exportações (T-902)  # noqa: ERA001 — cabeçalho de seção, não código comentado
 @app.post("/exportar/planilha", dependencies=[Depends(exigir_token)])
 def exportar_planilha(entrada: ExportarPlanilhaIn,
                       repo: Annotated[Repositorio, Depends(exigir_cofre)]) -> dict:
@@ -1007,7 +1007,7 @@ def _motor_ocr_singleton() -> Motor | None:
     `_motor_ocr` ainda vazio. Carregar os modelos PP-OCRv6 é raro (uma vez por
     processo), então pagar o lock em toda chamada é custo desprezível.
     """
-    global _motor_ocr, _motor_ocr_tentado
+    global _motor_ocr, _motor_ocr_tentado  # noqa: PLW0603 — singleton lazy sob lock
     with _LOCK_MOTOR_OCR:
         if not _motor_ocr_tentado:
             _motor_ocr_tentado = True

@@ -137,7 +137,7 @@ def test_acentos_sobrevivem_ao_roundtrip(tmp_path):
     repo.fechar()
 
 
-# -------------------------------------------------- rubricas (CRUD, T-1103)
+# -------------------------------------------------- rubricas (CRUD, T-1103)  # noqa: ERA001 — cabeçalho de seção, não código comentado
 def test_rubrica_crud_roundtrip(tmp_path):
     repo = Repositorio(tmp_path / "dados.db")
     criada = repo.criar_rubrica("fixas", "contas_casa", "Conta de luz", 180.0)

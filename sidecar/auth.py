@@ -307,7 +307,7 @@ class Cofre:
     def caminho(self) -> Path:
         return self._caminho
 
-    # ---------------------------------------------------- metadados (I/O)
+    # ---------------------------------------------------- metadados (I/O)  # noqa: ERA001 — cabeçalho de seção, não código comentado
     def esta_cadastrado(self) -> bool:
         return self._caminho.exists()
 

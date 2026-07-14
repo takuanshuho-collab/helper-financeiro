@@ -57,7 +57,7 @@ def _corpo_portabilidade(divida, dados):
     return txt
 
 
-def _corpo_reducao(divida, dados):
+def _corpo_reducao(divida, _dados):
     return (
         f"Venho solicitar a RENEGOCIAÇÃO do contrato em referência, cujo saldo "
         f"devedor é de {formatar_brl(divida.saldo_devedor)} e a taxa atual é de "
