@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.9.0 (ciclo ABERTO — ADR-0017; v2.8.0 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.11.0 (ciclo ABERTO — ADR-0019; v2.10.0 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -331,7 +331,36 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 |----|------|-----|---------|--------|
 | T-2001 | Migração Electron 43: checklist de breaking changes 34→43 × superfície (tabela anexada à ADR-0018) → bump + correlatas comprovadas → `lastUsedPath` nos diálogos → escada de portões completa (tsc → eslint → E2E dev → dist → smoke do pacote) (Opus) | C-16 | ADR-0018 | ✅ `262b2ee` |
 | T-2002 | Carona C-10 (validação do prefixo `/` em `chamarSidecar`, com E2E) + passo permanente de auditoria de deps no checklist de fechamento (Sonnet) | C-10 | T-2001 | ✅ `ea783c8` |
-| T-2003 | Fechamento do ciclo: `npm audit` registrado, build oficial, smokes (pacote + órfão), ata `FREEZE.md` v2.10.0, docs sincronizados (orquestrador) | Processo | todas | ✅ (este commit) |
+| T-2003 | Fechamento do ciclo: `npm audit` registrado, build oficial, smokes (pacote + órfão), ata `FREEZE.md` v2.10.0, docs sincronizados (orquestrador) | Processo | todas | ✅ `a55f817` |
+
+## Milestone M21 — Endurecimento dormente e higiene de linter (ciclo v2.11, ADR-0019)
+
+> Ciclo dedicado aos achados **C-23** e **C-35**, design validado em
+> brainstorming com o mantenedor em 2026-07-13 (Decision Log na **ADR-0019**).
+> Tasks independentes e paralelizáveis (arquivos disjuntos). Regra do C-35:
+> veredito triplo por item (corrigir / suprimir com justificativa / manter);
+> **nenhuma mudança de comportamento** — bug real encontrado PARA a task e
+> vira achado novo para o portão. Zero regressão (ADR-0017 §E herdada).
+
+| ID | Task | Achados | Depende | Status |
+|----|------|-----|---------|--------|
+| T-2101 | Endurecimento POSIX dormente: `0o600` nos arquivos e `0o700` nas pastas do cofre no ramo POSIX (`sidecar/arquivos.py` `gravar_json_atomico` + criação de pasta/banco em `sidecar/persistencia.py`); no-op no Windows; unit tests provam os flags via monkeypatch (Sonnet) | C-23 | ADR-0019 | ⬜ |
+| T-2102 | Mini-varredura C-35: reavaliação item a item dos grupos ARG001/ERA001/S608/PLW0603/FURB122 com veredito triplo; `ruff check` com as regras ativadas limpo ou 100% justificado em código (Sonnet) | C-35 | ADR-0019 | ⬜ |
+
+## Milestone M22 — Complexidade sob catraca (ciclo v2.11, ADR-0019)
+
+> Achados **C-28/C-29** sob a régua do **golden-master** (T-2201 ANTES de
+> qualquer refatoração, commit separado) e diretriz **extrair, não
+> reescrever**: cada seção vira função privada, sem melhorar prosa, ordem ou
+> formatação; golden idêntico é critério de aceite. Fecha com a catraca
+> permanente **C901** no ruff (teto = pior caso pós-refatoração, "só aperta").
+
+| ID | Task | Achados | Depende | Status |
+|----|------|-----|---------|--------|
+| T-2201 | Golden-master dos outputs: `tests/test_golden_outputs.py` com extratores determinísticos (`.docx` → `(estilo, texto)`; `.xlsx` → por aba `(coordenada, valor_ou_fórmula)`), goldens JSON em `tests/golden/` das fixtures do harness; regeneração SÓ com `HF_REGENERAR_GOLDEN=1` fora do CI; máscara de campo volátil no extrator (Opus) | C-28/C-29 (régua) | M21 | ⬜ |
+| T-2202 | Refatoração `gerar_relatorio` (`outputs/relatorio.py`) por extração de seções; golden idêntico + C901 da função abaixo do teto (Opus) | C-28 | T-2201 | ⬜ |
+| T-2203 | Refatoração `_aba_evolucao` (`outputs/planilha.py`) e `baixar_modelo` (`sidecar/gestor_modelos.py`), mesmo contrato do T-2202 (Sonnet) | C-29 | T-2201 | ⬜ |
+| T-2204 | Fechamento do ciclo: medir pior C901 → fixar `max-complexity` e ativar `C901` no ruff (catraca permanente); gates, auditoria de deps (ADR-0018 §5), ata `FREEZE.md` v2.11.0; smoke NSIS dispensado (§E.4 não dispara — decisão registrada na ADR-0019 e na ata) (orquestrador) | Processo | todas | ⬜ |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -368,7 +397,10 @@ aprovado alcançado — o falso "bloqueio" do 43 era o flake histórico do
 via `lastUsedPath`. Regra permanente nova: auditoria de deps em todo
 fechamento (seção acima). Ata `FREEZE.md` v2.10.0. **Pendentes para ciclos
 futuros:** C-15 (code signing — certificado), C-23 (POSIX), C-28/C-29
-(complexidade), C-35 (sem ação). Próximo ciclo: a definir (começa por ADR).
+(complexidade), C-35 (sem ação). **Ciclo v2.11 ABERTO (ADR-0019, M21+M22,
+2026-07-14):** C-23 dormente + C-35 item a item (M21, paralelas) e C-28/C-29
+sob golden-master com catraca C901 no fechamento (M22). Fora do ciclo: C-15
+(aguarda decisão de custo do certificado).
 
 ### Histórico do ciclo v2.8 (fechado)
 
