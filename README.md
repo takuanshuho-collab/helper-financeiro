@@ -29,7 +29,9 @@ podendo apontar para ele (`HF_BASE_URL`). O ciclo v2.9 (ADR-0017) foi de
 de regressão — destaque para o **Job Object** que garante que nenhum
 `llama-server` fica órfão nem num encerramento forçado — e dependências
 órfãs removidas (instalador ~21 MB menor). Nenhum recurso novo, zero
-mudança de comportamento visível.
+mudança de comportamento visível. O ciclo v2.10 (ADR-0018) atualizou o
+**Electron para a versão atual (43)** — dez majors de uma vez, eliminando os
+CVEs conhecidos — mantendo tudo como estava para o usuário.
 
 ---
 

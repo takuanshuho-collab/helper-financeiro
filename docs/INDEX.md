@@ -123,8 +123,16 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   das deps `llama-index-*` órfãs — −43 pacotes; E2E sem esperas fixas).
   Cobertura 95,8% → 96,6% com o `sidecar/` medido. Zero regressão, sem
   migração de schema (ADR-0017 §E).
-- **Mudanças nos artefatos congelados (v2.9.0) exigem nova ADR + incremento de
-  versão + nova ata** — o próximo ciclo começa por uma ADR.
+- **Ciclo v2.10 FECHADO (`FREEZE.md` v2.10.0, ADR-0018, M20):** **Electron
+  33 → 43.1.0** (C-16: dez majors de defasagem e CVEs high eliminados;
+  `npm audit` e `pip-audit` zerados) sem nenhuma correlata exigida e com os
+  diálogos preservando a última pasta (`lastUsedPath`, em memória). Carona:
+  C-10 (IPC rejeita `metodo` sem `/` antes do sidecar). Bônus: o flake
+  histórico do E2E "planilha" (v2.4..v2.8) foi diagnosticado como corrida do
+  próprio teste e encerrado pelo padrão T-1907. Regra permanente nova:
+  auditoria de deps registrada na ata em todo fechamento de ciclo.
+- **Mudanças nos artefatos congelados (v2.10.0) exigem nova ADR + incremento
+  de versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar
 ```bash

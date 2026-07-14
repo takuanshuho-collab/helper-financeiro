@@ -329,9 +329,9 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | Achados | Depende | Status |
 |----|------|-----|---------|--------|
-| T-2001 | Migração Electron 43: checklist de breaking changes 34→43 × superfície (tabela anexada à ADR-0018) → bump + correlatas comprovadas → `lastUsedPath` nos diálogos → escada de portões completa (tsc → eslint → E2E dev → dist → smoke do pacote) (Opus) | C-16 | ADR-0018 | ⬜ |
-| T-2002 | Carona C-10 (validação do prefixo `/` em `chamarSidecar`, com E2E) + passo permanente de auditoria de deps no checklist de fechamento (Sonnet) | C-10 | T-2001 | ⬜ |
-| T-2003 | Fechamento do ciclo: `npm audit` registrado, build oficial, smokes (pacote + órfão), ata `FREEZE.md` v2.10.0, docs sincronizados (orquestrador) | Processo | todas | ⬜ |
+| T-2001 | Migração Electron 43: checklist de breaking changes 34→43 × superfície (tabela anexada à ADR-0018) → bump + correlatas comprovadas → `lastUsedPath` nos diálogos → escada de portões completa (tsc → eslint → E2E dev → dist → smoke do pacote) (Opus) | C-16 | ADR-0018 | ✅ `262b2ee` |
+| T-2002 | Carona C-10 (validação do prefixo `/` em `chamarSidecar`, com E2E) + passo permanente de auditoria de deps no checklist de fechamento (Sonnet) | C-10 | T-2001 | ✅ `ea783c8` |
+| T-2003 | Fechamento do ciclo: `npm audit` registrado, build oficial, smokes (pacote + órfão), ata `FREEZE.md` v2.10.0, docs sincronizados (orquestrador) | Processo | todas | ✅ (este commit) |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -360,10 +360,15 @@ smoke do pacote e ata `docs/FREEZE.md` v2.9.0. **Registrados para ciclos
 futuros:** C-10, C-15 (code signing), C-16 (bump Electron), C-23, C-28/C-29
 (complexidade), C-35. Nota: a fase 0 do PaddleOCR-VL foi executada FORA de
 ciclo (2026-07-12) com veredito "manter RapidOCR" — relatório em
-`docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (untracked). **Ciclo v2.10 ABERTO
-(ADR-0018, M20, 2026-07-13):** bump Electron 33→43 (C-16) + carona C-10.
-Ordem: T-2001 (Opus, migração) → T-2002 (Sonnet) → T-2003 (orquestrador,
-ata v2.10.0). Plano B: 43 → 42 → abortar sem merge.
+`docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (untracked). **Ciclo v2.10 FECHADO
+(ADR-0018, M20, 2026-07-13):** Electron 33.4.11 → **43.1.0** (atual; alvo
+aprovado alcançado — o falso "bloqueio" do 43 era o flake histórico do
+"planilha", encerrado pelo padrão T-1907), C-10 corrigido de carona,
+`npm audit`/`pip-audit` = 0, nenhuma correlata exigida, diálogos preservados
+via `lastUsedPath`. Regra permanente nova: auditoria de deps em todo
+fechamento (seção acima). Ata `FREEZE.md` v2.10.0. **Pendentes para ciclos
+futuros:** C-15 (code signing — certificado), C-23 (POSIX), C-28/C-29
+(complexidade), C-35 (sem ação). Próximo ciclo: a definir (começa por ADR).
 
 ### Histórico do ciclo v2.8 (fechado)
 

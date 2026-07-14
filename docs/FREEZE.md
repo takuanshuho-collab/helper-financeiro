@@ -1,49 +1,44 @@
-# FREEZE — Ata de Congelamento v2.9.0
+# FREEZE — Ata de Congelamento v2.10.0
 
 - **Data:** 2026-07-13
 - **Versão da Constituição:** 2.0.0
-- **Escopo congelado:** ciclo **v2.9** (ADR-0017): milestones **M18** e **M19**
-  — ciclo de **saúde de código**, sem nenhum recurso novo e com zero mudança
-  de comportamento visível (restrições §E: zero regressão, sem migração de
-  schema/quebra do cofre). **M18 — auditoria:** 5 varreduras somente-leitura
-  (segurança, concorrência/recursos, fronteira TS↔Python, higiene,
-  silenciosos/dívida de teste) consolidadas em `docs/RELATORIO-AUDITORIA.md`
-  (34 achados: 1 crítico, 5 altos, 14 médios, 14 baixos) com portão humano em
-  2026-07-12. **M19 — correção:** 26 achados corrigidos (T-1901..T-1910),
-  cada um com teste de regressão que falharia antes da mudança. Destaques:
-  **Job Object do Windows** (`sidecar/job_windows.py`) garante que o
-  `llama-server` morre junto do sidecar em QUALQUER caminho de morte,
-  inclusive kill duro — fecha o risco residual nº 2 da ata v2.8 (provado no
-  smoke desta ata contra o exe congelado); disciplina de locks do runtime LLM
-  (corrida da troca de modelo eliminada, boot fora do lock,
-  `RuntimeLLMInvalidado` + retry no chokepoint); TTL e descarte de PII dos
-  jobs em memória no bloqueio do cofre; blindagem da DEK na cadeia de
-  exceções do SQLCipher (exceção limpa criada no `except` e levantada fora —
-  `raise ... from None` não bastaria); shutdown gracioso do Electron
-  (`POST /encerrar` + prazo de 3 s); handlers de validação/500 sempre JSON;
-  validação `ge=0` nos campos monetários de entrada; E2E sem esperas fixas
-  (poll da condição real); remoção do ramo RAG morto (`agent/ingestao.py` =
-  truncagem pura; ADR-0007 **revogada**) e das deps `llama-index-*` órfãs
-  (−43 pacotes na árvore, incl. `nltk` — PYSEC-2026-597 deixou de se
-  aplicar); cobertura passou a medir o `sidecar/` e subiu de 95,8% para
-  **96,6%**. Sem correção neste ciclo (registrados no relatório): C-10,
-  C-15 (code signing), C-16 (bump Electron), C-23, C-28/C-29 (complexidade),
-  C-35.
+- **Escopo congelado:** ciclo **v2.10** (ADR-0018): milestone **M20** — bump
+  do **Electron 33.4.11 → 43.1.0** (achado C-16 do ciclo v2.9: dez majors de
+  defasagem, fora da janela de suporte, CVEs *high* no `npm audit`). O alvo
+  aprovado (43, atual) foi alcançado: o aparente bloqueio da major 43 no E2E
+  era o **flake histórico do cenário "planilha"** (corrida do próprio teste —
+  dois cliques consecutivos sobre DOM em re-render — documentada nas atas
+  v2.4..v2.8 e agravada até quase-determinismo pelo Chromium novo),
+  diagnosticado pela revisão do orquestrador e **encerrado pelo padrão
+  T-1907** (asserção da condição real entre os cliques; régua mais forte, sem
+  esperas). **Nenhuma dependência correlata precisou subir** (electron-builder
+  26.15.3, Playwright 1.61.1, undici 6.x, React/Vite intactos — regra "o erro
+  pede o bump", e nenhum erro pediu). Comportamento preservado: os diálogos de
+  arquivo mantêm a última pasta da sessão via `lastUsedPath` **em memória**
+  (o Electron 43 passaria a abrir em Downloads). **Carona C-10:**
+  `chamarSidecar` rejeita `metodo` sem prefixo `/` antes de qualquer fetch
+  (formato `__hfErro`, status 400), com cenário E2E de regressão. **Regra
+  permanente nova (ADR-0018 §5):** todo fechamento de ciclo roda `npm audit`
+  + `pip-audit` + confere a janela de suporte do Electron, com resultado
+  registrado na ata. Zero mudança de comportamento visível; suíte Python
+  intocada; sem migração de schema.
+- **Auditoria de dependências deste fechamento (regra ADR-0018 §5):**
+  `npm audit` = **0 vulnerabilidades**; `pip-audit` = **nenhuma
+  vulnerabilidade conhecida**; Electron **43.1.0 = versão atual** (janela de
+  suporte 41/42/43 em 2026-07). Nenhum risco aceito pendente de dependência.
 - **Regra:** qualquer alteração nos artefatos abaixo exige nova ADR,
   incremento de versão e nova ata.
 - **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04, M1..M6), v2.3.0..v2.5.0
   (2026-07-07, M7..M12), v2.6.0 (2026-07-08, M13), v2.7.0 (2026-07-08,
-  M14+M15) e v2.8.0 (2026-07-11, M16+M17) — substituídas por esta.
+  M14+M15), v2.8.0 (2026-07-11, M16+M17) e v2.9.0 (2026-07-13, M18+M19) —
+  substituídas por esta.
 
-> A lista congelada cobre todo o código de primeira parte (incluindo os
-> artefatos novos do ciclo: `sidecar/job_windows.py`, `sidecar/arquivos.py`,
-> `tests/test_job_windows.py`, `docs/RELATORIO-AUDITORIA.md` e a ADR-0017) e
-> o harness. `docs/INDEX.md` (mapa navegável) e este `FREEZE.md` não se
-> auto-hasheiam. Os arquivos `docs/PaddleOCR-VL.en.md`,
-> `docs/paddleocr_vl_sft.md` (material de estudo de terceiros) e
-> `docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` (experimento fora de ciclo,
-> veredito "manter RapidOCR") são **não versionados** e fora do escopo
-> congelado.
+> A lista congelada cobre todo o código de primeira parte (artefato novo do
+> ciclo: `docs/adr/ADR-0018-bump-electron-43.md`, que carrega o Decision Log
+> do design e o registro da execução) e o harness. `docs/INDEX.md` e este
+> `FREEZE.md` não se auto-hasheiam. Os arquivos `docs/PaddleOCR-VL.en.md`,
+> `docs/paddleocr_vl_sft.md` e `docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md`
+> permanecem **não versionados** e fora do escopo congelado.
 
 ## Checksums SHA-256 dos artefatos
 
@@ -55,13 +50,13 @@
 | `docs/PRD.md` | `7a0d731b4bf65918084da884ed70655afe0fc3d4595d268aa5c5f7c0840d7ff3` |
 | `docs/SPEC.md` | `800dd0b1801494f9a4120735ee0c5214ca913e4cc961ca347873b13f35e3a831` |
 | `docs/PLAN.md` | `e61a988b03683dbd66076924d59384917d59420c5e743d7d9b0f253e0590156f` |
-| `docs/TASKS.md` | `21400168d3ae923d9c45c3a7bdd1cdccc0f9246f8e0acaeda86c40b4f3d79569` |
-| `docs/HARNESS.md` | `a07111ff4bcffe23b303fc9e641729d8707d1b31023848a7d92bcfbf9e2b292a` |
+| `docs/TASKS.md` | `439d1dbbaec07c372583bc3206a8aff0c98983ba3532b73cd18e3c0901a9d1b4` |
+| `docs/HARNESS.md` | `a309502f17cc28fa4f68376021f78071b59e8b32a61de9659c382bac5e0a17d1` |
 | `docs/AGENT.md` | `742de4d9d5bd1a16768f64bbf4dbcb74a39a5b01fa7d9d1e6995ea6952c0e842` |
 | `docs/REVISAO-SEGURANCA.md` | `ec6923ac3abbe8e4235db73c8b1472558be1336d6d4d6b621b3cb91512ed4a2b` |
 | `docs/SEGURANCA-SHELL.md` | `e59baca3c3023bb318dd231bce712fd6612524794fa9c5054f592ce772c19fd6` |
 | `docs/PARIDADE.md` | `390cc2ef3b473f4e31819f998b81070991e10aa61f13b4ec44834bfdd92ef6de` |
-| `docs/RELATORIO-AUDITORIA.md` | `ad88bc02c01fc86384c61f21c05c75fffbbed3c0eda9c6abdbe2d151e8653446` |
+| `docs/RELATORIO-AUDITORIA.md` | `e878b24b900337cb2def1b55dc85e690364f56e9e112e3010d102e36c4da71a6` |
 | `AGENTS.md` | `678a2473998cab86146a1b4b4fd8d6dda40bbc38d4a6d56a3c85d49c52e7e1f0` |
 
 ### Decisões de arquitetura (ADR)
@@ -85,6 +80,7 @@
 | `docs/adr/ADR-0015-ocr-de-documento-escaneado.md` | `49258054c14a329d19a53c89c4eca9410236fd1c0576f00c180b52462a4599af` |
 | `docs/adr/ADR-0016-cofre-local-mfa-e-llm-embarcada.md` | `3039f7fc88ede7bbdcf4b3c1d68e132d38ebdd6ab5d75d8d7f2f9027858c7d30` |
 | `docs/adr/ADR-0017-ciclo-de-saude-de-codigo.md` | `13b35818103cab2ca0f6c2238838dca28b0078c7119ed93ce28dafdbc9cc2955` |
+| `docs/adr/ADR-0018-bump-electron-43.md` | `f12c84d43ba96307e94f338509a563e843ab605dd259a75cffaf718aa51966c3` |
 
 ### Contratos de dados
 
@@ -150,7 +146,7 @@
 |---|---|
 | `sidecar/__init__.py` | `0f55c31161b81aad9355fe5ad58fae8064defe1a7a7cfd238ed17e59073e5aad` |
 | `sidecar/__main__.py` | `7e57e7ff71a25020a25ec5c715fd58f6dafcff633121f6db49d83f14cff7b7c0` |
-| `sidecar/app.py` | `40b9407d28b533d3e8457a9dd2a43c52f358e5157eaf509babf504fbd005bd31` |
+| `sidecar/app.py` | `408e0012cd9e7d4cfad6c2e7274ca128ecbba78ad9dcd9b4db2549bd9836cff0` |
 | `sidecar/arquivos.py` | `8e314b83e677a024d1b6367717826e71d8a78bde9c486ca480855c883ba54aa0` |
 | `sidecar/auth.py` | `d3df8f125a75620b400efdd77de65f65520b186661cb5d1d354e4a167157c9dd` |
 | `sidecar/gestor_modelos.py` | `1755050802295082cb6b4f3727acabb9a7299c0468256ef34fdd63d3ae6f7557` |
@@ -172,7 +168,7 @@
 
 | Artefato | SHA-256 |
 |---|---|
-| `gui_web/e2e/app.spec.ts` | `56603bb03ffc8ef6e87664c386bb95ceef97f3438e39a332d91f97cf40608a29` |
+| `gui_web/e2e/app.spec.ts` | `f578df02871759e23302145a316eeca956d29d865e18861932d2ece2fd4d0187` |
 | `gui_web/e2e/cofre-helpers.ts` | `765a7a6605d7b0105da9a53b390afa0d11bb5c8ebe6be82060c9d27ea6a5607e` |
 | `gui_web/e2e/cofre.spec.ts` | `600b7b7e1f520726ca151946816435b8e512d39c01d3262b3bf014d27c47d2a6` |
 | `gui_web/e2e/configuracao-ia.spec.ts` | `bef5560ca0e2ec9e0ffdcf5b4218edfd161a93a1d5b9142fccef9bf30f4240c0` |
@@ -180,11 +176,11 @@
 | `gui_web/e2e/empacotado.spec.ts` | `829dbd5b9092859c8c97ea4613ab723e78b50afeb1bc47900603543da8a703be` |
 | `gui_web/e2e/fixtures/comprovante-escaneado.png` | `e40b7dfe7b9b5523b1cf05a65b9743dd200b9bad6a207b4fbdd74df9eab41a8e` |
 | `gui_web/e2e/fixtures/contrato-escaneado.png` | `abca12f61ce1fef2323c5f818d9c076ed23c0b4506e3de1cb9b5965002d36747` |
-| `gui_web/electron/main.ts` | `e7bd041d1794afe19006b50d1c4eab204401ee785040aef4fbd63111fec421f8` |
+| `gui_web/electron/main.ts` | `b5fd18fc6738e64b0e22194f28f3967dfac3419d08b6aa59939b2cf6b1a0ec5c` |
 | `gui_web/electron/preload.ts` | `c78a0c0b185631100335db687cd99fc8e542d924325322c3bc7b0f5de6a605fa` |
 | `gui_web/eslint.config.mjs` | `5f6f18f557d1fb301b6f3437d02a47ff372d9ced55d23582ff63c3003213c155` |
 | `gui_web/index.html` | `65d438e190c6a2eb076894d03bc2690dc7bc842d8ee58691c81690fb64555d8d` |
-| `gui_web/package.json` | `eb247d90e6dd5a028a982331909fab4b8bb369217c5ebb8807fdc1242b98d2c0` |
+| `gui_web/package.json` | `c463799fa5a3640c3728e3814bde8ea5709dfddae4d435cc01ea7ca2e14b775e` |
 | `gui_web/playwright.config.ts` | `1fc12157bfc5c21d51f9f2ab7f237108a550501b387bcd7c3033081bb741ea29` |
 | `gui_web/src/App.tsx` | `1b9a7de77f16bd75a6eb76d1cd5e36d5b9e0d3bb6ff30cda033888e03920ecff` |
 | `gui_web/src/components/CampoMoeda.tsx` | `564687d9facbc452b9d15d8c5d919121a98d1d323a3a1b9111a459526286cc4a` |
@@ -218,7 +214,7 @@
 | Artefato | SHA-256 |
 |---|---|
 | `main.py` | `a979656c100f6d12b02e0d625f6197a6b792769aab885f328631faedc019a448` |
-| `pyproject.toml` | `ad5a0fc0018faabf2c1095f9e5bebb2d9a5f906d2cc795596abd5d012d7f629b` |
+| `pyproject.toml` | `2fa3d90c13e87f16ddd702c8260c67dea1514615cde982937194f712236bb679` |
 | `SidecarHF.spec` | `cc3471a70cb6ebf50da89c6eb8820fde375645fedcbe40785ff8b187561c3cfa` |
 | `scripts/sidecar_entry.py` | `c63c53e315cd42423f06832d120ab66c4ff66965bf038bfcf3012d638acae3d9` |
 | `scripts/preparar_ocr.py` | `fb305d8a58947eed84070e898cce647e2abebd7d7aec409a2ad0899cbb96b0a5` |
@@ -264,52 +260,49 @@
 | `tests/test_telemetria.py` | `f5750e70fe314e187d25f464ea0c5871c2a807e518821cb1a41a4ec1580bdbe8` |
 | `tests/test_validacao_texto.py` | `4c9482f0ea98fc9af46a3ea89d4f2262eda6a207e54da9d5ed322ecebdfce3e7` |
 
-## Binários empacotados (build oficial do T-1911, nesta data)
+## Binários empacotados (build oficial do T-2003, nesta data)
 
 | Artefato | SHA-256 | Tamanho |
 |---|---|---|
-| `gui_web/release/Helper Financeiro Setup 2.9.0.exe` | `1e00a181240895c3b193db9ae6b9a2b89f80213226a69e85920c1bb49622e84e` | 328,5 MB |
-| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `d5613bd412b4af37b577069dc42fb1982ae71be401635712b1df3132abc25829` | 22,6 MB |
+| `gui_web/release/Helper Financeiro Setup 2.10.0.exe` | `b64b9763c20837ee208af965eddf0e56b20675d7e4b5b835c615a9de28f8b69d` | 347,0 MB |
+| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `3b5e56481a228b0d02a42470f8dba771639ced7f1a849ffe8569e326f0ce926f` | 22,6 MB |
 
-> Os binários não são versionados no git (`dist/`, `gui_web/release/` e
-> `resources/llama/` no `.gitignore`); os hashes identificam o build desta ata
-> (PyInstaller 6.x + electron-builder NSIS, sem code signing — registrado como
-> C-15 para ciclo futuro). O instalador **encolheu** de 350,0 MB (v2.8) para
-> **328,5 MB** e o sidecar congelado de 37,8 MB para **22,6 MB**: a remoção
-> das deps `llama-index-*` órfãs (T-1911) tirou pandas/sqlalchemy/nltk e
-> outros 40 pacotes do freeze. **Nenhum modelo GGUF é embarcado**: o download
-> é opt-in no 1º uso (REQ-NF-007), com SHA-256 obrigatório do catálogo.
-> Rebuild em outra máquina/data produz hash diferente — rode
-> **`scripts/preparar_llama.py` E `scripts/preparar_ocr.py` antes**, e
-> regenere com `uv run --group build pyinstaller SidecarHF.spec --noconfirm` e
-> `npm run dist`, registrando em nova ata. Validado pelos smokes
-> `e2e/empacotado.spec.ts` + `e2e/empacotado-llm.spec.ts` (4 passed contra o
-> pacote desta ata: onboarding real do cofre no exe congelado, diagnóstico,
-> OCR de verdade e binário llama resolvido + download/ativação com catálogo
-> fake) e pelo **smoke do órfão** exclusivo desta ata: sidecar congelado
-> subiu um `llama-server` real (GGUF local), levou `TerminateProcess` (kill
-> DURO, sem lifespan) e o filho **morreu junto** — Job Object confirmado no
-> pacote real. O rebuild sobre release anterior não reproduziu o EBUSY do
-> T-1704.
+> Os binários não são versionados no git; os hashes identificam o build desta
+> ata (PyInstaller 6.x + electron-builder NSIS com **Electron 43.1.0**, sem
+> code signing — C-15 segue registrado para ciclo futuro). O instalador foi de
+> 328,5 MB (v2.9) para **347,0 MB**: o Chromium do Electron 43 é maior que o
+> do 33 (+18,5 MB, único efeito do bump); o sidecar congelado permaneceu em
+> **22,6 MB** (Python intocado no ciclo). **Nenhum modelo GGUF é embarcado**
+> (download opt-in, REQ-NF-007). Rebuild em outra máquina/data produz hash
+> diferente — rode **`scripts/preparar_llama.py` E `scripts/preparar_ocr.py`
+> antes**, e regenere com `uv run --group build pyinstaller SidecarHF.spec
+> --noconfirm` e `npm run dist`, registrando em nova ata. Validado pelos
+> smokes `e2e/empacotado.spec.ts` + `e2e/empacotado-llm.spec.ts` (**4 passed**
+> contra o pacote desta ata) e pelo **smoke do órfão** (sidecar congelado com
+> GGUF real levou kill DURO e o `llama-server` filho morreu junto — Job
+> Object do T-1902 confirmado também sob Electron 43).
 
 ## Estado do harness no congelamento
 
 ```text
 472 passed, 2 skipped (opt-in reais: HF_OCR_REAL=1 e HF_LLAMA_REAL=1) — suíte offline (Gate A)
-Cobertura: 96,6% (piso de 90% no CI; desde o v2.9 a medição inclui sidecar/)
-E2E Playwright: 18 passed no app dev + 4 passed contra o pacote NSIS real
-(cofre + diagnóstico + OCR + runtime llama embarcado), estado isolado por
-HF_DB_PATH/HF_AUTH_PATH/HF_MODELOS_DIR; esperas fixas eliminadas (T-1907)
+Cobertura: 96,6% (piso de 90% no CI; medição inclui sidecar/ desde o v2.9)
+E2E Playwright: 19 passed no app dev (18 herdados + cenário C-10 novo),
+2 rodadas limpas exigidas e obtidas no Electron 43; + 4 passed contra o
+pacote NSIS real; estado isolado por HF_DB_PATH/HF_AUTH_PATH/HF_MODELOS_DIR/
+HF_LLM_CONFIG_PATH
 Gate Front (CI): ESLint + tsc + build Vite verdes
-Smoke extra do fechamento: Job Object mata o llama-server órfão no exe
-congelado (kill duro comprovado com GGUF real)
-Observações: (1) o flake intermitente dos cenários E2E pesados não se
-manifestou nas rodadas do fechamento (a T-1907 removeu as esperas fixas que
-o alimentavam); histórico mantido em atas anteriores. (2) O risco residual
-do llama-server órfão (ata v2.8) está FECHADO pelo Job Object (T-1902).
-(3) Modelos com menos de ~1B de parâmetros tendem a degradar por
-REQ-LLM-002:SCHEMA (P8 correto) — o catálogo curado (1.5B–3.8B) satisfaz o
-schema.
+Auditoria de deps (regra nova): npm audit 0 · pip-audit 0 · Electron 43.1.0
+dentro da janela de suporte
+Observações: (1) o flake histórico do cenário "planilha" (atas v2.4..v2.8)
+foi diagnosticado como corrida do próprio teste e ENCERRADO nesta ata
+(asserção intermediária, padrão T-1907) — era também a causa do falso
+bloqueio da major 43. (2) Risco residual: compatibilidade do
+electron-updater 6.8 com Electron 43 verificada só por changelog (auto-update
+é opt-in e desligado por padrão; sem teste automatizado). (3) `lastUsedPath`
+dos diálogos verificado manualmente no smoke (diálogo nativo não é
+automatizável com fidelidade). (4) Modelos com menos de ~1B de parâmetros
+tendem a degradar por REQ-LLM-002:SCHEMA (P8 correto).
 ```
 
 Gerado automaticamente. Recalcule com `Get-FileHash -Algorithm SHA256`
