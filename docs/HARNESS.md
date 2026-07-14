@@ -17,6 +17,12 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 > `llama-server` no kill duro, par prova/controle). Estado no fechamento:
 > 472 testes offline, cobertura 96,6% (piso de 90% no CI).
 
+> **v2.10 (ADR-0018):** portão permanente novo no fechamento de ciclo —
+> `npm audit` + `pip-audit` + janela de suporte do Electron, resultado
+> registrado na ata FREEZE (não bloqueante; CVE sem fix upstream = risco
+> registrado). E2E ganhou o cenário C-10 (IPC rejeita `metodo` sem `/`) e a
+> asserção intermediária que encerrou o flake histórico do "planilha".
+
 ---
 
 ## 1. Categorias de teste

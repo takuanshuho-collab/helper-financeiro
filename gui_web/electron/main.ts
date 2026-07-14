@@ -126,6 +126,20 @@ async function aguardarSaude(timeoutMs = 15_000): Promise<void> {
 }
 
 async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown> {
+  // C-10 (ADR-0018): `metodo` vem do renderer via IPC e é concatenado direto
+  // na URL (`http://127.0.0.1:${porta}${metodo}`). Sem o `/` inicial a URL
+  // fica mal-formada — rejeitamos ANTES de qualquer fetch, no mesmo formato
+  // `__hfErro` que os erros HTTP já usam (ver comentário abaixo), para que o
+  // `hf/client.ts` relance como `HfErro` tipado sem tratamento novo no
+  // renderer. Nenhum chamador legítimo usa `metodo` sem barra hoje — isto só
+  // fecha a superfície para uma chamada IPC já inválida.
+  if (!metodo.startsWith('/')) {
+    return {
+      __hfErro: true as const,
+      status: 400,
+      detail: 'Método inválido (deve começar com "/")',
+    }
+  }
   const temCorpo = payload !== undefined && payload !== null
   const resp = await fetchSidecar(`http://127.0.0.1:${sidecarPort}${metodo}`, {
     method: temCorpo ? 'POST' : 'GET',

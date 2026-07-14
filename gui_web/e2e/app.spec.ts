@@ -133,6 +133,19 @@ test('visão geral: diagnóstico do core com o perfil semente', async () => {
   await expect(win.locator('.scard-win .scard-meses')).toContainText('meses')
 })
 
+/**
+ * C-10 (ADR-0018): `chamarSidecar` (main.ts) rejeita ANTES do fetch quando o
+ * `metodo` não começa com `/`, no mesmo formato `__hfErro` de um erro HTTP.
+ * Sem a validação, `'estado'` (sem a barra) formaria uma URL relativa mal-
+ * -formada — este teste falharia se a rejeição sumisse (ex.: um retorno com
+ * as chaves de `EstadoOut`, que é o formato de uma resposta REAL do sidecar).
+ */
+test('IPC: metodo sem "/" é rejeitado antes do sidecar (C-10)', async () => {
+  const resultado = await win.evaluate(() => window.hf!.invoke('estado'))
+  expect(resultado).toMatchObject({ __hfErro: true, status: 400 })
+  expect(resultado).not.toHaveProperty('perfil')
+})
+
 test('perfil: editar a renda recalcula o diagnóstico ao vivo', async () => {
   await aba('Perfil').click()
   await preencher('Salário/benefício líquido', '10000')

@@ -338,6 +338,16 @@ Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
 harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
+## Fechamento de ciclo — auditoria de dependências (regra permanente, ADR-0018 §5)
+Todo fechamento de ciclo (task T-x9xx/T-xx03) roda `npm audit` (gui_web) e
+`pip-audit` (Python) e confere a janela de suporte oficial do Electron
+instalado. O resultado — vulnerabilidades (ou "0"), decisão (corrigir /
+registrar como risco aceito / abrir achado para ciclo próprio) e se o
+Electron segue suportado — é **registrado na ata FREEZE**. Não força bump:
+CVE transitiva sem fix upstream é risco registrado, não bloqueio. Objetivo:
+defasagem como a do C-16 (Electron 33, 10 majors atrás) nunca mais passa
+despercebida entre ciclos.
+
 ## Próxima ação recomendada
 **Ciclo v2.9 FECHADO (ADR-0017, M18+M19) — saúde de código, 2026-07-13.**
 M18: 5 varreduras + consolidação em `docs/RELATORIO-AUDITORIA.md` (34 achados:
