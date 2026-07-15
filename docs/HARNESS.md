@@ -1,6 +1,6 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.11.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.12.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
@@ -31,6 +31,16 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 > mascarado no extrator. (2) **Catraca de complexidade `C901`** no ruff do
 > pre-commit/CI, teto 13 (pior caso legado) — só aperta, como o piso de
 > cobertura. Estado no fechamento: 489 testes offline, cobertura ≥ 96,6%.
+
+> **v2.12 (ADR-0020):** smoke novo do **auto-update**
+> (`e2e/empacotado-update.spec.ts`, gated por `HF_E2E_PACOTE=1`): feed
+> `generic` local + instalador-isca com sha512, asserção em escada
+> (`update-available` mínimo / `update-downloaded` ideal) — o feed usa
+> `http://127.0.0.1` porque o stack Chromium do electron-updater ignora
+> `NODE_EXTRA_CA_CERTS` (exceção loopback-only em `main.ts`, coberta por
+> teste negativo). Cenário de recuperação do cofre blindado pelo padrão
+> T-1907 (asserção pela condição real, não pelo wrapper de render). E2E do
+> pacote agora são 7 checks: 6 specs + smoke do órfão.
 
 ---
 

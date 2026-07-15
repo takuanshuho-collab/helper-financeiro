@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0019) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0020) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
@@ -139,7 +139,15 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   C901 16→3, `_aba_evolucao` e `baixar_modelo` →2) e **catraca `C901`
   permanente** no ruff (teto 13 = pior caso legado; só aperta). Sem build
   oficial no ciclo (nenhuma dep subiu — §E.4 não dispara).
-- **Mudanças nos artefatos congelados (v2.11.0) exigem nova ADR + incremento
+- **Ciclo v2.12 FECHADO (`FREEZE.md` v2.12.0, ADR-0020, M23):** build/release
+  — os binários oficiais voltaram a conter o código corrente (instalador NSIS
+  2.12.0 + sidecar congelado, validados por 6 smokes do pacote + smoke do
+  órfão). Bumps dirigidos: `setuptools` 83 (**pip-audit zerado** — fim do
+  risco aceito da v2.11), Electron 43.1.1, langgraph 1.2.9, uvicorn 0.51.
+  Novidades de harness: **smoke do auto-update** (electron-updater 6.8 real
+  chegou a `update-downloaded`; exceção `http://` só-loopback no `main.ts`
+  com teste negativo) e blindagem T-1907 do cenário de recuperação do cofre.
+- **Mudanças nos artefatos congelados (v2.12.0) exigem nova ADR + incremento
   de versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar

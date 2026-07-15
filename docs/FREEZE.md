@@ -1,60 +1,60 @@
-# FREEZE — Ata de Congelamento v2.11.0
+# FREEZE — Ata de Congelamento v2.12.0
 
 - **Data:** 2026-07-14
 - **Versão da Constituição:** 2.0.0
-- **Escopo congelado:** ciclo **v2.11** (ADR-0019): milestones **M21+M22** —
-  higiene e complexidade, fechando os achados restantes da auditoria v2.9.
-  **C-23** (T-2101): endurecimento **dormente** do cofre no ramo POSIX —
-  arquivos `0o600` e pastas `0o700` via guard único `_e_posix()`
-  (`sidecar/arquivos.py`), temporário do `gravar_json_atomico` já nasce
-  restrito via `os.open` (sem janela 0644); no Windows é no-op provado por
-  teste (a ACL de `%APPDATA%` segue sendo a proteção). **C-35** (T-2102):
-  reavaliação item a item de 84 ocorrências (ARG001/ERA001/S608/PLW0603/
-  FURB122) com veredito triplo — 2 correções reais sem mudança de
-  comportamento, resto suprimido com justificativa em código ou
-  `per-file-ignores`; **nenhum bug real encontrado**; o probe roda limpo e
-  auditoria futura não reabre o grupo. **C-28/C-29** (T-2201..T-2203):
-  refatoração por **extração sob golden-master** — a T-2201 congelou ANTES
-  9 goldens JSON (`tests/golden/`, extratores determinísticos de
-  `.docx`/`.xlsx`, máscara `<DATA>` no extrator, regeneração SÓ com
-  `HF_REGENERAR_GOLDEN=1` fora do CI); as T-2202/T-2203 extraíram
-  `gerar_relatorio` (C901 16 → 3), `_aba_evolucao` (→ 2) e `baixar_modelo`
-  (→ 2) com goldens byte a byte idênticos. **Catraca permanente nova
-  (T-2204):** `C901` ativo no `[tool.ruff.lint]` com
-  `max-complexity = 13` — o teto é o pior caso legado
-  (`gui/app.py:_extrair_pdf`, casca tkinter congelada); mesma filosofia do
-  piso de cobertura: **só aperta**, recalibração futura apenas para baixo.
-  Zero mudança de comportamento visível; sem migração de schema; GUI e
-  dependências intocadas.
+- **Escopo congelado:** ciclo **v2.12** (ADR-0020): milestone **M23** —
+  **build/release**. Os binários oficiais voltam a conter o código corrente
+  (a ata v2.11.0 registrava que os publicados eram os da v2.10, sem o
+  endurecimento POSIX nem as refatorações sob golden-master). **Bumps
+  dirigidos (T-2301):** `setuptools` 82.0.1 → **83.0.0** — fecha
+  PYSEC-2026-3447 e **encerra o risco aceito da ata v2.11.0**; Electron
+  43.1.0 → **43.1.1** (patch, range `^43.1.0` preservado); `langgraph`
+  1.2.7 → 1.2.9 (goldens 9/9 intocados provaram que nenhum output mudou);
+  `uvicorn` 0.50 → 0.51. Nenhum major (React 18, TS 5.9, undici 6
+  intocados — ADR-0017 §E). **Caronas de harness (T-2302):** smoke do
+  **auto-update** (`e2e/empacotado-update.spec.ts`) — o electron-updater
+  6.8 REAL, sob Electron 43.1.1, chegou à régua IDEAL (`update-available` E
+  `update-downloaded`, download completo do instalador-isca com sha512
+  conferido) contra um feed `generic` local; a escada HTTPS do design parou
+  no **degrau 2 com evidência** (o updater baixa o feed via
+  `electron.net.request`, stack do Chromium, que ignora
+  `NODE_EXTRA_CA_CERTS` — degrau 1 impossível sem afrouxar a validação
+  global de certificados): `main.ts` aceita `http://` **exclusivamente para
+  o host literal `127.0.0.1`** (`feedAceito`, parse via `new URL`; teste
+  negativo prova que `http://` não-loopback segue recusado). A instalação
+  real do update segue fora (sem code signing o Windows recusa a troca —
+  C-15). E o flake candidato do cenário "recuperação por código de uso
+  único" (1 ocorrência na ata v2.11.0) foi **diagnosticado e blindado**
+  (T-1907): a asserção antiga testava QUAL wrapper de render venceu a
+  corrida entre os dois gates de bloqueio do `App.tsx` (`.auth-overlay` vs
+  `.auth-tela`) — detalhe de implementação; a nova assevera a condição real
+  (`.auth-card .titulo` = "Esqueci a senha"), válida nos dois caminhos;
+  3 rodadas limpas consecutivas × 2 (executor e revisor). **Build oficial
+  (T-2303):** §E.4 disparado pelos bumps e satisfeito — 6 smokes do pacote
+  (NSIS ×2, LLM ×2, auto-update ×2) + smoke do órfão (kill DURO no sidecar
+  congelado com GGUF real; o `llama-server` filho morreu junto — Job Object
+  do T-1902 reconfirmado). Única mudança de comportamento de produção do
+  ciclo: a exceção loopback do `feedAceito` + 2 `console.log` nos eventos do
+  updater (observabilidade do smoke). Sem migração de schema.
 - **Auditoria de dependências deste fechamento (regra ADR-0018 §5):**
-  `npm audit` = **0 vulnerabilidades**; `pip-audit` = **1 achado**:
-  `setuptools 82.0.1` (PYSEC-2026-3447, CVSS 6.1) — transitiva **exclusiva
-  do PyInstaller (grupo `build`)**, não embarca no app nem no sidecar
-  congelado; o vetor (bypass de exclusões do `MANIFEST.in` em sdists sobre
-  APFS/HFS+ do macOS por não-normalização Unicode) **não se aplica** ao
-  nosso build (PyInstaller no Windows, sem sdist). **Risco aceito e
-  registrado**: o fix (83.0.0) entra no próximo ciclo que tocar o grupo
-  `build`/reconstruir binários, com o smoke do pacote que o §E.4 exigirá.
-  Electron **43.1.0 = versão atual** (janela de suporte 41/42/43 em
-  2026-07, verificada no fechamento anterior, um dia antes desta ata).
-- **Build/pacote:** **nenhum build oficial neste ciclo** — nenhuma
-  dependência subiu e a GUI/Electron não foram tocados, então o smoke do
-  pacote NSIS foi **dispensado por decisão de design** (ADR-0019, critérios
-  de fechamento; ADR-0017 §E.4 não dispara). Os binários publicados
-  permanecem os da ata v2.10.0 (instalador `b64b9763…`, sidecar
-  `3b5e5648…`); **eles NÃO contêm o código v2.11** — o próximo build
-  oficial o incorporará e será registrado em nova ata.
+  `npm audit` = **0 vulnerabilidades**; `pip-audit` = **0 vulnerabilidades**
+  (critério endurecido deste ciclo cumprido — o achado da v2.11 morreu com o
+  setuptools 83; pegadinha operacional registrada: rode `uv sync --group
+  build` antes do pip-audit, senão o venv sem o grupo opcional reporta a
+  versão antiga). Electron **43.1.1 = versão mais nova publicada** (janela
+  de suporte 41/42/43 em 2026-07). **Nenhum risco aceito pendente de
+  dependência.**
 - **Regra:** qualquer alteração nos artefatos abaixo exige nova ADR,
   incremento de versão e nova ata.
 - **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04, M1..M6), v2.3.0..v2.5.0
   (2026-07-07, M7..M12), v2.6.0 (2026-07-08, M13), v2.7.0 (2026-07-08,
-  M14+M15), v2.8.0 (2026-07-11, M16+M17), v2.9.0 (2026-07-13, M18+M19) e
-  v2.10.0 (2026-07-13, M20) — substituídas por esta.
+  M14+M15), v2.8.0 (2026-07-11, M16+M17), v2.9.0 (2026-07-13, M18+M19),
+  v2.10.0 (2026-07-13, M20) e v2.11.0 (2026-07-14, M21+M22) — substituídas
+  por esta.
 
 > A lista congelada cobre todo o código de primeira parte (artefatos novos
-> do ciclo: `docs/adr/ADR-0019-ciclo-higiene-e-complexidade.md`,
-> `tests/test_golden_outputs.py`, `tests/golden/*.json`,
-> `tests/test_endurecimento_permissoes.py`) e o harness. `docs/INDEX.md` e
+> do ciclo: `docs/adr/ADR-0020-ciclo-build-release.md` e
+> `gui_web/e2e/empacotado-update.spec.ts`) e o harness. `docs/INDEX.md` e
 > este `FREEZE.md` não se auto-hasheiam. Os arquivos
 > `docs/PaddleOCR-VL.en.md`, `docs/paddleocr_vl_sft.md` e
 > `docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` permanecem **não versionados** e
@@ -70,8 +70,8 @@
 | `docs/PRD.md` | `7a0d731b4bf65918084da884ed70655afe0fc3d4595d268aa5c5f7c0840d7ff3` |
 | `docs/SPEC.md` | `800dd0b1801494f9a4120735ee0c5214ca913e4cc961ca347873b13f35e3a831` |
 | `docs/PLAN.md` | `e61a988b03683dbd66076924d59384917d59420c5e743d7d9b0f253e0590156f` |
-| `docs/TASKS.md` | `43275de64ddf8528072c380f1ff072512d2c0a694259be4929b38581a896d109` |
-| `docs/HARNESS.md` | `fd69893f8a94c36f7e7a5d99b0f3f78e0727ed35681e7f935256e8330b473187` |
+| `docs/TASKS.md` | `426ad977d3fdf5a16f2756a792ded62fcf59cedb49ae49670496bf7d370f71fe` |
+| `docs/HARNESS.md` | `1d7c572c87aec2dbe6735acb2b5a9a0bc5114ae7639014d9b3adbab02fb98a20` |
 | `docs/AGENT.md` | `742de4d9d5bd1a16768f64bbf4dbcb74a39a5b01fa7d9d1e6995ea6952c0e842` |
 | `docs/REVISAO-SEGURANCA.md` | `ec6923ac3abbe8e4235db73c8b1472558be1336d6d4d6b621b3cb91512ed4a2b` |
 | `docs/SEGURANCA-SHELL.md` | `e59baca3c3023bb318dd231bce712fd6612524794fa9c5054f592ce772c19fd6` |
@@ -102,6 +102,7 @@
 | `docs/adr/ADR-0017-ciclo-de-saude-de-codigo.md` | `13b35818103cab2ca0f6c2238838dca28b0078c7119ed93ce28dafdbc9cc2955` |
 | `docs/adr/ADR-0018-bump-electron-43.md` | `f12c84d43ba96307e94f338509a563e843ab605dd259a75cffaf718aa51966c3` |
 | `docs/adr/ADR-0019-ciclo-higiene-e-complexidade.md` | `6d389a871ccee5c435616fc00027f5bb2e86e53d5c401f31b85f3c9c7eb03204` |
+| `docs/adr/ADR-0020-ciclo-build-release.md` | `4b99c4e12af6a6c2cb7ad885733553241a3f663694ccc85d6cc93c4f755e7095` |
 
 ### Contratos de dados
 
@@ -167,7 +168,7 @@
 |---|---|
 | `sidecar/__init__.py` | `0f55c31161b81aad9355fe5ad58fae8064defe1a7a7cfd238ed17e59073e5aad` |
 | `sidecar/__main__.py` | `7e57e7ff71a25020a25ec5c715fd58f6dafcff633121f6db49d83f14cff7b7c0` |
-| `sidecar/app.py` | `fea5ad3afd19eb5b21e1cb69ff12a3fb801e5b9ca8aa20580feac4abebe00669` |
+| `sidecar/app.py` | `42db1cba0446e48531a9681fa7f2459305801e797d5b1af47c7c460e44f715ec` |
 | `sidecar/arquivos.py` | `e15cc431874ae3cb0a076a9b0d1809e281f0b796ebff771bf6409173ef73fe82` |
 | `sidecar/auth.py` | `26431b0a512199853cda420de97e67573b11fdfb9a55ca608fe52e404462a3e0` |
 | `sidecar/gestor_modelos.py` | `2e0f18d2cccac1734fbbf20e6667408de3bbfc6108566afe0a3fb9365f82caf0` |
@@ -191,17 +192,18 @@
 |---|---|
 | `gui_web/e2e/app.spec.ts` | `f578df02871759e23302145a316eeca956d29d865e18861932d2ece2fd4d0187` |
 | `gui_web/e2e/cofre-helpers.ts` | `765a7a6605d7b0105da9a53b390afa0d11bb5c8ebe6be82060c9d27ea6a5607e` |
-| `gui_web/e2e/cofre.spec.ts` | `600b7b7e1f520726ca151946816435b8e512d39c01d3262b3bf014d27c47d2a6` |
+| `gui_web/e2e/cofre.spec.ts` | `2a499871e441b4a7069e5747d4fc634d0f6a2a81f214708b5bc46631ae367896` |
 | `gui_web/e2e/configuracao-ia.spec.ts` | `bef5560ca0e2ec9e0ffdcf5b4218edfd161a93a1d5b9142fccef9bf30f4240c0` |
 | `gui_web/e2e/empacotado-llm.spec.ts` | `634e91e333a4c37269c17ec98baa61dcd4878097650565044eb694c8b54cd93d` |
+| `gui_web/e2e/empacotado-update.spec.ts` | `a2f5dfc7fa36316a665d0d2764d803f3838e037503c1179366614acb8b3f4865` |
 | `gui_web/e2e/empacotado.spec.ts` | `829dbd5b9092859c8c97ea4613ab723e78b50afeb1bc47900603543da8a703be` |
 | `gui_web/e2e/fixtures/comprovante-escaneado.png` | `e40b7dfe7b9b5523b1cf05a65b9743dd200b9bad6a207b4fbdd74df9eab41a8e` |
 | `gui_web/e2e/fixtures/contrato-escaneado.png` | `abca12f61ce1fef2323c5f818d9c076ed23c0b4506e3de1cb9b5965002d36747` |
-| `gui_web/electron/main.ts` | `b5fd18fc6738e64b0e22194f28f3967dfac3419d08b6aa59939b2cf6b1a0ec5c` |
+| `gui_web/electron/main.ts` | `cc7d51388f8acd91e0c953b1ff5b3749936091e6a6d665c74ce4a0e92787b8ca` |
 | `gui_web/electron/preload.ts` | `c78a0c0b185631100335db687cd99fc8e542d924325322c3bc7b0f5de6a605fa` |
 | `gui_web/eslint.config.mjs` | `5f6f18f557d1fb301b6f3437d02a47ff372d9ced55d23582ff63c3003213c155` |
 | `gui_web/index.html` | `65d438e190c6a2eb076894d03bc2690dc7bc842d8ee58691c81690fb64555d8d` |
-| `gui_web/package.json` | `7564bcace2205efe0f1a629c9d9b8dbab2389e5b8c686894be7e1c8e2053a596` |
+| `gui_web/package.json` | `aa19a18decaba65fb30884d2e152442f7a325abfaab1d11df7183cf9d1d34e91` |
 | `gui_web/playwright.config.ts` | `1fc12157bfc5c21d51f9f2ab7f237108a550501b387bcd7c3033081bb741ea29` |
 | `gui_web/src/App.tsx` | `1b9a7de77f16bd75a6eb76d1cd5e36d5b9e0d3bb6ff30cda033888e03920ecff` |
 | `gui_web/src/components/CampoMoeda.tsx` | `564687d9facbc452b9d15d8c5d919121a98d1d323a3a1b9111a459526286cc4a` |
@@ -235,7 +237,7 @@
 | Artefato | SHA-256 |
 |---|---|
 | `main.py` | `a979656c100f6d12b02e0d625f6197a6b792769aab885f328631faedc019a448` |
-| `pyproject.toml` | `b0e306391eaae53d7f7ee997d3ddca45f2e1a5efbee83651cd375d23908e4ac6` |
+| `pyproject.toml` | `a386434642d163b07d3ba5a903ef41edea309e06f2f4b59cc93817fd99789d1f` |
 | `SidecarHF.spec` | `cc3471a70cb6ebf50da89c6eb8820fde375645fedcbe40785ff8b187561c3cfa` |
 | `scripts/sidecar_entry.py` | `c63c53e315cd42423f06832d120ab66c4ff66965bf038bfcf3012d638acae3d9` |
 | `scripts/preparar_ocr.py` | `fb305d8a58947eed84070e898cce647e2abebd7d7aec409a2ad0899cbb96b0a5` |
@@ -292,49 +294,48 @@
 | `tests/test_telemetria.py` | `f5750e70fe314e187d25f464ea0c5871c2a807e518821cb1a41a4ec1580bdbe8` |
 | `tests/test_validacao_texto.py` | `4c9482f0ea98fc9af46a3ea89d4f2262eda6a207e54da9d5ed322ecebdfce3e7` |
 
-## Binários publicados (sem build neste ciclo)
+## Binários empacotados (build oficial do T-2303, nesta data)
 
 | Artefato | SHA-256 | Tamanho |
 |---|---|---|
-| `gui_web/release/Helper Financeiro Setup 2.10.0.exe` (ata v2.10.0) | `b64b9763c20837ee208af965eddf0e56b20675d7e4b5b835c615a9de28f8b69d` | 347,0 MB |
-| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador, ata v2.10.0) | `3b5e56481a228b0d02a42470f8dba771639ced7f1a849ffe8569e326f0ce926f` | 22,6 MB |
+| `gui_web/release/Helper Financeiro Setup 2.12.0.exe` | `bb1c899e7ac001eb570a5f573fe85361af3b8130c46d2c6b8b224e6e0f8031c1` | 347,0 MB |
+| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `69745b90c7b3e93c3e4906d82a0305e421634b7b4e74cacffa776fd4cb881079` | 22,6 MB |
 
-> **Este ciclo não gerou build oficial** (decisão da ADR-0019: nenhuma
-> dependência subiu, GUI/Electron intocados, ADR-0017 §E.4 não dispara) — os
-> hashes acima são os da ata v2.10.0, repetidos por referência, e **não
-> contêm o código v2.11** (endurecimento POSIX dormente e refatorações de
-> complexidade). O próximo build oficial incorporará o v2.11 e será validado
-> pelos smokes do pacote (`e2e/empacotado*.spec.ts`) em nova ata. Para
-> reconstruir: `scripts/preparar_llama.py` E `scripts/preparar_ocr.py`
-> antes, depois `uv run --group build pyinstaller SidecarHF.spec
-> --noconfirm` e `npm run dist`. **Nenhum modelo GGUF é embarcado**
-> (download opt-in, REQ-NF-007). Code signing segue pendente (C-15).
+> Os binários não são versionados no git; os hashes identificam o build desta
+> ata (PyInstaller + electron-builder NSIS com **Electron 43.1.1**, sem code
+> signing — C-15 segue registrado). Este é o primeiro build desde a v2.10.0 e
+> **contém todo o código v2.11 + v2.12** (endurecimento POSIX dormente,
+> refatorações sob golden-master, exceção loopback do auto-update). Tamanhos
+> estáveis vs v2.10 (347,0 MB / 22,6 MB — nenhum asset novo). **Nenhum modelo
+> GGUF é embarcado** (download opt-in, REQ-NF-007). Rebuild em outra
+> máquina/data produz hash diferente — rode **`scripts/preparar_llama.py` E
+> `scripts/preparar_ocr.py` antes**, e regenere com `uv run --group build
+> pyinstaller SidecarHF.spec --noconfirm` e `npm run dist`, registrando em
+> nova ata. Validado por **6 smokes do pacote** (`empacotado.spec.ts`,
+> `empacotado-llm.spec.ts`, `empacotado-update.spec.ts` — todos passed contra
+> o pacote desta ata) e pelo **smoke do órfão** (kill duro; Job Object
+> reconfirmado sob Electron 43.1.1).
 
 ## Estado do harness no congelamento
 
 ```text
 489 passed, 2 skipped (opt-in reais: HF_OCR_REAL=1 e HF_LLAMA_REAL=1) — suíte
-offline (Gate A); 9 testes novos de golden-master + 7 de permissões POSIX
+offline (Gate A); goldens 9/9 intocados após o bump do langgraph
 Cobertura: ≥ 96,6% (piso de 90% no CI; sidecar/ medido desde o v2.9)
-Golden-master: tests/golden/ com 9 JSONs (5 .docx, 4 .xlsx); determinismo
-provado (2 execuções); regeneração com CI setado RECUSADA (verificado na
-prática pelo revisor)
-Catraca C901: ativa no ruff (max-complexity = 13, pior caso legado
-gui/app.py:_extrair_pdf); pós-refatoração: gerar_relatorio = 3,
-_aba_evolucao = 2, baixar_modelo = 2
-E2E Playwright: 19 passed no app dev (rodada completa limpa no Electron 43);
+Catraca C901: ativa (max-complexity = 13, herdada do v2.11)
+E2E Playwright: 19 passed no app dev (Electron 43.1.1); + 6 passed contra o
+pacote NSIS real (incl. os 2 do smoke de auto-update novo) + smoke do órfão;
 estado isolado por HF_DB_PATH/HF_AUTH_PATH/HF_MODELOS_DIR/HF_LLM_CONFIG_PATH
 Gate Front (CI): ESLint + tsc + build Vite verdes
-Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 1 (setuptools —
-risco aceito, ver cabeçalho) · Electron 43.1.0 atual
-Observações: (1) na 1ª rodada E2E do fechamento, o cenário "recuperação por
-código de uso único" (cofre.spec.ts) falhou uma vez num toBeVisible de 5 s e
-passou nas reexecuções (arquivo completo + suíte completa) — flake candidato
-NOVO, sem relação com o código do ciclo (no-op no Windows); se reincidir,
-aplicar o padrão T-1907 (asserção da condição real) em ciclo próprio.
-(2) Risco residual herdado: compatibilidade do electron-updater 6.8 com
-Electron 43 verificada só por changelog (auto-update opt-in, desligado por
-padrão). (3) Modelos com menos de ~1B de parâmetros tendem a degradar por
+Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 0 · Electron 43.1.1
+atual — nenhum risco aceito pendente
+Observações: (1) o flake candidato da ata v2.11.0 (recuperação por código de
+uso único) foi diagnosticado como corrida entre os dois gates de render do
+bloqueio e ENCERRADO pelo padrão T-1907 nesta ata. (2) O risco residual
+"electron-updater 6.8 verificado só por changelog" (atas v2.10/v2.11) foi
+ENCERRADO: updater real exercitado até update-downloaded pelo smoke novo.
+(3) Instalação real do update segue não testável sem code signing (C-15).
+(4) Modelos com menos de ~1B de parâmetros tendem a degradar por
 REQ-LLM-002:SCHEMA (P8 correto).
 ```
 

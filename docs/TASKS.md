@@ -373,10 +373,10 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | Alvo | Depende | Status |
 |----|------|-----|---------|--------|
-| T-2301 | Bumps dirigidos: `setuptools` 83.0.0 (fecha PYSEC-2026-3447), Electron 43.1.1 (patch), `langgraph` 1.2.9, `uvicorn` 0.51; gates completos + E2E dev completo (Sonnet) | risco aceito v2.11.0 | ADR-0020 | ⬜ |
-| T-2302 | Caronas de harness: smoke do auto-update (`e2e/empacotado-update.spec.ts`, feed local, escada HTTPS: CA de teste → fallback loopback-only) + blindagem T-1907 do cenário "recuperação por código de uso único" (Sonnet) | riscos residuais v2.10/v2.11 | T-2301 | ⬜ |
-| T-2303 | Build oficial (PyInstaller + NSIS 2.12.0) + bateria contra o pacote real: smoke NSIS, smoke do órfão, smoke do auto-update (orquestrador) | §E.4 | T-2302 | ⬜ |
-| T-2304 | Fechamento: auditoria de deps com pip-audit = 0 obrigatório, ata `FREEZE.md` v2.12.0 com hashes dos binários novos, docs sincronizados (orquestrador) | Processo | todas | ⬜ |
+| T-2301 | Bumps dirigidos: `setuptools` 83.0.0 (fecha PYSEC-2026-3447), Electron 43.1.1 (patch), `langgraph` 1.2.9, `uvicorn` 0.51; gates completos + E2E dev completo (Sonnet) | risco aceito v2.11.0 | ADR-0020 | ✅ `b93e175` |
+| T-2302 | Caronas de harness: smoke do auto-update (`e2e/empacotado-update.spec.ts`, feed local, escada HTTPS: CA de teste → fallback loopback-only) + blindagem T-1907 do cenário "recuperação por código de uso único" (Sonnet) | riscos residuais v2.10/v2.11 | T-2301 | ✅ `d75f10c` |
+| T-2303 | Build oficial (PyInstaller + NSIS 2.12.0) + bateria contra o pacote real: smoke NSIS, smoke do órfão, smoke do auto-update (orquestrador) | §E.4 | T-2302 | ✅ (binários fora do git; hashes na ata) |
+| T-2304 | Fechamento: auditoria de deps com pip-audit = 0 obrigatório, ata `FREEZE.md` v2.12.0 com hashes dos binários novos, docs sincronizados (orquestrador) | Processo | todas | ✅ (este commit) |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -424,10 +424,18 @@ Auditoria de deps: npm audit 0; pip-audit acusou `setuptools` 82.0.1
 aceito na ata). Sem build oficial neste ciclo (§E.4 não dispara). Ata
 `FREEZE.md` v2.11.0. **Fora do ciclo:** C-15 (aguarda decisão de custo do
 certificado). **Ciclo v2.12 ABERTO (ADR-0020, M23, 2026-07-14):**
-build/release — bumps dirigidos (setuptools 83, Electron 43.1.1, langgraph
-1.2.9, uvicorn 0.51), caronas de harness (smoke do auto-update + blindagem
-do flake do cofre) e rebuild oficial com os 3 smokes do pacote; fechamento
-exige pip-audit = 0.
+build/release. **Ciclo v2.12 FECHADO (2026-07-14):** bumps dirigidos
+entregues (setuptools 83 → **pip-audit 0**, fim do risco aceito da v2.11;
+Electron 43.1.1; langgraph 1.2.9; uvicorn 0.51 — goldens intocados provaram
+o langgraph); smoke do **auto-update** novo chegou à régua ideal
+(`update-downloaded` com sha512 conferido) — degrau 2 da escada HTTPS com
+evidência (o stack Chromium do electron-updater ignora `NODE_EXTRA_CA_CERTS`;
+`http://` aceito SÓ para `127.0.0.1`, com teste negativo); flake do cofre
+blindado (T-1907, asserção pela condição real). Build oficial 2.12.0
+(instalador 347,0 MB + sidecar 22,6 MB, hashes na ata) validado por
+**6 smokes do pacote + smoke do órfão**. Ata `FREEZE.md` v2.12.0. **Fora do
+ciclo:** C-15 (code signing — decisão de custo). Próximo ciclo: a definir
+(começa por ADR).
 
 ### Histórico do ciclo v2.8 (fechado)
 

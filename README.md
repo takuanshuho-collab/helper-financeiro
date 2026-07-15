@@ -36,7 +36,9 @@ CVEs conhecidos — mantendo tudo como estava para o usuário. O ciclo v2.11
 do cofre no ramo POSIX (dormente), higiene de linter item a item e os
 hotspots de complexidade refatorados sob **golden-master** (a saída
 `.docx`/`.xlsx` é comparada byte de conteúdo a byte de conteúdo com uma
-régua versionada), com catraca permanente de complexidade no lint.
+régua versionada), com catraca permanente de complexidade no lint. O ciclo
+v2.12 (ADR-0020) publicou os binários atualizados e passou a testar o
+auto-update de verdade (electron-updater real contra um feed local).
 
 ---
 
