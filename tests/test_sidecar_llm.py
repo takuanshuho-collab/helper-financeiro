@@ -36,10 +36,14 @@ def test_llm_status_sem_token_401():
     assert cliente.get("/llm/status").status_code == 401
 
 
-def test_llm_status_sem_binario_sem_modelo(monkeypatch):
+def test_llm_status_sem_binario_sem_modelo(monkeypatch, tmp_path):
     monkeypatch.delenv("HF_BASE_URL", raising=False)
     monkeypatch.setenv("HF_LLAMA_SERVER", "C:/caminho/inexistente/llama-server.exe")
     monkeypatch.delenv("HF_LLM_MODELO", raising=False)
+    # Isola o llm.json: sem isto o teste lê o llm.json REAL de %APPDATA% e
+    # falha em qualquer máquina onde o app já ativou um modelo (pego em campo
+    # na abertura do v2.14 — a máquina do mantenedor passou a ter um).
+    monkeypatch.setenv(gm.VAR_LLM_CONFIG_PATH, str(tmp_path / "llm.json"))
     resp = cliente.get("/llm/status", headers=CABECALHO)
     assert resp.status_code == 200
     dados = resp.json()

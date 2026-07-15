@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.13.0 (ciclo ABERTO — ADR-0021; v2.12.1 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.14.0 (ciclo ABERTO — ADR-0022; v2.13.0 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -396,6 +396,26 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-2403 | Degrau final do smoke de auto-update: feed com NSIS real 99.0.0 assinado, verificação por `publisherName`, instalação REAL (duplo gating + trava "aborta se instalado" + uninstall no finally) e verificação negativa (cert errado recusado) (Sonnet) | C-15 fase 1 | T-2402 | ✅ `132224e` |
 | T-2404 | `release.yml`: tag `v*`, windows-latest, build verificável → draft de Release; submissão SignPath atrás do secret-flag `SIGNPATH_ATIVO` (desligado); escada do sidecar embarcado documentada (Sonnet) | C-15 fase 2 | T-2402 | ✅ `b9e9306` |
 | T-2405 | Fechamento: gates + CI remoto verde + ensaio do release.yml (tag `v2.13.0-rc`, flag desligada) + ata `FREEZE.md` v2.13.0 sem rebuild oficial (orquestrador) | Processo | todas | ✅ (este commit) |
+
+## Milestone M25 — Runtime LLM resiliente e configurável (ciclo v2.14, ADR-0022)
+
+> Corrige o **primeiro bug de produto pego em campo** (2026-07-15): o default
+> `-ngl 99` do runtime embarcado crasha o `llama-server` com
+> `ErrorOutOfDeviceMemory` em GPUs sem VRAM livre (GTX 1650 4 GB, o
+> hardware-alvo) — o auto-fit do llama.cpp b9966 aborta quando `-ngl` é
+> forçado, em vez de reduzir. Novo default: **Auto** (auto-fit) + contexto
+> **4096**. Carona decidida pelo mantenedor: contexto/offload configuráveis
+> na tela de Configurações da IA + painel do último boot + dica de contexto
+> (1 regra). Falha de boot ⇒ **1 retry em CPU puro** com motivo classificado
+> (captura de stderr em ring buffer, só memória — REQ-SEC-001). Design e
+> Decision Log na **ADR-0022**.
+
+| ID | Task | Alvo | Depende | Status |
+|----|------|-----|---------|--------|
+| T-2501 | Runtime: `_FLAGS_PADRAO` → auto-fit, `_CTX_PADRAO` → 4096; resolução `env > llm.json > default` (`ctx_size`, `gpu_offload`); captura de stderr (thread + ring buffer ~200 linhas) com classificador de motivos (`GPU_SEM_MEMORIA`, `GPU_FIT_ABORTADO`, `GENERICO`) e métricas do boot; retry único em CPU puro com `boot_info` consultável (Opus) | Bug de campo / P8 | ADR-0022 | ⬜ |
+| T-2502 | Contratos + endpoints: `GET /llm/config` (config efetiva + origens, `boot_info`, `dica` pela regra única no backend) e `PUT /llm/config` (valida, persiste no `llm.json`, encerra o runtime); `aviso_runtime` aditivo na resposta da análise sênior; Pydantic em `contracts/schemas.py` (Sonnet) | REQ-NF-005 | T-2501 | ⬜ |
+| T-2503 | GUI: seção "Ajustes avançados" (contexto 3 degraus + GPU Auto/CPU/camadas; desabilitados com `HF_LLAMA_FLAGS` ativa) + painel "Último boot da IA" (badge de modo, motivo, camadas, VRAM, contexto) + callout da dica com "Aplicar sugestão" + banner âmbar do `aviso_runtime` na análise; E2E Playwright dos estados (Sonnet) | REQ-F (GUI) | T-2502 | ⬜ |
+| T-2504 | Fechamento: gates + CI remoto verde + auditoria de deps (§5) + rebuild oficial 2.14.0 + smokes (§E.4) + aceitação de campo (análise sênior com o default novo na máquina do mantenedor, env removida) + ata `FREEZE.md` v2.14.0 (orquestrador) | Processo | todas | ⬜ |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
