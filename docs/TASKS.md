@@ -391,10 +391,10 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | Alvo | Depende | Status |
 |----|------|-----|---------|--------|
-| T-2401 | Elegibilidade SignPath: `LICENSE` MIT + política de assinatura de código no README (atribuição exigida) (orquestrador) | C-15 fase 2 | ADR-0021 | ⬜ |
-| T-2402 | Pipeline de assinatura local: `scripts/preparar_cert_teste.ps1` (cert 30 dias, PFX fora do repo) + `scripts/build_assinado.ps1` (overrides `-c.win.signtoolOptions.*` via envs `HF_CSC_*`; assina sidecar antes do empacotamento); sem envs o build é byte-idêntico (Opus) | C-15 fase 1 | ADR-0021 | ⬜ |
-| T-2403 | Degrau final do smoke de auto-update: feed com NSIS real 99.0.0 assinado, verificação por `publisherName`, instalação REAL (duplo gating + trava "aborta se instalado" + uninstall no finally) e verificação negativa (cert errado recusado) (Sonnet) | C-15 fase 1 | T-2402 | ⬜ |
-| T-2404 | `release.yml`: tag `v*`, windows-latest, build verificável → draft de Release; submissão SignPath atrás do secret-flag `SIGNPATH_ATIVO` (desligado); escada do sidecar embarcado documentada (Sonnet) | C-15 fase 2 | T-2402 | ⬜ |
+| T-2401 | Elegibilidade SignPath: `LICENSE` MIT + política de assinatura de código no README (atribuição exigida) (orquestrador) | C-15 fase 2 | ADR-0021 | ✅ `d892e96` |
+| T-2402 | Pipeline de assinatura local: `scripts/preparar_cert_teste.ps1` (cert 30 dias, PFX fora do repo) + `scripts/build_assinado.ps1` (overrides `-c.win.signtoolOptions.*` via envs `HF_CSC_*`; assina sidecar antes do empacotamento); sem envs o build é byte-idêntico (Opus) | C-15 fase 1 | ADR-0021 | ✅ `4ff0c60` |
+| T-2403 | Degrau final do smoke de auto-update: feed com NSIS real 99.0.0 assinado, verificação por `publisherName`, instalação REAL (duplo gating + trava "aborta se instalado" + uninstall no finally) e verificação negativa (cert errado recusado) (Sonnet) | C-15 fase 1 | T-2402 | ✅ `132224e` |
+| T-2404 | `release.yml`: tag `v*`, windows-latest, build verificável → draft de Release; submissão SignPath atrás do secret-flag `SIGNPATH_ATIVO` (desligado); escada do sidecar embarcado documentada (Sonnet) | C-15 fase 2 | T-2402 | ✅ `b9e9306` |
 | T-2405 | Fechamento: gates + CI remoto verde + ensaio do release.yml (tag `v2.13.0-rc`, flag desligada) + ata `FREEZE.md` v2.13.0 sem rebuild oficial (orquestrador) | Processo | todas | ⬜ |
 
 ## Definição de Pronto (DoD)

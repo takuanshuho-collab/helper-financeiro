@@ -381,8 +381,13 @@ function buscarHelperInstalado(): InstalacaoExistente | null {
       '  $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue',
       "  if ($p.DisplayName -like 'Helper Financeiro*') { $p }",
       '} | Select-Object -First 1',
-      'if ($r) { [PSCustomObject]@{ DisplayName = $r.DisplayName; DisplayVersion = $r.DisplayVersion; ' +
-        'UninstallString = $r.UninstallString; InstallLocation = $r.InstallLocation } | ConvertTo-Json -Compress }',
+      // Chaves em camelCase DE PROPÓSITO: o JSON cruza a fronteira PowerShell→
+      // TS e a interface InstalacaoExistente lê displayVersion/uninstallString —
+      // com PascalCase tudo viria undefined (bug pego na 1ª rodada real do
+      // fechamento: a versão instalada existia, mas a asserção lia undefined e
+      // o cleanup não achava o uninstallString).
+      'if ($r) { [PSCustomObject]@{ displayName = $r.DisplayName; displayVersion = $r.DisplayVersion; ' +
+        'uninstallString = $r.UninstallString; installLocation = $r.InstallLocation } | ConvertTo-Json -Compress }',
     ])
     const texto = saida.trim()
     if (!texto) return null
@@ -423,6 +428,29 @@ function desinstalarSilenciosamente(uninstallString: string): void {
   const casado = uninstallString.match(/^"([^"]+)"/)
   const exe = casado ? casado[1] : uninstallString.trim()
   execFileSync(exe, ['/S'], { timeout: 120_000 })
+}
+
+// O (des)instalador NSIS spawna uma cópia de si mesmo e RETORNA antes de a
+// remoção/gravação terminar (comportamento clássico do NSIS sem `_?=`) — o
+// exit do processo NÃO é a condição real. Padrão T-1907: poll do registro
+// até a condição esperada, nunca checagem única nem sleep fixo. (Pego na 1ª
+// rodada real do fechamento: o uninstall funcionava, mas a checagem imediata
+// ainda via a entrada.)
+async function aguardarRegistro(
+  condicao: (entrada: InstalacaoExistente | null) => boolean,
+  descricao: string,
+  timeoutMs = 60_000,
+): Promise<InstalacaoExistente | null> {
+  const limite = Date.now() + timeoutMs
+  let atual = buscarHelperInstalado()
+  while (!condicao(atual)) {
+    if (Date.now() > limite) {
+      throw new Error(`timeout (${timeoutMs} ms) aguardando: ${descricao}; estado atual: ${JSON.stringify(atual)}`)
+    }
+    await new Promise((r) => setTimeout(r, 1_000))
+    atual = buscarHelperInstalado()
+  }
+  return atual
 }
 
 // Serve um instalador NSIS REAL (não mais o buffer-isca) + o `latest.yml`
@@ -535,8 +563,10 @@ test.describe('feed assinado — verificação de assinatura e instalação real
     try {
       instalarSilenciosamente(instaladorPendente)
 
-      const instalado = buscarHelperInstalado()
-      expect(instalado, 'a instalação não apareceu no registro de programas após o /S').not.toBeNull()
+      const instalado = await aguardarRegistro(
+        (e) => e !== null,
+        'a instalação aparecer no registro de programas após o /S',
+      )
       expect(instalado?.displayVersion).toBe(VERSAO_FICTICIA_REAL)
     } finally {
       // Salvaguarda (b), incondicional mesmo se a asserção acima falhar:
@@ -545,7 +575,10 @@ test.describe('feed assinado — verificação de assinatura e instalação real
       const paraRemover = buscarHelperInstalado()
       if (paraRemover) {
         desinstalarSilenciosamente(paraRemover.uninstallString)
-        const depoisDeRemover = buscarHelperInstalado()
+        const depoisDeRemover = await aguardarRegistro(
+          (e) => e === null,
+          'a desinstalação silenciosa remover a entrada do registro',
+        )
         expect(depoisDeRemover, 'desinstalação silenciosa não removeu a entrada do registro').toBeNull()
 
         if (paraRemover.installLocation && fs.existsSync(paraRemover.installLocation)) {
