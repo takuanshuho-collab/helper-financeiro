@@ -1,0 +1,229 @@
+# Release — workflow de release verificável (C-15 fase 2, ADR-0021, T-2404).
+#
+# Dispara por tag `v*` e produz um DRAFT de GitHub Release com o instalador
+# NSIS + latest.yml (feed de auto-update, electron-updater/provider generic —
+# ver gui_web/package.json "build.publish"). Nada publica sozinho: o draft
+# fica para o mantenedor revisar e publicar manualmente.
+#
+# Build verificável: roda inteiramente neste job, do checkout até o
+# `npm run dist`, no MESMO runner (windows-latest — PyInstaller e o NSIS do
+# electron-builder exigem Windows; é também o requisito do SignPath para uma
+# submissão elegível: o artefato tem que nascer de um pipeline de CI
+# auditável, não de um build local).
+#
+# Escada do sidecar embarcado (ADR-0021 §T-2404), decisão que só se resolve
+# quando a aprovação do SignPath sair e a policy for conhecida:
+#   - degrau 1 (implementado abaixo, é o caminho feliz): UMA submissão do
+#     instalador NSIS já pronto. Se a signing policy do SignPath cobrir
+#     assinatura de aninhados ("nested"/embedded binaries), o sidecar-hf.exe
+#     dentro do instalador sai assinado na mesma passada — não precisa de
+#     nada extra deste workflow.
+#   - degrau 2 (NÃO implementado; documentado para quando for preciso): se a
+#     policy NÃO assinar aninhados, o fluxo vira duas submissões — (a)
+#     submete dist/sidecar-hf/sidecar-hf.exe sozinho, baixa de volta
+#     assinado; (b) roda `npm run dist` de novo com o sidecar já assinado no
+#     lugar (extraResources copia o que estiver em dist/sidecar-hf) e
+#     submete o instalador resultante. Fica para um ajuste pontual (hotfix)
+#     quando a aprovação sair, não para especular agora.
+#
+# Segredos/variáveis que o mantenedor precisa configurar no repositório
+# (Settings → Secrets and variables → Actions):
+#   Repository Variables (não são segredo — só ligam/desligam o fluxo):
+#     - SIGNPATH_ATIVO           "1" para submeter ao SignPath; qualquer
+#                                outro valor (ou ausente) pula a submissão e
+#                                o workflow termina no draft NÃO assinado.
+#     - SIGNPATH_ORGANIZATION_ID  ID da organização no SignPath.
+#     - SIGNPATH_PROJECT_SLUG     slug do projeto no SignPath.
+#     - SIGNPATH_POLICY_SLUG      slug da signing policy (produção).
+#   Secrets (segredo de verdade):
+#     - SIGNPATH_API_TOKEN        token da REST API do SignPath.
+#   GITHUB_TOKEN (automático, sem configuração): usado pelo
+#     softprops/action-gh-release para criar o draft e pelas
+#     actions/upload-artifact + a action do SignPath para trocar o
+#     instalador com a plataforma deles (permissions abaixo cobrem os dois).
+#
+# NENHUM slug/ID real foi inventado aqui — os nomes acima são só os nomes das
+# variables/secrets; os valores são o mantenedor quem cadastra quando a
+# inscrição no SignPath aprovar (ADR-0021 "Ativação da fase 2").
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  # contents: write -> criar o draft de Release e anexar os artefatos.
+  # actions: write   -> upload-artifact (troca o instalador com a action do
+  #                     SignPath) e o download que ela faz do artefato
+  #                     assinado de volta (write inclui read no modelo de
+  #                     permissões do GITHUB_TOKEN).
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    name: Build verificável + draft de Release (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Mesma tag EXATA do ci.yml (Gate A): o astral-sh/setup-uv não publica
+      # alias de major/minor confiável, então o repo fixa o patch exato em
+      # vez de "@v8" (regra registrada no comentário do ci.yml).
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências (dev + build)
+        run: uv sync --group dev --group build
+
+      # ---------------------------------------------------------- gate rápido
+      # Portão mínimo antes de gastar tempo de build: a release nunca nasce
+      # de uma árvore quebrada. Mesmo comando do Gate A do ci.yml (sem a
+      # matriz de Python — aqui só interessa a versão que vai para o freeze).
+      - name: Gate rápido — lint (ruff)
+        run: uv run ruff check .
+
+      - name: Gate rápido — suíte pytest completa (offline, com piso de cobertura)
+        run: uv run pytest --cov --cov-fail-under=90
+
+      # -------------------------------------------------------- preparadores
+      # Baixam os assets do freeze (modelos de OCR + binário do llama.cpp).
+      # Precisam de rede — o runner do GitHub tem; a máquina do usuário final
+      # NUNCA baixa nada disso (REQ-NF-006). Mesmos comandos usados localmente
+      # antes do PyInstaller (ver docstrings de scripts/preparar_*.py).
+      - name: Preparar assets — LLM local (llama.cpp)
+        run: uv run python scripts/preparar_llama.py
+
+      - name: Preparar assets — OCR (RapidOCR)
+        run: uv run python scripts/preparar_ocr.py
+
+      # ------------------------------------------------------------ sidecar
+      - name: Congelar o sidecar (PyInstaller)
+        run: uv run --group build pyinstaller SidecarHF.spec --noconfirm
+
+      # ------------------------------------------------------------- GUI web
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: gui_web/package-lock.json
+
+      - name: Instalar dependências (gui_web)
+        working-directory: gui_web
+        run: npm ci
+        # SEM ELECTRON_SKIP_BINARY_DOWNLOAD aqui (ao contrário do gate-front
+        # do ci.yml): este job PRECISA do binário do Electron e das
+        # ferramentas de empacotamento do electron-builder para o
+        # `npm run dist` funcionar de verdade.
+
+      # Atenção herdada da T-2402: o electron-builder pode logar erros de
+      # symlink ao extrair o winCodeSign (dylibs macOS/darwin dentro do cache
+      # de ferramentas do electron-builder, baixado mesmo em build --win
+      # porque o pacote traz utilitários cross-platform). No Windows runner
+      # isso é tipicamente NÃO-fatal (o build --win não usa esses dylibs) —
+      # mas se o passo abaixo quebrar por causa disso, o primeiro suspeito é
+      # o cache do electron-builder (~/.cache/electron-builder no runner) ou
+      # a extração em si; um retry do step (ou limpar o cache do runner antes
+      # de tentar de novo) costuma resolver antes de investigar mais fundo.
+      - name: Build do instalador (electron-builder --win)
+        working-directory: gui_web
+        run: npm run dist
+
+      # ------------------------------------------------------ SHA-256 (pré-assinatura)
+      # Hash dos artefatos crus, para conferência com a ata mesmo se a
+      # submissão ao SignPath estiver desligada (fluxo mais comum hoje).
+      - name: SHA-256 dos artefatos (build)
+        working-directory: gui_web/release
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path . -Filter '*Setup*.exe' -File |
+            Where-Object { $_.Name -notlike '*uninstaller*' } |
+            ForEach-Object {
+              $h = Get-FileHash -Algorithm SHA256 -Path $_.FullName
+              Write-Host "SHA256  $($h.Hash)  $($_.Name)"
+            }
+          if (Test-Path 'latest.yml') {
+            $h = Get-FileHash -Algorithm SHA256 -Path 'latest.yml'
+            Write-Host "SHA256  $($h.Hash)  latest.yml"
+          }
+
+      # -------------------------------------------------- submissão SignPath
+      # Atrás do flag: Repository Variable (não secret — o flag em si não é
+      # segredo, só liga/desliga o passo). Enquanto SIGNPATH_ATIVO != "1"
+      # (estado atual: aprovação da inscrição ainda pendente), os dois passos
+      # abaixo são PULADOS e o workflow termina no draft NÃO assinado.
+      - name: Publicar instalador como artifact (para a submissão SignPath)
+        if: vars.SIGNPATH_ATIVO == '1'
+        id: upload-instalador
+        uses: actions/upload-artifact@v7
+        with:
+          name: instalador-nsis
+          path: gui_web/release/*Setup*.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      # Degrau 1 da escada (ver comentário no topo do arquivo): UMA submissão
+      # do instalador já pronto. wait-for-completion aguarda a aprovação
+      # manual do mantenedor na plataforma do SignPath antes de seguir.
+      - name: Submeter instalador ao SignPath
+        if: vars.SIGNPATH_ATIVO == '1'
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@v2.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-instalador.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-artifact
+
+      # Se a submissão rodou, o instalador assinado volta em
+      # signed-artifact/ com o MESMO nome de arquivo — sobrescreve o cru em
+      # gui_web/release/ para que o passo de release (mais abaixo) e o
+      # SHA-256 final peguem a versão assinada sem duplicar lógica.
+      - name: Substituir o instalador cru pelo assinado
+        if: vars.SIGNPATH_ATIVO == '1'
+        shell: pwsh
+        run: |
+          $assinado = Get-ChildItem -Path 'signed-artifact' -Filter '*Setup*.exe' -File -Recurse |
+            Select-Object -First 1
+          if (-not $assinado) {
+            throw "Artefato assinado nao encontrado em signed-artifact/ apos a submissao ao SignPath."
+          }
+          Copy-Item -Path $assinado.FullName -Destination 'gui_web/release' -Force
+          Write-Host "Instalador assinado copiado: $($assinado.Name)"
+
+      - name: SHA-256 dos artefatos (pós-assinatura)
+        if: vars.SIGNPATH_ATIVO == '1'
+        working-directory: gui_web/release
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path . -Filter '*Setup*.exe' -File |
+            Where-Object { $_.Name -notlike '*uninstaller*' } |
+            ForEach-Object {
+              $h = Get-FileHash -Algorithm SHA256 -Path $_.FullName
+              Write-Host "SHA256 (assinado)  $($h.Hash)  $($_.Name)"
+            }
+
+      # ---------------------------------------------------------- draft de Release
+      # softprops/action-gh-release escolhido em vez de `gh release create`
+      # cru: cria (ou reaproveita) o Release da tag, anexa os artefatos por
+      # glob e faz tudo num passo só, sem eu precisar escrever a lógica de
+      # "release já existe? edita : cria" nem tratar upload de múltiplos
+      # arquivos manualmente — é o caminho mais simples que cobre exatamente
+      # o que o ADR pede (draft, nunca publica sozinho). Usa o
+      # GITHUB_TOKEN automático (permissions.contents: write no topo do
+      # arquivo já autoriza).
+      - name: Criar/atualizar draft de Release
+        uses: softprops/action-gh-release@v3.0.2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            gui_web/release/Helper*Setup*.exe
+            gui_web/release/latest.yml
+            gui_web/release/*.blockmap
