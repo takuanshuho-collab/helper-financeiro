@@ -102,3 +102,27 @@ destrava a instalação real no smoke do auto-update).
 - **Testar a instalação real do update:** impossível sem assinatura
   (Windows recusa); a régua para em `update-downloaded` por decisão, com o
   degrau final destravado pelo futuro C-15.
+
+## Hotfix v2.12.1 — CI vermelho desde a T-1902 (registro da execução)
+
+Logo após o congelamento da v2.12.0, o mantenedor apontou que o **Gate A do
+CI (Ubuntu) estava vermelho** — investigação: falha no mypy em
+`sidecar/job_windows.py` (`ctypes.WinDLL`/`get_last_error` não existem nos
+stubs de Linux; o mypy é sensível à plataforma), **desde a T-1902
+(2026-07-12)**, o commit que criou o módulo. 18 pushes falhados em 4 ciclos
+sem ninguém notar: os portões de mypy/pytest rodam localmente no Windows, e
+o CI remoto nunca era conferido após o push (o pytest/cobertura do CI nem
+chegou a rodar nesses runs — o job parava no mypy).
+
+**Correção:** (1) `platform = "win32"` no `[tool.mypy]` — o produto é
+Windows-first (o ramo POSIX do cofre é dormente e só usa `os.chmod`, comum a
+ambos os stubs), então checar como win32 em qualquer host é o comportamento
+correto; reproduzido/validado localmente com `--platform linux` (6 erros →
+verde). (2) `ci.yml`: escopo do mypy alinhado ao portão local (`sidecar`
+explícito — antes o CI só o alcançava seguindo imports, 39 vs 51 arquivos) e
+actions atualizadas (`checkout@v7`, `setup-uv@v8`) fechando o warning do
+Node 20 deprecado. (3) **Regra permanente nova** (junto da auditoria de deps
+ADR-0018 §5): todo fechamento de ciclo confere o **CI remoto verde** no
+commit final antes de congelar a ata. Sem rebuild de binários: nenhuma linha
+de produto muda (config de typecheck + workflow); os binários da ata seguem
+os do build 2.12.0, registrado na ata v2.12.1.

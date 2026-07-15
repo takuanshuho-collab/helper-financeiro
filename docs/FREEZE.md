@@ -1,6 +1,6 @@
-# FREEZE — Ata de Congelamento v2.12.0
+# FREEZE — Ata de Congelamento v2.12.1
 
-- **Data:** 2026-07-14
+- **Data:** 2026-07-15 (v2.12.0 congelada em 2026-07-14; regerada como v2.12.1 no mesmo hotfix — ver seção do hotfix na ADR-0020)
 - **Versão da Constituição:** 2.0.0
 - **Escopo congelado:** ciclo **v2.12** (ADR-0020): milestone **M23** —
   **build/release**. Os binários oficiais voltam a conter o código corrente
@@ -44,6 +44,17 @@
   versão antiga). Electron **43.1.1 = versão mais nova publicada** (janela
   de suporte 41/42/43 em 2026-07). **Nenhum risco aceito pendente de
   dependência.**
+- **Hotfix v2.12.1 (2026-07-15, registro na ADR-0020):** o CI remoto (Gate A
+  Ubuntu) estava vermelho desde a T-1902 — o mypy é sensível à plataforma e
+  `ctypes.WinDLL`/`get_last_error` (`sidecar/job_windows.py`) não existem
+  nos stubs de Linux; os portões locais (Windows) nunca acusaram. Corrigido
+  com `platform = "win32"` no `[tool.mypy]` (produto Windows-first; ramo
+  POSIX dormente só usa `os.chmod`), escopo do mypy do `ci.yml` alinhado ao
+  portão local (`sidecar` explícito) e actions atualizadas (`checkout@v7`,
+  `setup-uv@v8` — fim do warning do Node 20). **Regra permanente nova:**
+  todo fechamento confere o CI remoto verde antes de congelar (TASKS.md).
+  Nenhuma linha de produto mudou — os binários abaixo seguem os do build
+  2.12.0 (o instalador se chama "Setup 2.12.0.exe"), hashes inalterados.
 - **Regra:** qualquer alteração nos artefatos abaixo exige nova ADR,
   incremento de versão e nova ata.
 - **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04, M1..M6), v2.3.0..v2.5.0
@@ -70,7 +81,7 @@
 | `docs/PRD.md` | `7a0d731b4bf65918084da884ed70655afe0fc3d4595d268aa5c5f7c0840d7ff3` |
 | `docs/SPEC.md` | `800dd0b1801494f9a4120735ee0c5214ca913e4cc961ca347873b13f35e3a831` |
 | `docs/PLAN.md` | `e61a988b03683dbd66076924d59384917d59420c5e743d7d9b0f253e0590156f` |
-| `docs/TASKS.md` | `426ad977d3fdf5a16f2756a792ded62fcf59cedb49ae49670496bf7d370f71fe` |
+| `docs/TASKS.md` | `035d9e237d3673cd40fb8f2397209e6062b8d735b846c03647840c3436d2f656` |
 | `docs/HARNESS.md` | `1d7c572c87aec2dbe6735acb2b5a9a0bc5114ae7639014d9b3adbab02fb98a20` |
 | `docs/AGENT.md` | `742de4d9d5bd1a16768f64bbf4dbcb74a39a5b01fa7d9d1e6995ea6952c0e842` |
 | `docs/REVISAO-SEGURANCA.md` | `ec6923ac3abbe8e4235db73c8b1472558be1336d6d4d6b621b3cb91512ed4a2b` |
@@ -102,7 +113,7 @@
 | `docs/adr/ADR-0017-ciclo-de-saude-de-codigo.md` | `13b35818103cab2ca0f6c2238838dca28b0078c7119ed93ce28dafdbc9cc2955` |
 | `docs/adr/ADR-0018-bump-electron-43.md` | `f12c84d43ba96307e94f338509a563e843ab605dd259a75cffaf718aa51966c3` |
 | `docs/adr/ADR-0019-ciclo-higiene-e-complexidade.md` | `6d389a871ccee5c435616fc00027f5bb2e86e53d5c401f31b85f3c9c7eb03204` |
-| `docs/adr/ADR-0020-ciclo-build-release.md` | `4b99c4e12af6a6c2cb7ad885733553241a3f663694ccc85d6cc93c4f755e7095` |
+| `docs/adr/ADR-0020-ciclo-build-release.md` | `67fa63282e74500c3f598847ba73d30a3e1e6d0eddccb8542ddcb6bcc4046455` |
 
 ### Contratos de dados
 
@@ -168,7 +179,7 @@
 |---|---|
 | `sidecar/__init__.py` | `0f55c31161b81aad9355fe5ad58fae8064defe1a7a7cfd238ed17e59073e5aad` |
 | `sidecar/__main__.py` | `7e57e7ff71a25020a25ec5c715fd58f6dafcff633121f6db49d83f14cff7b7c0` |
-| `sidecar/app.py` | `42db1cba0446e48531a9681fa7f2459305801e797d5b1af47c7c460e44f715ec` |
+| `sidecar/app.py` | `7ba716610ac0e6c6cc37d4708630e315f1dd473f2a89d5204878563954130bb3` |
 | `sidecar/arquivos.py` | `e15cc431874ae3cb0a076a9b0d1809e281f0b796ebff771bf6409173ef73fe82` |
 | `sidecar/auth.py` | `26431b0a512199853cda420de97e67573b11fdfb9a55ca608fe52e404462a3e0` |
 | `sidecar/gestor_modelos.py` | `2e0f18d2cccac1734fbbf20e6667408de3bbfc6108566afe0a3fb9365f82caf0` |
@@ -203,7 +214,7 @@
 | `gui_web/electron/preload.ts` | `c78a0c0b185631100335db687cd99fc8e542d924325322c3bc7b0f5de6a605fa` |
 | `gui_web/eslint.config.mjs` | `5f6f18f557d1fb301b6f3437d02a47ff372d9ced55d23582ff63c3003213c155` |
 | `gui_web/index.html` | `65d438e190c6a2eb076894d03bc2690dc7bc842d8ee58691c81690fb64555d8d` |
-| `gui_web/package.json` | `aa19a18decaba65fb30884d2e152442f7a325abfaab1d11df7183cf9d1d34e91` |
+| `gui_web/package.json` | `fad7cd3f3b6e52d45b51328f8e25c0b0a9a55872e2ca50aa9e645189051a2d18` |
 | `gui_web/playwright.config.ts` | `1fc12157bfc5c21d51f9f2ab7f237108a550501b387bcd7c3033081bb741ea29` |
 | `gui_web/src/App.tsx` | `1b9a7de77f16bd75a6eb76d1cd5e36d5b9e0d3bb6ff30cda033888e03920ecff` |
 | `gui_web/src/components/CampoMoeda.tsx` | `564687d9facbc452b9d15d8c5d919121a98d1d323a3a1b9111a459526286cc4a` |
@@ -237,7 +248,7 @@
 | Artefato | SHA-256 |
 |---|---|
 | `main.py` | `a979656c100f6d12b02e0d625f6197a6b792769aab885f328631faedc019a448` |
-| `pyproject.toml` | `a386434642d163b07d3ba5a903ef41edea309e06f2f4b59cc93817fd99789d1f` |
+| `pyproject.toml` | `1e447d0254fd9125481a170d2db6079a159afbf2e5986aeb69f34e7fff27f3cd` |
 | `SidecarHF.spec` | `cc3471a70cb6ebf50da89c6eb8820fde375645fedcbe40785ff8b187561c3cfa` |
 | `scripts/sidecar_entry.py` | `c63c53e315cd42423f06832d120ab66c4ff66965bf038bfcf3012d638acae3d9` |
 | `scripts/preparar_ocr.py` | `fb305d8a58947eed84070e898cce647e2abebd7d7aec409a2ad0899cbb96b0a5` |

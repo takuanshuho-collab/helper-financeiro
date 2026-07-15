@@ -383,6 +383,14 @@ Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
 harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
 violado; (5) sem PII/chave em claro.
 
+## Fechamento de ciclo — CI remoto verde (regra permanente, ADR-0020 hotfix v2.12.1)
+Todo fechamento de ciclo confere o **CI do GitHub verde** no commit final
+(`gh run list`/`gh run watch`) ANTES de congelar a ata. Motivo: os portões
+locais rodam no Windows e o CI roda em Linux — uma divergência de plataforma
+(como o mypy do `job_windows.py`, vermelho por 4 ciclos sem ninguém notar)
+só aparece lá. CI vermelho no fechamento = bloqueio: corrigir ou registrar
+o motivo na ata.
+
 ## Fechamento de ciclo — auditoria de dependências (regra permanente, ADR-0018 §5)
 Todo fechamento de ciclo (task T-x9xx/T-xx03) roda `npm audit` (gui_web) e
 `pip-audit` (Python) e confere a janela de suporte oficial do Electron
@@ -433,9 +441,16 @@ evidência (o stack Chromium do electron-updater ignora `NODE_EXTRA_CA_CERTS`;
 `http://` aceito SÓ para `127.0.0.1`, com teste negativo); flake do cofre
 blindado (T-1907, asserção pela condição real). Build oficial 2.12.0
 (instalador 347,0 MB + sidecar 22,6 MB, hashes na ata) validado por
-**6 smokes do pacote + smoke do órfão**. Ata `FREEZE.md` v2.12.0. **Fora do
-ciclo:** C-15 (code signing — decisão de custo). Próximo ciclo: a definir
-(começa por ADR).
+**6 smokes do pacote + smoke do órfão**. Ata `FREEZE.md` v2.12.0. **Hotfix
+v2.12.1 (mesmo dia):** o mantenedor apontou o CI remoto vermelho — mypy
+falhava em `job_windows.py` no Linux desde a T-1902 (4 ciclos sem ninguém
+notar; portões locais rodam no Windows). Corrigido com `platform = "win32"`
+no mypy + escopo do CI alinhado ao local + actions atualizadas
+(checkout@v7/setup-uv@v8); regra permanente nova: **CI remoto verde antes de
+congelar** (seção acima). Ata regerada como v2.12.1 (binários seguem os do
+build 2.12.0 — nenhuma linha de produto mudou). **Fora do ciclo:** C-15
+(code signing — decisão de custo). Próximo ciclo: a definir (começa por
+ADR).
 
 ### Histórico do ciclo v2.8 (fechado)
 

@@ -1,6 +1,6 @@
 [project]
 name = "helper-financeiro"
-version = "2.12.0"
+version = "2.12.1"
 description = "Diagnóstico de dívidas com estratégias de quitação, saídas em xlsx/docx e agente financeiro (LLM) sob guardrails"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -84,6 +84,14 @@ max-complexity = 13
 # ---------------------------------------------------------------- mypy
 [tool.mypy]
 python_version = "3.12"
+# Hotfix v2.12.1 (ADR-0020): o mypy é sensível à plataforma e o CI roda em
+# Linux — `ctypes.WinDLL`/`get_last_error` (sidecar/job_windows.py, T-1902)
+# não existem nos stubs de lá, o que manteve o Gate A vermelho por 4 ciclos
+# sem ninguém notar (portões locais rodam no Windows). O produto é
+# Windows-first (o ramo POSIX do cofre é dormente e só usa os.chmod, que
+# existe em ambos os stubs) — checar como win32 em qualquer host é o
+# comportamento correto.
+platform = "win32"
 warn_unused_ignores = true
 warn_redundant_casts = true
 check_untyped_defs = true

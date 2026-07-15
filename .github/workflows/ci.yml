@@ -18,10 +18,10 @@ jobs:
       matrix:
         python: ["3.12", "3.14"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8
         with:
           python-version: ${{ matrix.python }}
 
@@ -31,8 +31,10 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check .
 
+      # Mesmo escopo do pre-commit/portão local (sidecar explícito — antes o
+      # CI só o alcançava por seguir imports). Hotfix v2.12.1.
       - name: Tipos (mypy)
-        run: uv run mypy core agent guardrails outputs contracts scripts main.py
+        run: uv run mypy core agent guardrails outputs contracts scripts sidecar main.py
 
       # Catraca de cobertura: só sobe, nunca desce. Fase 1 (testes de outputs,
       # propriedades e recuperação) levou a cobertura real a ~92%.
@@ -49,7 +51,7 @@ jobs:
       run:
         working-directory: gui_web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar Node
         uses: actions/setup-node@v4
