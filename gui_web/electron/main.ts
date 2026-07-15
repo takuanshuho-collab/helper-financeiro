@@ -248,25 +248,60 @@ function criarJanela(): void {
   }
 }
 
+// Degrau 2 da escada HTTPS do smoke de auto-update (T-2302, ADR-0020
+// §M23/T-2302 — só chega aqui porque o degrau 1 comprovadamente falhou: o
+// electron-updater 6.8 baixa o feed via `electron.net.request`, o stack de
+// rede do Chromium, que ignora `NODE_EXTRA_CA_CERTS` (isso só vale para o
+// `https`/`tls` do Node) — o smoke com CA self-signed injetada só no
+// processo do teste sempre bate em ERR_CERT_AUTHORITY_INVALID, mesmo com a
+// CA corretamente confiável para o Node. Por isso a exceção abaixo: aceitar
+// `http://` SÓ para o host literal `127.0.0.1` (não `localhost`, não outras
+// faixas de loopback) — o mesmo precedente da invariante H2 usada no
+// restante do app (ex.: o sidecar só fala com o próprio 127.0.0.1). Um
+// MITM alcança qualquer endereço não-local; 127.0.0.1 nunca sai da própria
+// máquina, então a exceção não abre superfície de ataque real. Qualquer
+// outro esquema/host continua exigindo HTTPS.
+function feedAceito(feed: string): boolean {
+  if (feed.startsWith('https://')) return true
+  try {
+    const url = new URL(feed)
+    return url.protocol === 'http:' && url.hostname === '127.0.0.1'
+  } catch {
+    return false
+  }
+}
+
 /**
  * Auto-updater OPT-IN (T-1002, REQ-SEC-004): desligado por padrão; só roda
  * no app empacotado, com HF_AUTO_UPDATE=1 e feed HTTPS (HF_UPDATE_URL, que
- * sobrepõe o placeholder do app-update.yml). No Windows o electron-updater
- * só aplica pacote com assinatura compatível com a do app instalado — a
+ * sobrepõe o placeholder do app-update.yml) — ou `http://127.0.0.1` (degrau 2
+ * acima, só para o smoke local do T-2302). No Windows o electron-updater só
+ * aplica pacote com assinatura compatível com a do app instalado — a
  * distribuição de produção deve ser assinada (code signing).
  */
 function configurarAutoUpdate(): void {
   if (!app.isPackaged || process.env.HF_AUTO_UPDATE !== '1') return
   const feed = process.env.HF_UPDATE_URL ?? ''
-  if (!feed.startsWith('https://')) {
+  if (!feedAceito(feed)) {
     console.warn(
-      'HF_AUTO_UPDATE=1 ignorado: defina HF_UPDATE_URL com o feed HTTPS.',
+      'HF_AUTO_UPDATE=1 ignorado: defina HF_UPDATE_URL com o feed HTTPS (ou http://127.0.0.1 para testes locais).',
     )
     return
   }
   autoUpdater.setFeedURL({ provider: 'generic', url: feed })
   autoUpdater.on('error', (err) =>
     console.warn('Auto-update indisponível:', err.message),
+  )
+  // Logging inofensivo (T-2302, ADR-0020): só stdout, nenhuma mudança de
+  // comportamento — dá ao smoke `empacotado-update.spec.ts` um jeito de
+  // observar os eventos do updater sem instrumentar o processo do teste por
+  // dentro do main (que não tem `require` disponível no `evaluate` do
+  // Playwright para alcançar o singleton do electron-updater).
+  autoUpdater.on('update-available', (info) =>
+    console.log(`[auto-update] update-available: ${info.version}`),
+  )
+  autoUpdater.on('update-downloaded', (info) =>
+    console.log(`[auto-update] update-downloaded: ${info.version}`),
   )
   void autoUpdater.checkForUpdatesAndNotify()
 }

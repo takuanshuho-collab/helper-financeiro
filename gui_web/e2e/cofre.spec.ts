@@ -120,8 +120,22 @@ test('recuperação por código de uso único redefine a senha e invalida o cód
     await preencherAuth(win, 'Confirmar nova senha', 'outra-tentativa-789')
     await win.locator('.btn-add', { hasText: 'Redefinir senha' }).click()
     await expect(win.locator('.auth-card form .aviso-erro')).toBeVisible({ timeout: 10_000 })
-    // O overlay de bloqueio continua na tela (código reusado não desbloqueia).
-    await expect(win.locator('.auth-overlay')).toBeVisible()
+    // Diagnóstico do flake (v2.11, ata de fechamento): `App.tsx` tem DOIS
+    // caminhos que renderizam "bloqueado" — o gate de topo, dirigido por
+    // `authStatus.desbloqueado` (`.auth-tela`, tela cheia), e o overlay
+    // dirigido por `bloqueioNoMeio` (`.auth-overlay`, sobre o app já montado).
+    // O 1º desbloqueio bem-sucedido desta função (`aoDesbloquear`) faz
+    // `setBloqueioNoMeio(false)` de forma síncrona e só DEPOIS aguarda
+    // `consultarStatusCofre()` (assíncrono) — então o `.hero` pode aparecer
+    // ANTES desse `authStatus` assentar. Se essa chamada demorar o bastante
+    // para resolver só depois do 2º bloqueio (linha acima), o gate de topo
+    // passa a ganhar do overlay no próximo render, trocando `.auth-overlay`
+    // por `.auth-tela` — mesmo conteúdo (`.auth-card`), wrapper diferente.
+    // Por isso a asserção certa (T-1907) é a condição real que a UI garante
+    // nos dois caminhos — o cartão de recuperação segue na tela com o erro —
+    // e não o wrapper específico, que depende dessa corrida entre os dois
+    // gates e não é o que REQ-SEC-007 promete.
+    await expect(win.locator('.auth-card .titulo')).toHaveText('Esqueci a senha')
   } finally {
     await app.close().catch(() => {})
   }
