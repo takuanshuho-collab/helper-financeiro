@@ -1,6 +1,6 @@
 # TASKS — Helper Financeiro v2
 
-- **Versão:** 2.12.0 (ciclo ABERTO — ADR-0020; v2.11.0 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
+- **Versão:** 2.13.0 (ciclo ABERTO — ADR-0021; v2.12.1 congelada na ata `FREEZE.md`) · **Deriva de:** `SPEC.md` / `PLAN.md`
 - **Regra:** toda task cita o(s) `REQ-ID` que satisfaz e só fecha com teste.
 
 Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffold)
@@ -376,7 +376,26 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-2301 | Bumps dirigidos: `setuptools` 83.0.0 (fecha PYSEC-2026-3447), Electron 43.1.1 (patch), `langgraph` 1.2.9, `uvicorn` 0.51; gates completos + E2E dev completo (Sonnet) | risco aceito v2.11.0 | ADR-0020 | ✅ `b93e175` |
 | T-2302 | Caronas de harness: smoke do auto-update (`e2e/empacotado-update.spec.ts`, feed local, escada HTTPS: CA de teste → fallback loopback-only) + blindagem T-1907 do cenário "recuperação por código de uso único" (Sonnet) | riscos residuais v2.10/v2.11 | T-2301 | ✅ `d75f10c` |
 | T-2303 | Build oficial (PyInstaller + NSIS 2.12.0) + bateria contra o pacote real: smoke NSIS, smoke do órfão, smoke do auto-update (orquestrador) | §E.4 | T-2302 | ✅ (binários fora do git; hashes na ata) |
-| T-2304 | Fechamento: auditoria de deps com pip-audit = 0 obrigatório, ata `FREEZE.md` v2.12.0 com hashes dos binários novos, docs sincronizados (orquestrador) | Processo | todas | ✅ (este commit) |
+| T-2304 | Fechamento: auditoria de deps com pip-audit = 0 obrigatório, ata `FREEZE.md` v2.12.0 com hashes dos binários novos, docs sincronizados (orquestrador) | Processo | todas | ✅ `3a497a5` (hotfix v2.12.1: `98798ca`+`dd7d74a`) |
+
+## Milestone M24 — Code signing em duas fases (ciclo v2.13, ADR-0021)
+
+> Fecha o **C-15**, último achado aberto da auditoria v2.9. Fase 1: cert de
+> teste PowerShell destrava pipeline + degrau final do smoke de auto-update
+> (instalação real). Fase 2: caminho SignPath Foundation preparado e
+> desligado até a aprovação da inscrição (publisher será "SignPath
+> Foundation"; build assinado nasce em CI). Design e Decision Log na
+> **ADR-0021**. Salvaguardas duras: PFX nunca no repo; confiar o cert é
+> portão manual do mantenedor; teste de instalação aborta se o app real
+> estiver instalado; sem rebuild oficial (binários públicos seguem 2.12.0).
+
+| ID | Task | Alvo | Depende | Status |
+|----|------|-----|---------|--------|
+| T-2401 | Elegibilidade SignPath: `LICENSE` MIT + política de assinatura de código no README (atribuição exigida) (orquestrador) | C-15 fase 2 | ADR-0021 | ⬜ |
+| T-2402 | Pipeline de assinatura local: `scripts/preparar_cert_teste.ps1` (cert 30 dias, PFX fora do repo) + `scripts/build_assinado.ps1` (overrides `-c.win.signtoolOptions.*` via envs `HF_CSC_*`; assina sidecar antes do empacotamento); sem envs o build é byte-idêntico (Opus) | C-15 fase 1 | ADR-0021 | ⬜ |
+| T-2403 | Degrau final do smoke de auto-update: feed com NSIS real 99.0.0 assinado, verificação por `publisherName`, instalação REAL (duplo gating + trava "aborta se instalado" + uninstall no finally) e verificação negativa (cert errado recusado) (Sonnet) | C-15 fase 1 | T-2402 | ⬜ |
+| T-2404 | `release.yml`: tag `v*`, windows-latest, build verificável → draft de Release; submissão SignPath atrás do secret-flag `SIGNPATH_ATIVO` (desligado); escada do sidecar embarcado documentada (Sonnet) | C-15 fase 2 | T-2402 | ⬜ |
+| T-2405 | Fechamento: gates + CI remoto verde + ensaio do release.yml (tag `v2.13.0-rc`, flag desligada) + ata `FREEZE.md` v2.13.0 sem rebuild oficial (orquestrador) | Processo | todas | ⬜ |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -448,9 +467,11 @@ notar; portões locais rodam no Windows). Corrigido com `platform = "win32"`
 no mypy + escopo do CI alinhado ao local + actions atualizadas
 (checkout@v7/setup-uv@v8); regra permanente nova: **CI remoto verde antes de
 congelar** (seção acima). Ata regerada como v2.12.1 (binários seguem os do
-build 2.12.0 — nenhuma linha de produto mudou). **Fora do ciclo:** C-15
-(code signing — decisão de custo). Próximo ciclo: a definir (começa por
-ADR).
+build 2.12.0 — nenhuma linha de produto mudou). **Ciclo v2.13 ABERTO
+(ADR-0021, M24, 2026-07-15):** C-15/code signing em duas fases — cert de
+teste PowerShell (pipeline + instalação real do update no smoke) e caminho
+SignPath Foundation preparado atrás de flag (inscrição do mantenedor
+pendente de aprovação). Licença MIT adotada (bloqueador de elegibilidade).
 
 ### Histórico do ciclo v2.8 (fechado)
 

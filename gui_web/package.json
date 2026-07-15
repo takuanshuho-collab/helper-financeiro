@@ -1,6 +1,6 @@
 {
   "name": "helper-financeiro-web",
-  "version": "2.12.1",
+  "version": "2.13.0",
   "private": true,
   "description": "GUI web (Electron + React/TypeScript) do Helper Financeiro — ADR-0009",
   "main": "dist-electron/main.js",
