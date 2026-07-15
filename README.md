@@ -168,6 +168,28 @@ análises, OCR e extração nunca tocam a internet.
 
 ---
 
+## ✍️ Política de assinatura de código
+
+- **Licença:** MIT (arquivo [`LICENSE`](LICENSE)).
+- **Assinatura gratuita fornecida por [SignPath.io](https://signpath.io),
+  certificado pela [SignPath Foundation](https://signpath.org)** — quando a
+  inscrição do projeto for aprovada, as releases oficiais serão assinadas
+  com esse certificado; o *publisher* exibido pelo Windows será **"SignPath
+  Foundation"** (é o modelo do programa: a fundação certifica builds
+  verificáveis de projetos open source; a chave privada nunca sai da
+  plataforma deles).
+- **Builds assinados nascem exclusivamente do workflow de release em CI**
+  (build verificável a partir deste repositório, com aprovação manual do
+  mantenedor a cada release). Binários de desenvolvimento/teste locais não
+  são assinados com o certificado de produção.
+- **Papéis:** o mantenedor (`takuanshuho-collab`) é o único *committer* com
+  acesso de escrita e o *Approver* das submissões de assinatura.
+- **Privacidade:** este programa não altera a política de privacidade do
+  app (ver seção acima) — nenhum dado do usuário é enviado a terceiros;
+  apenas os artefatos de build são submetidos para assinatura.
+
+---
+
 ## ⚠️ Aviso
 
 Esta ferramenta é de **apoio à decisão** com base nos dados informados. Não
