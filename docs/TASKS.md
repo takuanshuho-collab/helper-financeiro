@@ -395,7 +395,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-2402 | Pipeline de assinatura local: `scripts/preparar_cert_teste.ps1` (cert 30 dias, PFX fora do repo) + `scripts/build_assinado.ps1` (overrides `-c.win.signtoolOptions.*` via envs `HF_CSC_*`; assina sidecar antes do empacotamento); sem envs o build é byte-idêntico (Opus) | C-15 fase 1 | ADR-0021 | ✅ `4ff0c60` |
 | T-2403 | Degrau final do smoke de auto-update: feed com NSIS real 99.0.0 assinado, verificação por `publisherName`, instalação REAL (duplo gating + trava "aborta se instalado" + uninstall no finally) e verificação negativa (cert errado recusado) (Sonnet) | C-15 fase 1 | T-2402 | ✅ `132224e` |
 | T-2404 | `release.yml`: tag `v*`, windows-latest, build verificável → draft de Release; submissão SignPath atrás do secret-flag `SIGNPATH_ATIVO` (desligado); escada do sidecar embarcado documentada (Sonnet) | C-15 fase 2 | T-2402 | ✅ `b9e9306` |
-| T-2405 | Fechamento: gates + CI remoto verde + ensaio do release.yml (tag `v2.13.0-rc`, flag desligada) + ata `FREEZE.md` v2.13.0 sem rebuild oficial (orquestrador) | Processo | todas | ⬜ |
+| T-2405 | Fechamento: gates + CI remoto verde + ensaio do release.yml (tag `v2.13.0-rc`, flag desligada) + ata `FREEZE.md` v2.13.0 sem rebuild oficial (orquestrador) | Processo | todas | ✅ (este commit) |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -467,11 +467,16 @@ notar; portões locais rodam no Windows). Corrigido com `platform = "win32"`
 no mypy + escopo do CI alinhado ao local + actions atualizadas
 (checkout@v7/setup-uv@v8); regra permanente nova: **CI remoto verde antes de
 congelar** (seção acima). Ata regerada como v2.12.1 (binários seguem os do
-build 2.12.0 — nenhuma linha de produto mudou). **Ciclo v2.13 ABERTO
-(ADR-0021, M24, 2026-07-15):** C-15/code signing em duas fases — cert de
-teste PowerShell (pipeline + instalação real do update no smoke) e caminho
-SignPath Foundation preparado atrás de flag (inscrição do mantenedor
-pendente de aprovação). Licença MIT adotada (bloqueador de elegibilidade).
+build 2.12.0 — nenhuma linha de produto mudou). **Ciclo v2.13 FECHADO
+(ADR-0021, M24, 2026-07-15):** C-15 — o último achado da auditoria v2.9 —
+fase 1 provada fim a fim (pipeline de assinatura com cert de teste;
+instalação real do update no smoke, com o cert confiado pelo portão manual
+do mantenedor e o 2.5.0 real desinstalado com cofre preservado); fase 2
+preparada (licença MIT, política no README, `release.yml` ensaiado com a
+tag `v2.13.0-rc` e a submissão SignPath atrás de flag). **Auditoria da v2.9
+ZERADA.** Ativação da fase 2 quando o SignPath aprovar = ligar
+`SIGNPATH_ATIVO` + secrets (hotfix com registro em ata). Próximo ciclo: a
+definir (começa por ADR).
 
 ### Histórico do ciclo v2.8 (fechado)
 

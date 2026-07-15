@@ -12,7 +12,7 @@ Mapa dos documentos que governam o projeto. **Comece pelo topo.**
 | 5 | [`AGENT.md`](AGENT.md) | Persona e prompt do Agente Financeiro Sênior (CONSELHEIRO) |
 | 6 | [`HARNESS.md`](HARNESS.md) | Suite de avaliação e portões de qualidade |
 | 7 | [`TASKS.md`](TASKS.md) | Backlog rastreável (REQ ↔ task ↔ teste) |
-| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0020) |
+| 8 | [`adr/`](adr/) | Decisões de arquitetura (ADR-0001..0021) |
 | 9 | [`REVISAO-SEGURANCA.md`](REVISAO-SEGURANCA.md) | Revisão de segurança do M4 (T-403) |
 | 10 | [`SEGURANCA-SHELL.md`](SEGURANCA-SHELL.md) | Revisão de segurança do shell web (T-1003) |
 | 11 | [`PARIDADE.md`](PARIDADE.md) | Checklist de paridade tkinter ↔ web (T-905) |
@@ -147,7 +147,18 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   Novidades de harness: **smoke do auto-update** (electron-updater 6.8 real
   chegou a `update-downloaded`; exceção `http://` só-loopback no `main.ts`
   com teste negativo) e blindagem T-1907 do cenário de recuperação do cofre.
-- **Mudanças nos artefatos congelados (v2.12.0) exigem nova ADR + incremento
+- **Ciclo v2.13 FECHADO (`FREEZE.md` v2.13.0, ADR-0021, M24):** **code
+  signing (C-15, o último achado da auditoria v2.9)** em duas fases. Fase 1
+  provada fim a fim com certificado de teste: pipeline de assinatura local
+  (`scripts/preparar_cert_teste.ps1` + `build_assinado.ps1`, inerte sem as
+  envs `HF_CSC_*`) e o degrau final do smoke de auto-update — **instalação
+  real do update verificada** (assinatura → NSIS silencioso → desinstalação
+  limpa), mais a negativa (pacote não assinado recusado). Fase 2 preparada:
+  licença **MIT**, política de assinatura no README, e `release.yml` (build
+  verificável por tag → draft de Release) com a submissão **SignPath
+  Foundation** atrás de flag até a aprovação da inscrição — quando sair, o
+  publisher das releases será "SignPath Foundation" (modelo do programa).
+- **Mudanças nos artefatos congelados (v2.13.0) exigem nova ADR + incremento
   de versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar

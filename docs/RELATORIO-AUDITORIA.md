@@ -573,7 +573,7 @@ mudança (exigência ADR-0017 §E).
 | C-12 | **Corrigido** — boot fora do lock de estado; `base_url()` reconfere disponibilidade antes de ler a porta | T-1903 `837f57b` |
 | C-13 | **Corrigido** — singleton do motor OCR sob `_LOCK_MOTOR_OCR` | T-1906 `ee51fe3` |
 | C-14 | **Corrigido** — cache de SHA-256 por `(caminho, mtime_ns, tamanho)` | T-1904 `f7fac65` |
-| C-15 | **Registrado** — code signing depende de certificado (ciclo dedicado) | — |
+| C-15 | ~~Registrado~~ **Fase 1 corrigida no ciclo v2.13** — pipeline de assinatura completo e provado com cert de teste (instalação real do update verificada fim a fim); fase 2 (cert real SignPath Foundation) preparada e atrás de flag, ativa quando a inscrição do mantenedor for aprovada | T-2401..T-2405 (ADR-0021) |
 | C-16 | ~~Registrado~~ **Corrigido no ciclo v2.10 (ADR-0018)** — Electron 33.4.11 → 43.1.0 (atual; `npm audit` 0 vulnerabilidades), diálogos preservados via `lastUsedPath`, nenhuma correlata exigida. Bônus: o flake histórico do E2E "planilha" (atas v2.4..v2.8) era a causa raiz do falso "bloqueio" do 43 e foi encerrado pelo padrão T-1907. | T-2001 `262b2ee` |
 | C-17 | **Resolvido de fato na T-1911** — a remoção das deps `llama-index-*` órfãs eliminou o `nltk` da árvore de dependências; PYSEC-2026-597 não se aplica mais. | T-1911 |
 | C-18 | **Corrigido** — caminhos sensíveis agora exercitados por teste (Job Object, kill duro, invalidação do runtime) | T-1902/T-1903 |

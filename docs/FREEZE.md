@@ -1,70 +1,75 @@
-# FREEZE — Ata de Congelamento v2.12.1
+# FREEZE — Ata de Congelamento v2.13.0
 
-- **Data:** 2026-07-15 (v2.12.0 congelada em 2026-07-14; regerada como v2.12.1 no mesmo hotfix — ver seção do hotfix na ADR-0020)
+- **Data:** 2026-07-15
 - **Versão da Constituição:** 2.0.0
-- **Escopo congelado:** ciclo **v2.12** (ADR-0020): milestone **M23** —
-  **build/release**. Os binários oficiais voltam a conter o código corrente
-  (a ata v2.11.0 registrava que os publicados eram os da v2.10, sem o
-  endurecimento POSIX nem as refatorações sob golden-master). **Bumps
-  dirigidos (T-2301):** `setuptools` 82.0.1 → **83.0.0** — fecha
-  PYSEC-2026-3447 e **encerra o risco aceito da ata v2.11.0**; Electron
-  43.1.0 → **43.1.1** (patch, range `^43.1.0` preservado); `langgraph`
-  1.2.7 → 1.2.9 (goldens 9/9 intocados provaram que nenhum output mudou);
-  `uvicorn` 0.50 → 0.51. Nenhum major (React 18, TS 5.9, undici 6
-  intocados — ADR-0017 §E). **Caronas de harness (T-2302):** smoke do
-  **auto-update** (`e2e/empacotado-update.spec.ts`) — o electron-updater
-  6.8 REAL, sob Electron 43.1.1, chegou à régua IDEAL (`update-available` E
-  `update-downloaded`, download completo do instalador-isca com sha512
-  conferido) contra um feed `generic` local; a escada HTTPS do design parou
-  no **degrau 2 com evidência** (o updater baixa o feed via
-  `electron.net.request`, stack do Chromium, que ignora
-  `NODE_EXTRA_CA_CERTS` — degrau 1 impossível sem afrouxar a validação
-  global de certificados): `main.ts` aceita `http://` **exclusivamente para
-  o host literal `127.0.0.1`** (`feedAceito`, parse via `new URL`; teste
-  negativo prova que `http://` não-loopback segue recusado). A instalação
-  real do update segue fora (sem code signing o Windows recusa a troca —
-  C-15). E o flake candidato do cenário "recuperação por código de uso
-  único" (1 ocorrência na ata v2.11.0) foi **diagnosticado e blindado**
-  (T-1907): a asserção antiga testava QUAL wrapper de render venceu a
-  corrida entre os dois gates de bloqueio do `App.tsx` (`.auth-overlay` vs
-  `.auth-tela`) — detalhe de implementação; a nova assevera a condição real
-  (`.auth-card .titulo` = "Esqueci a senha"), válida nos dois caminhos;
-  3 rodadas limpas consecutivas × 2 (executor e revisor). **Build oficial
-  (T-2303):** §E.4 disparado pelos bumps e satisfeito — 6 smokes do pacote
-  (NSIS ×2, LLM ×2, auto-update ×2) + smoke do órfão (kill DURO no sidecar
-  congelado com GGUF real; o `llama-server` filho morreu junto — Job Object
-  do T-1902 reconfirmado). Única mudança de comportamento de produção do
-  ciclo: a exceção loopback do `feedAceito` + 2 `console.log` nos eventos do
-  updater (observabilidade do smoke). Sem migração de schema.
+- **Escopo congelado:** ciclo **v2.13** (ADR-0021): milestone **M24** —
+  **code signing (C-15)**, o último achado aberto da auditoria v2.9, em duas
+  fases. **Fase 1 — provada fim a fim com certificado de teste:**
+  `scripts/preparar_cert_teste.ps1` (cert PowerShell, validade 30 dias, PFX
+  sempre fora do repo, `.gitignore` com `*.pfx`) +
+  `scripts/build_assinado.ps1` (assina o `sidecar-hf.exe` ANTES do
+  empacotamento — o electron-builder não assina extraResources — e roda o
+  `npm run dist` com overrides `-c.win.signtoolOptions.*` lidos de envs
+  `HF_CSC_*`; **sem as envs o build é byte-idêntico ao atual**, inércia
+  provada). O smoke de auto-update ganhou o **degrau final**: com o cert
+  confiado (portão MANUAL do mantenedor, executado neste fechamento) e o
+  Helper Financeiro 2.5.0 real desinstalado (escolha A do mantenedor; cofre
+  em `%APPDATA%` preservado e verificado antes/depois —
+  `deleteAppDataOnUninstall: false`), a rodada completa provou:
+  `update-available` → download → **verificação de assinatura pelo updater
+  real** (`publisherName` no `app-update.yml`; `Get-AuthenticodeSignature`
+  Valid + CN conferido) → **instalação NSIS silenciosa do 99.0.0** →
+  asserção no registro → **desinstalação e limpeza verificadas** (5/5
+  cenários passed). **Verificação negativa** (pacote NÃO assinado é
+  recusado com `is not signed by the application owner`) roda sempre, sem
+  confiança. Salvaguardas permanentes: o cenário de instalação aborta se o
+  app real estiver instalado; duplo gating (`HF_E2E_PACOTE=1` +
+  `HF_E2E_UPDATE_INSTALL=1`); poll T-1907 no registro (o NSIS retorna antes
+  de concluir — corrida pega e corrigida na rodada real deste fechamento,
+  junto com a projeção camelCase do JSON PowerShell→TS). **Fase 2 — caminho
+  SignPath Foundation preparado e desligado:** licença **MIT** (bloqueador
+  de elegibilidade resolvido — o repo era público sem licença), política de
+  assinatura de código no README (atribuição exigida pelo programa; o
+  publisher das releases assinadas será **"SignPath Foundation"**),
+  e `.github/workflows/release.yml` — build verificável por tag `v*` em
+  `windows-latest` (gates → preparadores → PyInstaller → NSIS → **draft**
+  de Release; nada publica sozinho), com a submissão ao SignPath atrás da
+  Repository Variable **`SIGNPATH_ATIVO`** (desligada até a aprovação da
+  inscrição; segredos nomeados e documentados no YAML; escada do sidecar
+  embarcado registrada). **Ensaio executado:** tag `v2.13.0-rc` → workflow
+  verde → draft com instalador 2.13.0 + blockmap + latest.yml → tag e draft
+  do ensaio apagados. Única mudança de comportamento de produto: nenhuma
+  (scripts e testes; o `main.ts` não foi tocado neste ciclo).
 - **Auditoria de dependências deste fechamento (regra ADR-0018 §5):**
-  `npm audit` = **0 vulnerabilidades**; `pip-audit` = **0 vulnerabilidades**
-  (critério endurecido deste ciclo cumprido — o achado da v2.11 morreu com o
-  setuptools 83; pegadinha operacional registrada: rode `uv sync --group
-  build` antes do pip-audit, senão o venv sem o grupo opcional reporta a
-  versão antiga). Electron **43.1.1 = versão mais nova publicada** (janela
-  de suporte 41/42/43 em 2026-07). **Nenhum risco aceito pendente de
-  dependência.**
-- **Hotfix v2.12.1 (2026-07-15, registro na ADR-0020):** o CI remoto (Gate A
-  Ubuntu) estava vermelho desde a T-1902 — o mypy é sensível à plataforma e
-  `ctypes.WinDLL`/`get_last_error` (`sidecar/job_windows.py`) não existem
-  nos stubs de Linux; os portões locais (Windows) nunca acusaram. Corrigido
-  com `platform = "win32"` no `[tool.mypy]` (produto Windows-first; ramo
-  POSIX dormente só usa `os.chmod`), escopo do mypy do `ci.yml` alinhado ao
-  portão local (`sidecar` explícito) e actions atualizadas (`checkout@v7`,
-  `setup-uv@v8` — fim do warning do Node 20). **Regra permanente nova:**
-  todo fechamento confere o CI remoto verde antes de congelar (TASKS.md).
-  Nenhuma linha de produto mudou — os binários abaixo seguem os do build
-  2.12.0 (o instalador se chama "Setup 2.12.0.exe"), hashes inalterados.
+  `npm audit` = **0**; `pip-audit` = **0** (com `uv sync --group build`
+  antes, regra registrada na ata v2.12.1); Electron **43.1.1 = atual**.
+  Nenhum risco aceito pendente. **CI remoto (regra ADR-0020 hotfix):**
+  verde em todos os commits do ciclo, conferido antes desta ata.
+- **Build/pacote:** **sem rebuild oficial** (decisão da ADR-0021): a
+  assinatura de teste não vai a público (publisher fake não melhora nada
+  para o usuário) e sem as envs `HF_CSC_*` a config é inerte. Os binários
+  publicados seguem os da ata v2.12.1 (build 2.12.0: instalador
+  `bb1c899e…`, sidecar `69745b90…`); **eles não contêm o código v2.13**
+  (que é só harness/scripts/workflow — nada de produto). A primeira release
+  assinada de verdade nascerá do `release.yml` quando o SignPath aprovar.
+- **Higiene do host registrada:** o cert de teste confiado neste fechamento
+  (thumbprint `116B7EF53ADBFF9AB7BB78CB825AB78A927C22EC`, só a parte
+  pública — a chave privada foi destruída antes) deve ser removido de
+  `CurrentUser\Root` e `CurrentUser\TrustedPublisher` após a validação;
+  caduca sozinho em 30 dias se esquecido. O Helper Financeiro 2.5.0 do
+  mantenedor foi desinstalado para o teste (dados preservados) — reinstalar
+  a versão 2.12.0 (última oficial).
 - **Regra:** qualquer alteração nos artefatos abaixo exige nova ADR,
   incremento de versão e nova ata.
-- **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04, M1..M6), v2.3.0..v2.5.0
-  (2026-07-07, M7..M12), v2.6.0 (2026-07-08, M13), v2.7.0 (2026-07-08,
-  M14+M15), v2.8.0 (2026-07-11, M16+M17), v2.9.0 (2026-07-13, M18+M19),
-  v2.10.0 (2026-07-13, M20) e v2.11.0 (2026-07-14, M21+M22) — substituídas
-  por esta.
+- **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04), v2.3.0..v2.5.0
+  (2026-07-07), v2.6.0/v2.7.0 (2026-07-08), v2.8.0 (2026-07-11), v2.9.0 e
+  v2.10.0 (2026-07-13), v2.11.0 (2026-07-14) e v2.12.0/v2.12.1
+  (2026-07-14/15) — substituídas por esta.
 
 > A lista congelada cobre todo o código de primeira parte (artefatos novos
-> do ciclo: `docs/adr/ADR-0020-ciclo-build-release.md` e
+> do ciclo: `docs/adr/ADR-0021-ciclo-code-signing.md`, `LICENSE`,
+> `scripts/preparar_cert_teste.ps1`, `scripts/build_assinado.ps1`,
+> `.github/workflows/release.yml` e a extensão do
 > `gui_web/e2e/empacotado-update.spec.ts`) e o harness. `docs/INDEX.md` e
 > este `FREEZE.md` não se auto-hasheiam. Os arquivos
 > `docs/PaddleOCR-VL.en.md`, `docs/paddleocr_vl_sft.md` e
@@ -81,13 +86,13 @@
 | `docs/PRD.md` | `7a0d731b4bf65918084da884ed70655afe0fc3d4595d268aa5c5f7c0840d7ff3` |
 | `docs/SPEC.md` | `800dd0b1801494f9a4120735ee0c5214ca913e4cc961ca347873b13f35e3a831` |
 | `docs/PLAN.md` | `e61a988b03683dbd66076924d59384917d59420c5e743d7d9b0f253e0590156f` |
-| `docs/TASKS.md` | `035d9e237d3673cd40fb8f2397209e6062b8d735b846c03647840c3436d2f656` |
-| `docs/HARNESS.md` | `1d7c572c87aec2dbe6735acb2b5a9a0bc5114ae7639014d9b3adbab02fb98a20` |
+| `docs/TASKS.md` | `d28233fc5c67980fb516b1723e53385f573b89396a44b29ebe977fde1b1ace3d` |
+| `docs/HARNESS.md` | `a2fc74533c1e33784d337c2bfa8e67a9c84dd3ae8e9070f091bf2d43a8ee5f98` |
 | `docs/AGENT.md` | `742de4d9d5bd1a16768f64bbf4dbcb74a39a5b01fa7d9d1e6995ea6952c0e842` |
 | `docs/REVISAO-SEGURANCA.md` | `ec6923ac3abbe8e4235db73c8b1472558be1336d6d4d6b621b3cb91512ed4a2b` |
 | `docs/SEGURANCA-SHELL.md` | `e59baca3c3023bb318dd231bce712fd6612524794fa9c5054f592ce772c19fd6` |
 | `docs/PARIDADE.md` | `390cc2ef3b473f4e31819f998b81070991e10aa61f13b4ec44834bfdd92ef6de` |
-| `docs/RELATORIO-AUDITORIA.md` | `4bbbf650e139ff0792a791b9cd14e23d521ffafd80458703fdbb0044198a321b` |
+| `docs/RELATORIO-AUDITORIA.md` | `b81674da539bf81129c482bc19a564a0dc3847025288e3023f47b7518d7838ad` |
 | `AGENTS.md` | `678a2473998cab86146a1b4b4fd8d6dda40bbc38d4a6d56a3c85d49c52e7e1f0` |
 
 ### Decisões de arquitetura (ADR)
@@ -114,6 +119,7 @@
 | `docs/adr/ADR-0018-bump-electron-43.md` | `f12c84d43ba96307e94f338509a563e843ab605dd259a75cffaf718aa51966c3` |
 | `docs/adr/ADR-0019-ciclo-higiene-e-complexidade.md` | `6d389a871ccee5c435616fc00027f5bb2e86e53d5c401f31b85f3c9c7eb03204` |
 | `docs/adr/ADR-0020-ciclo-build-release.md` | `67fa63282e74500c3f598847ba73d30a3e1e6d0eddccb8542ddcb6bcc4046455` |
+| `docs/adr/ADR-0021-ciclo-code-signing.md` | `ca9c643f1aa5b60df5ea69955a7187debd8d1c802c9db1abde4952a191e297d9` |
 
 ### Contratos de dados
 
@@ -179,7 +185,7 @@
 |---|---|
 | `sidecar/__init__.py` | `0f55c31161b81aad9355fe5ad58fae8064defe1a7a7cfd238ed17e59073e5aad` |
 | `sidecar/__main__.py` | `7e57e7ff71a25020a25ec5c715fd58f6dafcff633121f6db49d83f14cff7b7c0` |
-| `sidecar/app.py` | `7ba716610ac0e6c6cc37d4708630e315f1dd473f2a89d5204878563954130bb3` |
+| `sidecar/app.py` | `e55541a8fb0ebab0f715a63f530cb3daa87ec0da469e02762809c94076aad5d7` |
 | `sidecar/arquivos.py` | `e15cc431874ae3cb0a076a9b0d1809e281f0b796ebff771bf6409173ef73fe82` |
 | `sidecar/auth.py` | `26431b0a512199853cda420de97e67573b11fdfb9a55ca608fe52e404462a3e0` |
 | `sidecar/gestor_modelos.py` | `2e0f18d2cccac1734fbbf20e6667408de3bbfc6108566afe0a3fb9365f82caf0` |
@@ -206,7 +212,7 @@
 | `gui_web/e2e/cofre.spec.ts` | `2a499871e441b4a7069e5747d4fc634d0f6a2a81f214708b5bc46631ae367896` |
 | `gui_web/e2e/configuracao-ia.spec.ts` | `bef5560ca0e2ec9e0ffdcf5b4218edfd161a93a1d5b9142fccef9bf30f4240c0` |
 | `gui_web/e2e/empacotado-llm.spec.ts` | `634e91e333a4c37269c17ec98baa61dcd4878097650565044eb694c8b54cd93d` |
-| `gui_web/e2e/empacotado-update.spec.ts` | `a2f5dfc7fa36316a665d0d2764d803f3838e037503c1179366614acb8b3f4865` |
+| `gui_web/e2e/empacotado-update.spec.ts` | `e60678e3a21499519b180b31b6a006827a886316e4470fc7a2f9900ce0b92e7a` |
 | `gui_web/e2e/empacotado.spec.ts` | `829dbd5b9092859c8c97ea4613ab723e78b50afeb1bc47900603543da8a703be` |
 | `gui_web/e2e/fixtures/comprovante-escaneado.png` | `e40b7dfe7b9b5523b1cf05a65b9743dd200b9bad6a207b4fbdd74df9eab41a8e` |
 | `gui_web/e2e/fixtures/contrato-escaneado.png` | `abca12f61ce1fef2323c5f818d9c076ed23c0b4506e3de1cb9b5965002d36747` |
@@ -214,7 +220,7 @@
 | `gui_web/electron/preload.ts` | `c78a0c0b185631100335db687cd99fc8e542d924325322c3bc7b0f5de6a605fa` |
 | `gui_web/eslint.config.mjs` | `5f6f18f557d1fb301b6f3437d02a47ff372d9ced55d23582ff63c3003213c155` |
 | `gui_web/index.html` | `65d438e190c6a2eb076894d03bc2690dc7bc842d8ee58691c81690fb64555d8d` |
-| `gui_web/package.json` | `fad7cd3f3b6e52d45b51328f8e25c0b0a9a55872e2ca50aa9e645189051a2d18` |
+| `gui_web/package.json` | `313465330724e56b2b59bb89bbf80de363e0da77e8463fb18c8c573268568800` |
 | `gui_web/playwright.config.ts` | `1fc12157bfc5c21d51f9f2ab7f237108a550501b387bcd7c3033081bb741ea29` |
 | `gui_web/src/App.tsx` | `1b9a7de77f16bd75a6eb76d1cd5e36d5b9e0d3bb6ff30cda033888e03920ecff` |
 | `gui_web/src/components/CampoMoeda.tsx` | `564687d9facbc452b9d15d8c5d919121a98d1d323a3a1b9111a459526286cc4a` |
@@ -248,11 +254,16 @@
 | Artefato | SHA-256 |
 |---|---|
 | `main.py` | `a979656c100f6d12b02e0d625f6197a6b792769aab885f328631faedc019a448` |
-| `pyproject.toml` | `1e447d0254fd9125481a170d2db6079a159afbf2e5986aeb69f34e7fff27f3cd` |
+| `pyproject.toml` | `1b7fd2e072147bc16061972d2ec5ac0daa979fd4458cf74fa525ea159b2e8dba` |
 | `SidecarHF.spec` | `cc3471a70cb6ebf50da89c6eb8820fde375645fedcbe40785ff8b187561c3cfa` |
 | `scripts/sidecar_entry.py` | `c63c53e315cd42423f06832d120ab66c4ff66965bf038bfcf3012d638acae3d9` |
 | `scripts/preparar_ocr.py` | `fb305d8a58947eed84070e898cce647e2abebd7d7aec409a2ad0899cbb96b0a5` |
 | `scripts/preparar_llama.py` | `3ad30037f9abe6006a1c92e806c8cb4d304da82983a737792e615c2d56e56bd1` |
+| `scripts/preparar_cert_teste.ps1` | `79716b49d44adab7bdfe152179c0518d545340391ec971e9feb0fc80f9f5b7a7` |
+| `scripts/build_assinado.ps1` | `56e37073ca9b7b170c3728adff08e8b2949432df4d517c73b5f1dfd327d8a021` |
+| `LICENSE` | `a9b26795036f6be56cef2d6837c7be6d0d2d0c27b6bc1bf565cd0c5e4c3a083b` |
+| `.github/workflows/ci.yml` | `f603c1b67ac25cb7abb09b2ca2b448725f1cf669d1446499348622478d3af94c` |
+| `.github/workflows/release.yml` | `ed06d34a20d1418c04740dc122adde75448ba6a73933035ee4b3e408bee2e577` |
 
 ### Harness de testes (tests)
 
@@ -305,49 +316,46 @@
 | `tests/test_telemetria.py` | `f5750e70fe314e187d25f464ea0c5871c2a807e518821cb1a41a4ec1580bdbe8` |
 | `tests/test_validacao_texto.py` | `4c9482f0ea98fc9af46a3ea89d4f2262eda6a207e54da9d5ed322ecebdfce3e7` |
 
-## Binários empacotados (build oficial do T-2303, nesta data)
+## Binários publicados (sem rebuild neste ciclo)
 
 | Artefato | SHA-256 | Tamanho |
 |---|---|---|
-| `gui_web/release/Helper Financeiro Setup 2.12.0.exe` | `bb1c899e7ac001eb570a5f573fe85361af3b8130c46d2c6b8b224e6e0f8031c1` | 347,0 MB |
-| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `69745b90c7b3e93c3e4906d82a0305e421634b7b4e74cacffa776fd4cb881079` | 22,6 MB |
+| `gui_web/release/Helper Financeiro Setup 2.12.0.exe` (ata v2.12.1) | `bb1c899e7ac001eb570a5f573fe85361af3b8130c46d2c6b8b224e6e0f8031c1` | 347,0 MB |
+| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador, ata v2.12.1) | `69745b90c7b3e93c3e4906d82a0305e421634b7b4e74cacffa776fd4cb881079` | 22,6 MB |
 
-> Os binários não são versionados no git; os hashes identificam o build desta
-> ata (PyInstaller + electron-builder NSIS com **Electron 43.1.1**, sem code
-> signing — C-15 segue registrado). Este é o primeiro build desde a v2.10.0 e
-> **contém todo o código v2.11 + v2.12** (endurecimento POSIX dormente,
-> refatorações sob golden-master, exceção loopback do auto-update). Tamanhos
-> estáveis vs v2.10 (347,0 MB / 22,6 MB — nenhum asset novo). **Nenhum modelo
-> GGUF é embarcado** (download opt-in, REQ-NF-007). Rebuild em outra
-> máquina/data produz hash diferente — rode **`scripts/preparar_llama.py` E
-> `scripts/preparar_ocr.py` antes**, e regenere com `uv run --group build
-> pyinstaller SidecarHF.spec --noconfirm` e `npm run dist`, registrando em
-> nova ata. Validado por **6 smokes do pacote** (`empacotado.spec.ts`,
-> `empacotado-llm.spec.ts`, `empacotado-update.spec.ts` — todos passed contra
-> o pacote desta ata) e pelo **smoke do órfão** (kill duro; Job Object
-> reconfirmado sob Electron 43.1.1).
+> **Este ciclo não gerou build oficial** (ADR-0021: a assinatura de teste não
+> vai a público; nada de produto mudou — só harness, scripts e workflow). Os
+> hashes acima são os da ata v2.12.1, repetidos por referência. A **primeira
+> release oficial assinada** nascerá do `release.yml` (tag `v*`, build
+> verificável em CI) quando a inscrição no SignPath Foundation for aprovada
+> — ligar `SIGNPATH_ATIVO` + secrets e rodar a tag (registro em nova ata).
+> O ensaio do workflow (tag `v2.13.0-rc`, flag desligada) foi executado e
+> ficou verde: draft com instalador 2.13.0 + blockmap + latest.yml, apagado
+> após a validação. **Nenhum modelo GGUF é embarcado** (REQ-NF-007).
 
 ## Estado do harness no congelamento
 
 ```text
-489 passed, 2 skipped (opt-in reais: HF_OCR_REAL=1 e HF_LLAMA_REAL=1) — suíte
-offline (Gate A); goldens 9/9 intocados após o bump do langgraph
-Cobertura: ≥ 96,6% (piso de 90% no CI; sidecar/ medido desde o v2.9)
-Catraca C901: ativa (max-complexity = 13, herdada do v2.11)
-E2E Playwright: 19 passed no app dev (Electron 43.1.1); + 6 passed contra o
-pacote NSIS real (incl. os 2 do smoke de auto-update novo) + smoke do órfão;
-estado isolado por HF_DB_PATH/HF_AUTH_PATH/HF_MODELOS_DIR/HF_LLM_CONFIG_PATH
+489 passed, 2 skipped — suíte offline (Gate A); cobertura ≥ 96,6% (piso 90%)
+Catraca C901: ativa (max-complexity = 13); golden-master: 9/9
+E2E Playwright: 19 passed no app dev; smokes do pacote com o degrau final
+NOVO: 5/5 no empacotado-update.spec.ts com cert de teste confiado —
+update-available → verificação de assinatura REAL → instalação NSIS
+silenciosa (99.0.0) → desinstalação e registro limpo; verificação negativa
+(pacote não assinado recusado) roda sem confiança. Gating:
+HF_E2E_PACOTE=1 + HF_E2E_UPDATE_INSTALL=1; NUNCA roda com o app real
+instalado (trava de aborto).
 Gate Front (CI): ESLint + tsc + build Vite verdes
-Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 0 · Electron 43.1.1
-atual — nenhum risco aceito pendente
-Observações: (1) o flake candidato da ata v2.11.0 (recuperação por código de
-uso único) foi diagnosticado como corrida entre os dois gates de render do
-bloqueio e ENCERRADO pelo padrão T-1907 nesta ata. (2) O risco residual
-"electron-updater 6.8 verificado só por changelog" (atas v2.10/v2.11) foi
-ENCERRADO: updater real exercitado até update-downloaded pelo smoke novo.
-(3) Instalação real do update segue não testável sem code signing (C-15).
-(4) Modelos com menos de ~1B de parâmetros tendem a degradar por
-REQ-LLM-002:SCHEMA (P8 correto).
+CI remoto: verde em todos os commits do ciclo (regra ADR-0020)
+Release: workflow `release.yml` ensaiado (run 29412113083, verde)
+Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 0 · Electron
+43.1.1 atual — nenhum risco aceito pendente
+Observações: (1) O smoke de instalação real exige preparo manual do host
+(cert de teste confiado + app real ausente) — é deliberado: portões de
+segurança do mantenedor, não automatizáveis. (2) `actions/setup-node@v4`
+ainda emite o warning de Node 20 deprecado no runner — bump candidato para
+o próximo toque no CI (anotação, não erro). (3) Modelos com menos de ~1B
+de parâmetros tendem a degradar por REQ-LLM-002:SCHEMA (P8 correto).
 ```
 
 Gerado automaticamente. Recalcule com `Get-FileHash -Algorithm SHA256`

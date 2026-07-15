@@ -1,6 +1,6 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.12.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.13.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
@@ -41,6 +41,16 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 > teste negativo). Cenário de recuperação do cofre blindado pelo padrão
 > T-1907 (asserção pela condição real, não pelo wrapper de render). E2E do
 > pacote agora são 7 checks: 6 specs + smoke do órfão.
+
+> **v2.13 (ADR-0021):** o smoke de auto-update ganhou o **degrau final** —
+> com build assinado (cert de teste, `scripts/build_assinado.ps1`) e o cert
+> confiado (portão manual do mantenedor), o cenário gated por
+> `HF_E2E_UPDATE_INSTALL=1` prova o ciclo completo: verificação de
+> assinatura pelo updater real → instalação NSIS silenciosa → asserção →
+> desinstalação → registro limpo. Verificação negativa (pacote não
+> assinado é recusado) roda sempre. Salvaguardas: aborta se o app real
+> estiver instalado; poll T-1907 no registro (o NSIS retorna antes de
+> concluir). Workflow `release.yml` (build verificável por tag) ensaiado.
 
 ---
 
