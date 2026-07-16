@@ -137,10 +137,12 @@ def test_resolver_modelo_env_precede_llm_json(binario_e_modelo, tmp_path):
     assert resolver_modelo(ambiente) == modelo  # env vence, não o llm.json
 
 
-# ------------------------------------------------- flags de GPU (T-1703)
-def test_flags_padrao_aceleram_gpu():
-    """Sem `HF_LLAMA_FLAGS`, o default offloada as camadas p/ a GPU Vulkan."""
-    assert rt.resolver_flags({}) == ("-ngl", "99")
+# ------------------------------------------- flags/ctx resolvidos (ADR-0022)
+def test_flags_padrao_auto_fit_sem_ngl():
+    """Sem `HF_LLAMA_FLAGS` e sem `gpu_offload` no llm.json, o default é VAZIO —
+    o auto-fit do llama.cpp decide o offload (fix de campo: `-ngl 99` explícito
+    abortava no OOM da GPU-alvo)."""
+    assert rt.resolver_flags({}) == ()
 
 
 def test_flags_env_sobrepoe():
@@ -154,14 +156,87 @@ def test_flags_env_vazia_forca_cpu():
     assert rt.resolver_flags({rt.VAR_FLAGS: "   "}) == ()
 
 
+def _ambiente_llm(tmp_path, **campos):
+    """Escreve um `llm.json` isolado em `tmp_path` e devolve o ambiente-dicionário
+    que aponta para ele (NUNCA lê o llm.json real do host)."""
+    import json
+
+    from sidecar import gestor_modelos as gm
+
+    caminho = tmp_path / "llm.json"
+    caminho.write_text(json.dumps(campos), encoding="utf-8")
+    return {gm.VAR_LLM_CONFIG_PATH: str(caminho)}
+
+
+def test_gpu_offload_cpu_vira_ngl_0(tmp_path):
+    """`gpu_offload="cpu"` no llm.json ⇒ `-ngl 0` (CPU puro), inclusive no argv."""
+    binario, modelo = tmp_path / "b", tmp_path / "m.gguf"
+    ambiente = _ambiente_llm(tmp_path, gpu_offload="cpu")
+    assert rt.resolver_flags(ambiente) == ("-ngl", "0")
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, flags_extra=("-ngl", "0")))
+    assert runtime._comando_llama_server(8080)[-2:] == ["-ngl", "0"]
+
+
+def test_gpu_offload_int_vira_ngl_n(tmp_path):
+    """`gpu_offload=20` ⇒ `-ngl 20` (fixar 20 camadas na GPU)."""
+    assert rt.resolver_flags(_ambiente_llm(tmp_path, gpu_offload=20)) == ("-ngl", "20")
+
+
+def test_gpu_offload_auto_sem_ngl(tmp_path):
+    """`gpu_offload="auto"` ⇒ SEM `-ngl` (auto-fit), como o default."""
+    assert rt.resolver_flags(_ambiente_llm(tmp_path, gpu_offload="auto")) == ()
+
+
+def test_gpu_offload_invalido_cai_no_auto(tmp_path):
+    """Valores inválidos (0, texto, tipo errado) ⇒ auto-fit (sem `-ngl`)."""
+    assert rt.resolver_flags(_ambiente_llm(tmp_path, gpu_offload=0)) == ()
+    assert rt.resolver_flags(_ambiente_llm(tmp_path, gpu_offload="xyz")) == ()
+    assert rt.resolver_flags(_ambiente_llm(tmp_path, gpu_offload=True)) == ()
+
+
+def test_env_flags_vence_llm_json(tmp_path):
+    """`HF_LLAMA_FLAGS` definida vence o `gpu_offload` do llm.json (contrato de
+    override intacto)."""
+    ambiente = _ambiente_llm(tmp_path, gpu_offload="cpu")
+    ambiente[rt.VAR_FLAGS] = "-ngl 40"
+    assert rt.resolver_flags(ambiente) == ("-ngl", "40")
+
+
+def test_ctx_size_default_4096(tmp_path):
+    """Sem `ctx_size` no llm.json ⇒ default 4096 (ADR-0022)."""
+    assert rt.resolver_ctx_size({}) == 4096
+    assert rt.resolver_ctx_size(_ambiente_llm(tmp_path)) == 4096
+
+
+def test_ctx_size_llm_json_substitui_default(tmp_path):
+    """`ctx_size` do llm.json substitui o `-c` default."""
+    assert rt.resolver_ctx_size(_ambiente_llm(tmp_path, ctx_size=2048)) == 2048
+
+
+def test_ctx_size_invalido_cai_no_default(tmp_path):
+    """`ctx_size` inválido (texto, ≤0, tipo errado) ⇒ default 4096."""
+    assert rt.resolver_ctx_size(_ambiente_llm(tmp_path, ctx_size="abc")) == 4096
+    assert rt.resolver_ctx_size(_ambiente_llm(tmp_path, ctx_size=0)) == 4096
+    assert rt.resolver_ctx_size(_ambiente_llm(tmp_path, ctx_size=-5)) == 4096
+    assert rt.resolver_ctx_size(_ambiente_llm(tmp_path, ctx_size=True)) == 4096
+
+
 def test_flags_entram_no_comando_do_servidor(binario_e_modelo):
-    """As flags calibradas viram argumentos do `llama-server` (após `-c ctx`)."""
+    """As flags resolvidas viram argumentos do `llama-server` (após `-c ctx`)."""
     binario, modelo = binario_e_modelo
     runtime = RuntimeLLM(
-        ConfigRuntime(binario=binario, modelo=modelo, flags_extra=("-ngl", "99")))
+        ConfigRuntime(binario=binario, modelo=modelo, flags_extra=("-ngl", "20")))
     comando = runtime._comando_llama_server(8080)
-    assert comando[-2:] == ["-ngl", "99"]
+    assert comando[-2:] == ["-ngl", "20"]
     assert str(modelo) in comando
+
+
+def test_comando_auto_fit_nao_tem_ngl(binario_e_modelo):
+    """Com flags vazias (auto-fit), o argv NÃO carrega `-ngl` algum."""
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(ConfigRuntime(binario=binario, modelo=modelo))
+    assert "-ngl" not in runtime._comando_llama_server(8080)
 
 
 # ------------------------------------------------- degradação por ausência
@@ -219,6 +294,7 @@ def test_restart_sob_demanda_apos_morte(binario_e_modelo, script_servidor):
     try:
         primeira = runtime.base_url()
         # Simula morte do processo por fora (crash do servidor).
+        assert runtime._proc is not None
         runtime._proc.kill()
         runtime._proc.wait()
         assert not runtime.ativo()
@@ -281,7 +357,7 @@ class _PopenQueIgnoraTerminate:
 
     def wait(self, timeout: float | None = None) -> int:
         if not self.morto:
-            raise subprocess.TimeoutExpired(cmd="fake", timeout=timeout)
+            raise subprocess.TimeoutExpired(cmd="fake", timeout=timeout or 0.0)
         return 0
 
 
@@ -506,6 +582,248 @@ def test_encerrar_durante_o_boot_mata_o_processo(binario_e_modelo):
     assert proc.poll() is not None  # o processo do boot morreu
     assert not runtime.ativo()
     assert isinstance(resultado.get("exc"), RuntimeLLMInvalidado)
+
+
+# ---------------------------- classificador e métricas de boot (ADR-0022)
+# Linhas REAIS do crash de campo (2026-07-15, GTX 1650 4 GB, b9966): o auto-fit
+# avisa que não coube ("failed to fit params", pois -ngl foi forçado) e a
+# alocação estoura com OOM — as DUAS linhas aparecem, e a falta de VRAM é a
+# causa decisiva (dispara a dica de reduzir contexto no T-2502).
+_LOG_CRASH_OOM = [
+    "0.00.483.401 W common_fit_params: failed to fit params to free device "
+    "memory: n_gpu_layers already set by user to 99, abort",
+    "ggml_vulkan: Device memory allocation of size 1056964608 failed.",
+    "ggml_vulkan: vk::Device::allocateMemory: ErrorOutOfDeviceMemory",
+    "0.04.251.378 E alloc_tensor_range: failed to allocate Vulkan0 buffer of "
+    "size 1056964608",
+]
+
+# Variante em que o auto-fit aborta mas NÃO se chega ao OOM (sem a linha de
+# alocação Vulkan): classifica como GPU_FIT_ABORTADO.
+_LOG_FIT_ABORTADO = [
+    "0.00.483.401 W common_fit_params: failed to fit params to free device "
+    "memory: n_gpu_layers already set by user to 99, abort",
+    "0.00.500.000 E srv    load_model: failed to load model",
+]
+
+# Boot BOM mínimo (linhas reais de campo): só o n_ctx_slot é extraível.
+_LOG_BOOT_BOM_MINIMO = [
+    r"0.00.340.011 I srv    load_model: loading model 'C:\...\modelos\phi.gguf'",
+    "0.07.971.309 I srv    load_model: initializing, n_slots = 4, "
+    "n_ctx_slot = 4096, kv_unified = 'true'",
+    "0.07.990.688 I srv  llama_server: model loaded",
+    "0.07.990.715 I srv  llama_server: listening on http://127.0.0.1:18181",
+]
+
+# Boot BOM com `-lv 4` — sequência REAL de campo (b9966, GTX 1650): o load faz
+# DOIS passes e há VÁRIAS linhas `model buffer size`; a de dry-run `Vulkan0 ...
+# 0.00 MiB` vem primeiro, depois `CPU_Mapped ... 2281.66 MiB`, e só então a real
+# `Vulkan0 ... 358.41 MiB`. O parser ancora em `VulkanN` (exclui CPU_Mapped e
+# Vulkan_Host) e pega a ÚLTIMA ocorrência ⇒ 358.41 MiB, offload 5/33.
+_LOG_BOOT_BOM_METRICAS = [
+    "0.02.450.563 I load_tensors: offloaded 5/33 layers to GPU",
+    "load_tensors:      Vulkan0 model buffer size =     0.00 MiB",
+    "load_tensors:  Vulkan_Host model buffer size =     0.00 MiB",
+    "0.02.450.563 I load_tensors: offloaded 5/33 layers to GPU",
+    "load_tensors:   CPU_Mapped model buffer size =  2281.66 MiB",
+    "0.02.450.589 I load_tensors:      Vulkan0 model buffer size =   358.41 MiB",
+    "0.07.971.309 I srv    load_model: initializing, n_slots = 4, "
+    "n_ctx_slot = 4096, kv_unified = 'true'",
+]
+
+# Saída REAL do `llama-server --list-devices` no host (2 GPUs).
+_SAIDA_LIST_DEVICES = (
+    "Available devices:\n"
+    "  Vulkan0: NVIDIA GeForce GTX 1650 (4149 MiB, 3535 MiB free)\n"
+    "  Vulkan1: Intel(R) UHD Graphics 630 (8120 MiB, 7458 MiB free)\n"
+)
+
+
+def test_classificador_gpu_sem_memoria():
+    """O crash real de campo (OOM) ⇒ GPU_SEM_MEMORIA (a causa decisiva vence o
+    aviso de fit, mesmo com as duas linhas presentes)."""
+    assert rt.classificar_falha(_LOG_CRASH_OOM) == rt.MotivoFalhaGPU.GPU_SEM_MEMORIA
+
+
+def test_classificador_gpu_fit_abortado():
+    """Auto-fit aborta sem chegar ao OOM ⇒ GPU_FIT_ABORTADO."""
+    assert rt.classificar_falha(_LOG_FIT_ABORTADO) == rt.MotivoFalhaGPU.GPU_FIT_ABORTADO
+
+
+def test_classificador_generico():
+    """Falha sem padrão conhecido ⇒ GENERICO (fallback sempre existe)."""
+    linhas = ["0.00.1 E srv load_model: failed to load model, arquivo corrompido"]
+    assert rt.classificar_falha(linhas) == rt.MotivoFalhaGPU.GENERICO
+
+
+def test_classificador_tolerante_a_lixo():
+    """Linhas vazias/lixo e sequência vazia ⇒ GENERICO, sem exceção."""
+    assert rt.classificar_falha([]) == rt.MotivoFalhaGPU.GENERICO
+    assert rt.classificar_falha(["", "   ", "\x00lixo binário"]) == \
+        rt.MotivoFalhaGPU.GENERICO
+
+
+def test_extrair_metricas_boot_bom_completo():
+    """Do boot bom rico, extrai camadas, VRAM (a ÚLTIMA `VulkanN`, não o dry-run
+    zerado nem o `CPU_Mapped`) e contexto. Dispositivo NÃO sai do stderr."""
+    m = rt.extrair_metricas(_LOG_BOOT_BOM_METRICAS)
+    assert m.camadas_offload == 5
+    assert m.camadas_total == 33
+    assert m.vram_bytes == int(round(358.41 * 1024 * 1024))
+    assert m.ctx_efetivo == 4096
+    assert m.dispositivo is None  # vem do --list-devices, não do stderr
+
+
+def test_extrair_metricas_boot_bom_minimo():
+    """Do boot bom mínimo (linhas reais), só o contexto é extraível — o resto
+    fica None (tolerância)."""
+    m = rt.extrair_metricas(_LOG_BOOT_BOM_MINIMO)
+    assert m.ctx_efetivo == 4096
+    assert m.camadas_offload is None
+    assert m.camadas_total is None
+    assert m.vram_bytes is None
+    assert m.dispositivo is None
+
+
+def test_extrair_metricas_tolerante_a_lixo():
+    """Linhas vazias/lixo ⇒ todas as métricas None, sem exceção."""
+    m = rt.extrair_metricas(["", "nada aqui", "\x00"])
+    assert m == rt.MetricasBoot()
+
+
+def test_parsear_dispositivos_linhas_reais():
+    """Parser puro do `--list-devices` com a saída real do host (2 GPUs)."""
+    devs = rt._parsear_dispositivos(_SAIDA_LIST_DEVICES)
+    assert devs == [
+        rt.DispositivoGPU("NVIDIA GeForce GTX 1650", 4149, 3535),
+        rt.DispositivoGPU("Intel(R) UHD Graphics 630", 8120, 7458),
+    ]
+
+
+def test_parsear_dispositivos_tolerante():
+    """Sem dispositivos / lixo ⇒ lista vazia, sem exceção."""
+    assert rt._parsear_dispositivos("") == []
+    assert rt._parsear_dispositivos("Available devices:\n  (nenhum)\n") == []
+
+
+def test_listar_dispositivos_tolerante_a_binario_invalido(tmp_path):
+    """Binário que não executa ⇒ lista vazia (tolerância total), e o resultado
+    é cacheado por caminho (não re-executa)."""
+    falso = tmp_path / "nao-executavel.bin"
+    falso.write_text("não sou um exe", encoding="utf-8")
+    rt._CACHE_DISPOSITIVOS.pop(str(falso), None)
+    assert rt.listar_dispositivos(falso) == []
+    assert str(falso) in rt._CACHE_DISPOSITIVOS  # cacheado
+
+
+def test_listar_dispositivos_usa_cache(monkeypatch, tmp_path):
+    """Com o cache quente, `--list-devices` não é re-executado."""
+    falso = tmp_path / "bin"
+    rt._CACHE_DISPOSITIVOS[str(falso)] = [rt.DispositivoGPU("GPU Fake", 4096, 2048)]
+
+    def nao_deve_rodar(*a, **k):  # pragma: no cover - só falha se chamado
+        raise AssertionError("subprocess.run não deveria rodar com cache quente")
+
+    monkeypatch.setattr(rt.subprocess, "run", nao_deve_rodar)
+    assert rt.listar_dispositivos(falso) == [rt.DispositivoGPU("GPU Fake", 4096, 2048)]
+
+
+# ------------------------------------- retry em CPU e boot_info (ADR-0022)
+def _montar_conta_e_morre():
+    """montar_comando que conta as tentativas e SEMPRE devolve um comando que
+    morre na hora (simula o crash da GPU em todos os boots)."""
+    estado = {"n": 0}
+
+    def montar(_porta):
+        estado["n"] += 1
+        return [sys.executable, "-c", "raise SystemExit(1)"]
+
+    return montar, estado
+
+
+def test_boot_info_inicial_nunca_subiu(binario_e_modelo):
+    """Antes de qualquer boot, o diagnóstico é neutro (`nunca_subiu`, sem
+    métricas)."""
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(ConfigRuntime(binario=binario, modelo=modelo))
+    info = runtime.boot_info()
+    assert info.modo == "nunca_subiu"
+    assert info.motivo_fallback is None
+    assert info.metricas == rt.MetricasBoot()
+
+
+def test_boot_info_gpu_no_sucesso_de_primeira(binario_e_modelo, script_servidor):
+    """Boot que sobe de primeira (config auto) ⇒ modo `gpu`, sem motivo."""
+    binario, modelo = binario_e_modelo
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0),
+        montar_comando=_comando_fake(script_servidor),
+    )
+    try:
+        runtime.base_url()
+        info = runtime.boot_info()
+        assert info.modo == "gpu"
+        assert info.motivo_fallback is None
+    finally:
+        runtime.encerrar()
+
+
+def test_retry_cpu_salva_o_boot(binario_e_modelo, script_servidor):
+    """Processo que morre na 1ª tentativa e sobe na 2ª ⇒ UMA retentativa em CPU;
+    boot_info vira `cpu_fallback` com motivo tipado."""
+    binario, modelo = binario_e_modelo
+    estado = {"n": 0}
+
+    def montar(porta):
+        estado["n"] += 1
+        if estado["n"] == 1:
+            return [sys.executable, "-c", "raise SystemExit(1)"]  # 1ª: crash
+        return [sys.executable, str(script_servidor), "--port", str(porta)]  # 2ª: sobe
+
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=10.0),
+        montar_comando=montar,
+    )
+    try:
+        base = runtime.base_url()
+        assert base.endswith("/v1")
+        assert estado["n"] == 2  # exatamente uma retentativa
+        info = runtime.boot_info()
+        assert info.modo == "cpu_fallback"
+        assert isinstance(info.motivo_fallback, rt.MotivoFalhaGPU)
+    finally:
+        runtime.encerrar()
+
+
+def test_retry_morre_nas_duas_degrada_sem_loop(binario_e_modelo):
+    """Se as duas tentativas morrem ⇒ RuntimeLLMIndisponivel, sem terceira
+    tentativa (sem loop), e boot_info fica `nunca_subiu` com o motivo."""
+    binario, modelo = binario_e_modelo
+    montar, estado = _montar_conta_e_morre()
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=2.0),
+        montar_comando=montar,
+    )
+    with pytest.raises(RuntimeLLMIndisponivel):
+        runtime.base_url()
+    assert estado["n"] == 2  # 1 tentativa + 1 retentativa, e para
+    assert not runtime.ativo()
+    assert runtime.boot_info().modo == "nunca_subiu"
+
+
+def test_sem_retry_quando_config_ja_e_cpu_puro(binario_e_modelo):
+    """Config já em CPU puro (`-ngl 0`) que falha NÃO faz retry (a retentativa em
+    CPU não mudaria nada) — degrada com uma única tentativa."""
+    binario, modelo = binario_e_modelo
+    montar, estado = _montar_conta_e_morre()
+    runtime = RuntimeLLM(
+        ConfigRuntime(binario=binario, modelo=modelo, timeout_health_s=2.0,
+                      flags_extra=("-ngl", "0")),
+        montar_comando=montar,
+    )
+    with pytest.raises(RuntimeLLMIndisponivel):
+        runtime.base_url()
+    assert estado["n"] == 1  # nenhuma retentativa
 
 
 # ------------------------------------------------------- real (opt-in)

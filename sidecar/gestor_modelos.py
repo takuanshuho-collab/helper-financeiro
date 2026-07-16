@@ -255,6 +255,58 @@ def modelo_ativo(ambiente: Mapping[str, str] | None = None) -> str | None:
     return texto or None
 
 
+def ctx_size_configurado(ambiente: Mapping[str, str] | None = None) -> int | None:
+    """Tamanho de contexto (`ctx_size`) escolhido na tela de Configuração da IA,
+    lido do `llm.json`, ou `None` quando ausente/inválido (⇒ o runtime cai no
+    default).
+
+    Leitura TOLERANTE como o resto do `llm.json` (nunca levanta): tipo errado,
+    texto não-numérico ou valor ≤ 0 viram `None`. A validação do domínio fechado
+    (degraus {2048, 4096, 8192}) é do endpoint `PUT /llm/config` (T-2502) no
+    salvar; aqui só garantimos um inteiro positivo utilizável — um `llm.json`
+    editado à mão com lixo não pode derrubar o boot. `bool` é rejeitado de
+    propósito (em Python `True`/`False` são `int`, mas `ctx_size: true` é um
+    engano, não um contexto de 1 token).
+    """
+    bruto = ler_llm_config(ambiente).get("ctx_size")
+    if bruto is None or isinstance(bruto, bool):
+        return None
+    try:
+        valor = int(bruto)
+    except (TypeError, ValueError):
+        return None
+    return valor if valor > 0 else None
+
+
+def gpu_offload_configurado(
+    ambiente: Mapping[str, str] | None = None,
+) -> str | int | None:
+    """Preferência de offload de GPU (`gpu_offload`) do `llm.json`:
+    `"auto"` | `"cpu"` | int de camadas ≥ 1, ou `None` quando ausente/inválido.
+
+    Leitura TOLERANTE (nunca levanta): qualquer coisa fora do contrato — número
+    ≤ 0, texto desconhecido, tipo errado, `bool` — vira `None`, e o runtime
+    trata `None` como `"auto"` (auto-fit do llama.cpp decide o offload). Números
+    em string (ex.: `"20"`, se a GUI serializar assim) são aceitos por
+    conveniência; a validação estrita fica no `PUT /llm/config` (T-2502).
+    """
+    bruto = ler_llm_config(ambiente).get("gpu_offload")
+    if bruto is None or isinstance(bruto, bool):
+        return None
+    if isinstance(bruto, int):
+        return bruto if bruto >= 1 else None
+    if isinstance(bruto, str):
+        texto = bruto.strip().lower()
+        if texto in ("auto", "cpu"):
+            return texto
+        try:
+            valor = int(texto)
+        except ValueError:
+            return None
+        return valor if valor >= 1 else None
+    return None
+
+
 def definir_modelo_ativo(caminho: str | os.PathLike[str],
                          ambiente: Mapping[str, str] | None = None) -> Path:
     """Valida o `.gguf` e persiste como modelo ativo em `llm.json`.
