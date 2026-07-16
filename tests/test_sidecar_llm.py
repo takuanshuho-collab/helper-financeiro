@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import hashlib
 import http.server
+import json
 import os
 import threading
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from sidecar import gestor_modelos as gm
+from sidecar import runtime_llm as rt
 from sidecar.app import app
 from sidecar.security import VAR_TOKEN
 from tests.test_sidecar import CABECALHO, TOKEN, _sessao_sem_cofre  # noqa: F401 — fixture reusada
@@ -321,3 +324,162 @@ def test_llm_modelo_local_valido_define_ativo(monkeypatch, tmp_path):
     resp = cliente.post("/llm/modelo", json={"caminho": str(gguf)}, headers=CABECALHO)
     assert resp.status_code == 200
     assert resp.json()["modelo_ativo"] == str(gguf)
+
+
+# ------------------------------------------------- /llm/config (T-2502, ADR-0022)
+class _RuntimeFalso:
+    """Substituto mínimo de `RuntimeLLM` para os testes de `/llm/config`: só
+    precisa devolver um `boot_info` fixo e registrar se `encerrar()` rodou —
+    não sobe processo nenhum."""
+
+    def __init__(self, info: rt.BootInfo):
+        self._info = info
+        self.encerrado = False
+
+    def boot_info(self) -> rt.BootInfo:
+        return self._info
+
+    def encerrar(self) -> None:
+        self.encerrado = True
+
+
+def _isolar_llm_config(monkeypatch, tmp_path):
+    """Isola `llm.json` (nunca o real de %APPDATA%) e garante ambiente limpo
+    de `HF_LLAMA_FLAGS`/runtime singleton para os testes de `/llm/config`."""
+    monkeypatch.setenv(gm.VAR_LLM_CONFIG_PATH, str(tmp_path / "llm.json"))
+    monkeypatch.delenv(rt.VAR_FLAGS, raising=False)
+    monkeypatch.setattr(rt, "_RUNTIME", None)
+
+
+def test_llm_config_sem_token_401():
+    assert cliente.get("/llm/config").status_code == 401
+    assert cliente.put("/llm/config", json={}).status_code == 401
+
+
+def test_llm_config_get_padrao_sem_llm_json_sem_env(monkeypatch, tmp_path):
+    """Sem `llm.json` e sem env: os dois valores caem no default, origem
+    `padrao`, `boot_info` neutro (nenhum runtime foi instanciado ainda)."""
+    _isolar_llm_config(monkeypatch, tmp_path)
+    resp = cliente.get("/llm/config", headers=CABECALHO)
+    assert resp.status_code == 200
+    dados = resp.json()
+    assert dados["config"]["ctx_size"] == 4096
+    assert dados["config"]["ctx_size_origem"] == "padrao"
+    assert dados["config"]["gpu_offload"] == "auto"
+    assert dados["config"]["gpu_offload_origem"] == "padrao"
+    assert dados["boot_info"]["modo"] == "nunca_subiu"
+    assert dados["dica"] is None
+    assert dados["dica_ctx_sugerido"] is None
+
+
+def test_llm_config_get_sem_runtime_nao_instancia(monkeypatch, tmp_path):
+    """C-12-like: o GET NUNCA sobe/instancia o runtime só para responder."""
+    _isolar_llm_config(monkeypatch, tmp_path)
+    assert rt.runtime_atual() is None
+    cliente.get("/llm/config", headers=CABECALHO)
+    assert rt.runtime_atual() is None  # continua sem efeito colateral
+
+
+def test_llm_config_get_origem_tela(monkeypatch, tmp_path):
+    """Valores vindos do `llm.json` (escolha salva na tela) ⇒ origem `tela`."""
+    _isolar_llm_config(monkeypatch, tmp_path)
+    (tmp_path / "llm.json").write_text(
+        json.dumps({"ctx_size": 2048, "gpu_offload": "cpu"}), encoding="utf-8")
+    dados = cliente.get("/llm/config", headers=CABECALHO).json()
+    assert dados["config"]["ctx_size"] == 2048
+    assert dados["config"]["ctx_size_origem"] == "tela"
+    assert dados["config"]["gpu_offload"] == "cpu"
+    assert dados["config"]["gpu_offload_origem"] == "tela"
+
+
+def test_llm_config_get_origem_env_vence_llm_json(monkeypatch, tmp_path):
+    """`HF_LLAMA_FLAGS` definida ⇒ origem `env` para OS DOIS campos, mesmo
+    havendo `llm.json` com valores próprios (ela vence tudo, ADR-0022)."""
+    _isolar_llm_config(monkeypatch, tmp_path)
+    (tmp_path / "llm.json").write_text(
+        json.dumps({"ctx_size": 2048, "gpu_offload": "cpu"}), encoding="utf-8")
+    monkeypatch.setenv(rt.VAR_FLAGS, "-ngl 10")
+    dados = cliente.get("/llm/config", headers=CABECALHO).json()
+    assert dados["config"]["ctx_size_origem"] == "env"
+    assert dados["config"]["gpu_offload_origem"] == "env"
+
+
+def test_llm_config_get_com_runtime_cpu_fallback_traz_boot_info_e_dica(monkeypatch, tmp_path):
+    """Runtime já instanciado com `boot_info` de `cpu_fallback` por memória:
+    o GET espelha o diagnóstico e a dica sugere o degrau abaixo."""
+    _isolar_llm_config(monkeypatch, tmp_path)
+    info = rt.BootInfo(
+        modo="cpu_fallback", motivo_fallback=rt.MotivoFalhaGPU.GPU_SEM_MEMORIA,
+        metricas=rt.MetricasBoot(ctx_efetivo=4096, camadas_offload=5, camadas_total=33))
+    monkeypatch.setattr(rt, "_RUNTIME", _RuntimeFalso(info))
+    dados = cliente.get("/llm/config", headers=CABECALHO).json()
+    assert dados["boot_info"]["modo"] == "cpu_fallback"
+    assert dados["boot_info"]["motivo_fallback"] == "GPU_SEM_MEMORIA"
+    assert dados["boot_info"]["metricas"]["camadas_offload"] == 5
+    assert dados["dica"] is not None
+    assert dados["dica_ctx_sugerido"] == 2048
+
+
+def test_llm_config_put_ctx_size_valido_persiste_e_encerra_runtime(monkeypatch, tmp_path):
+    _isolar_llm_config(monkeypatch, tmp_path)
+    falso = _RuntimeFalso(rt.BootInfo())
+    monkeypatch.setattr(rt, "_RUNTIME", falso)
+
+    resp = cliente.put("/llm/config", json={"ctx_size": 2048}, headers=CABECALHO)
+    assert resp.status_code == 200
+    assert resp.json()["config"]["ctx_size"] == 2048
+    assert gm.ctx_size_configurado() == 2048
+    assert falso.encerrado is True
+    assert rt.runtime_atual() is None  # encerrar_runtime() descarta a instância
+
+
+def test_llm_config_put_gpu_offload_valido_persiste(monkeypatch, tmp_path):
+    _isolar_llm_config(monkeypatch, tmp_path)
+    for valor in ("auto", "cpu", 20):
+        resp = cliente.put("/llm/config", json={"gpu_offload": valor}, headers=CABECALHO)
+        assert resp.status_code == 200
+        assert gm.gpu_offload_configurado() == valor
+
+
+def test_llm_config_put_preserva_modelo_ativo(monkeypatch, tmp_path):
+    """O `PUT` mexe só nos campos que vêm no corpo — `modelo_ativo` (já salvo
+    por outro fluxo) sobrevive, mesmo padrão de `definir_modelo_ativo`."""
+    _isolar_llm_config(monkeypatch, tmp_path)
+    caminho = tmp_path / "llm.json"
+    caminho.write_text(json.dumps({"modelo_ativo": "C:/modelos/x.gguf"}), encoding="utf-8")
+    cliente.put("/llm/config", json={"ctx_size": 8192}, headers=CABECALHO)
+    dados = json.loads(caminho.read_text(encoding="utf-8"))
+    assert dados["modelo_ativo"] == "C:/modelos/x.gguf"
+    assert dados["ctx_size"] == 8192
+
+
+def test_llm_config_put_ctx_size_invalido_422_sem_tocar_disco(monkeypatch, tmp_path):
+    _isolar_llm_config(monkeypatch, tmp_path)
+    caminho = tmp_path / "llm.json"
+    original = json.dumps({"ctx_size": 4096})
+    caminho.write_text(original, encoding="utf-8")
+    falso = _RuntimeFalso(rt.BootInfo())
+    monkeypatch.setattr(rt, "_RUNTIME", falso)
+
+    resp = cliente.put("/llm/config", json={"ctx_size": 3000}, headers=CABECALHO)
+    assert resp.status_code == 422
+    assert caminho.read_text(encoding="utf-8") == original  # disco intacto
+    assert falso.encerrado is False  # runtime NÃO foi tocado
+
+
+@pytest.mark.parametrize("valor", ["banana", 0, 1000, True])
+def test_llm_config_put_gpu_offload_invalido_422(monkeypatch, tmp_path, valor):
+    _isolar_llm_config(monkeypatch, tmp_path)
+    resp = cliente.put("/llm/config", json={"gpu_offload": valor}, headers=CABECALHO)
+    assert resp.status_code == 422
+
+
+def test_llm_config_put_sem_nenhum_campo_e_noop(monkeypatch, tmp_path):
+    """Corpo vazio é válido (ambos opcionais) e não reinicia o runtime à toa."""
+    _isolar_llm_config(monkeypatch, tmp_path)
+    falso = _RuntimeFalso(rt.BootInfo())
+    monkeypatch.setattr(rt, "_RUNTIME", falso)
+    resp = cliente.put("/llm/config", json={}, headers=CABECALHO)
+    assert resp.status_code == 200
+    assert falso.encerrado is False
+    assert rt.runtime_atual() is falso

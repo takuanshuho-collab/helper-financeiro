@@ -636,6 +636,51 @@ def test_analise_ia_job_completo_e_anonimizacao_da_fronteira():
         assert "Cartão Banco João da Silva" in texto_secao
         assert "CREDOR_1" not in texto_secao
         assert secao["aviso_legal"]
+        # Sem runtime embarcado instanciado (provider é o FakeProvider injetado
+        # via `contexto_analise`, não o runtime real) ⇒ sem aviso (ADR-0022 T-2502).
+        assert dados["aviso_runtime"] is None
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_analise_ia_aviso_runtime_presente_quando_boot_caiu_para_cpu(monkeypatch):
+    """`aviso_runtime` (campo ADITIVO, ADR-0022 T-2502): preenchido quando o
+    boot que serviu a análise foi `cpu_fallback` — o runtime embarcado é
+    consultado (nunca instanciado) na hora de montar a resposta do job."""
+    from sidecar import runtime_llm as rt
+
+    class _RuntimeFalso:
+        def boot_info(self) -> rt.BootInfo:
+            return rt.BootInfo(
+                modo="cpu_fallback", motivo_fallback=rt.MotivoFalhaGPU.GPU_SEM_MEMORIA)
+
+    monkeypatch.setattr(rt, "_RUNTIME", _RuntimeFalso())
+    espiao = ProviderEspiao()
+    cfg = ConfigAgente(provider="fake", cache=False)
+    cliente.app.dependency_overrides[contexto_analise] = lambda: (cfg, espiao)
+    try:
+        resp = cliente.post("/analise/ia", json={"perfil": PERFIL_ANALISE},
+                            headers=CABECALHO)
+        dados = _esperar_job(resp.json()["job_id"])
+        assert dados["status"] == "pronto"
+        assert dados["aviso_runtime"] is not None
+        assert "CPU" in dados["aviso_runtime"]
+    finally:
+        cliente.app.dependency_overrides.clear()
+
+
+def test_analise_ia_aviso_runtime_ausente_no_erro():
+    """No ramo de erro (P8/degradado por exceção inesperada) `aviso_runtime`
+    também está presente no contrato, mas `None` — nunca omitido."""
+    espiao = ProviderEspiao(erro=ValueError("llm fora do ar"))
+    cfg = ConfigAgente(provider="fake", cache=False)
+    cliente.app.dependency_overrides[contexto_analise] = lambda: (cfg, espiao)
+    try:
+        resp = cliente.post("/analise/ia", json={"perfil": PERFIL_ANALISE},
+                            headers=CABECALHO)
+        dados = _esperar_job(resp.json()["job_id"])
+        assert dados["status"] == "pronto"  # P8: degrada, não vira "erro"
+        assert dados["aviso_runtime"] is None
     finally:
         cliente.app.dependency_overrides.clear()
 

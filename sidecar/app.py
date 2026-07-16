@@ -36,7 +36,15 @@ from agent.extracao import Extrator, confirmar_extracao, iniciar_extracao
 from agent.ingestao import preparar_contexto
 from agent.ocr import Motor, OCRIndisponivel, obter_motor, ocr_documento
 from agent.provider import LLMProvider
-from contracts import SecaoIA
+from contracts import (
+    BootInfoOut,
+    ConfigLLMEfetiva,
+    ConfigLLMIn,
+    ConfigLLMOut,
+    MetricasBootOut,
+    OrigemConfigLLM,
+    SecaoIA,
+)
 from core.diagnostico import resumo_diagnostico
 from core.documento import FonteDocumento, fonte_por_extensao
 from core.estrategias import (
@@ -834,8 +842,17 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
         # (REQ-SEC-003) — o que foi ao LLM só tinha tokens.
         _, mapa = anonimizar_credores([d.credor for d in perfil.dividas])
         secao = preparar_exibicao(resultado, mapa)
-        estado: dict[str, object] = {"status": "pronto",
-                                     "secao": secao.model_dump(), "erro": ""}
+        # `aviso_runtime` (campo ADITIVO, ADR-0022 T-2502): preenchido só quando
+        # o boot que serviu ESTA análise caiu para CPU (`cpu_fallback`) — nunca
+        # instancia o runtime (só consulta o que já subiu para responder). Sem
+        # runtime embarcado (servidor próprio via HF_BASE_URL, ou nenhuma
+        # análise embarcada rodou ainda) fica `None`.
+        from .runtime_llm import mensagem_cpu_fallback, runtime_atual
+
+        instancia = runtime_atual()
+        aviso_runtime = mensagem_cpu_fallback(instancia.boot_info()) if instancia else None
+        estado: dict[str, object] = {"status": "pronto", "secao": secao.model_dump(),
+                                     "erro": "", "aviso_runtime": aviso_runtime}
     except Exception as e:  # noqa: BLE001 — o erro vira status consultável no poll
         # C-34: nunca engolir em silêncio. `perfil` carrega dados financeiros
         # do usuário (credores, valores) — `str(e)` pode ecoar fragmentos dele
@@ -844,7 +861,7 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
         # exceção só carrega dados de catálogo de modelo, não PII do perfil).
         log.warning("Análise IA %s falhou: %s", job_id, type(e).__name__)
         estado = {"status": "erro", "secao": None,
-                  "erro": f"{type(e).__name__}: {e}"}
+                  "erro": f"{type(e).__name__}: {e}", "aviso_runtime": None}
     with _JOBS_IA_LOCK:
         # Só grava se a entrada AINDA existe: se o cofre bloqueou no meio do
         # job, `_descartar_jobs_ia` já a removeu — regravar aqui ressuscitaria
@@ -870,7 +887,8 @@ def analise_ia_iniciar(
     job_id = uuid4().hex
     with _JOBS_IA_LOCK:
         _varrer_jobs_terminais(_JOBS_IA, _JOBS_IA_FIM)  # coleta preguiçosa
-        _JOBS_IA[job_id] = {"status": "rodando", "secao": None, "erro": ""}
+        _JOBS_IA[job_id] = {"status": "rodando", "secao": None, "erro": "",
+                           "aviso_runtime": None}
     threading.Thread(
         target=_rodar_job_ia, args=(job_id, perfil, entrada.extra, cfg, provider),
         daemon=True,
@@ -1471,3 +1489,89 @@ def llm_definir_modelo(entrada: DefinirModeloIn) -> dict:
     except ModeloLocalInvalido as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     return {"ok": True, "modelo_ativo": str(modelo)}
+
+
+# ------------------------- config do runtime LLM (T-2502, ADR-0022) ---------
+def _config_llm_efetiva() -> ConfigLLMOut:
+    """Monta a resposta de `GET`/`PUT /llm/config`: valores efetivos + origem,
+    `boot_info` (SEM instanciar o runtime — só consulta o que já existe) e a
+    dica de contexto (regra única, testável, do `runtime_llm`).
+
+    Import tardio de `.runtime_llm`/`.gestor_modelos` (mesmo racional do resto
+    do arquivo: evita ciclo de import a nível de módulo).
+    """
+    from .gestor_modelos import ctx_size_configurado, gpu_offload_configurado
+    from .runtime_llm import (
+        VAR_FLAGS,
+        BootInfo,
+        calcular_dica_contexto,
+        resolver_ctx_size,
+        runtime_atual,
+    )
+
+    origem_env = VAR_FLAGS in os.environ
+    ctx_size = resolver_ctx_size()
+    ctx_da_tela = ctx_size_configurado()
+    gpu_offload_da_tela = gpu_offload_configurado()
+    gpu_offload: str | int = gpu_offload_da_tela if gpu_offload_da_tela is not None else "auto"
+
+    ctx_origem: OrigemConfigLLM
+    gpu_offload_origem: OrigemConfigLLM
+    if origem_env:
+        ctx_origem = gpu_offload_origem = "env"
+    else:
+        ctx_origem = "tela" if ctx_da_tela is not None else "padrao"
+        gpu_offload_origem = "tela" if gpu_offload_da_tela is not None else "padrao"
+
+    instancia = runtime_atual()
+    boot = instancia.boot_info() if instancia is not None else BootInfo()
+    dica, dica_ctx = calcular_dica_contexto(boot, ctx_size)
+
+    return ConfigLLMOut(
+        config=ConfigLLMEfetiva(
+            ctx_size=ctx_size,
+            ctx_size_origem=ctx_origem,
+            gpu_offload=gpu_offload,
+            gpu_offload_origem=gpu_offload_origem,
+        ),
+        boot_info=BootInfoOut(
+            modo=boot.modo,
+            motivo_fallback=boot.motivo_fallback.value if boot.motivo_fallback else None,
+            metricas=MetricasBootOut(
+                camadas_offload=boot.metricas.camadas_offload,
+                camadas_total=boot.metricas.camadas_total,
+                vram_bytes=boot.metricas.vram_bytes,
+                ctx_efetivo=boot.metricas.ctx_efetivo,
+                dispositivo=boot.metricas.dispositivo,
+                vram_total_bytes=boot.metricas.vram_total_bytes,
+                vram_livre_bytes=boot.metricas.vram_livre_bytes,
+            ),
+        ),
+        dica=dica,
+        dica_ctx_sugerido=dica_ctx,
+    )
+
+
+@app.get("/llm/config", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_config() -> ConfigLLMOut:
+    """Config efetiva (com origem), diagnóstico do último boot e dica de
+    contexto — SEM subir o runtime (a tela de Configurações da IA não pode
+    pagar o custo de carregar o modelo só para se abrir)."""
+    return _config_llm_efetiva()
+
+
+@app.put("/llm/config", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+def llm_definir_config(entrada: ConfigLLMIn) -> ConfigLLMOut:
+    """Persiste `ctx_size`/`gpu_offload` (só o que vier) e encerra o runtime
+    corrente — a próxima análise sobe já com a config nova.
+
+    Validação de domínio é do `ConfigLLMIn` (Pydantic): entrada fora do
+    contrato nunca chega aqui (FastAPI devolve 422 antes, sem tocar o disco).
+    Com `HF_LLAMA_FLAGS` definida a persistência acontece normalmente (a env
+    continua vencendo em runtime; é a GUI quem avisa que o salvar não terá
+    efeito enquanto a env existir).
+    """
+    from .gestor_modelos import salvar_config_llm
+
+    salvar_config_llm(ctx_size=entrada.ctx_size, gpu_offload=entrada.gpu_offload)
+    return _config_llm_efetiva()

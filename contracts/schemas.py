@@ -6,7 +6,9 @@ tipado. O LLM recebe `FatosFinanceiros` e devolve `AnaliseAgente`.
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 
 # ----------------------------- Entrada do agente (só números + tokens) --------
@@ -143,3 +145,82 @@ class SecaoIA(BaseModel):
     alertas: list[str] = Field(default_factory=list)
     confianca: float = 0.0
     aviso_legal: str = ""
+
+
+# --------------------------- Runtime LLM configurável (ADR-0022, T-2502) ------
+# Contratos da tela "Configurações da IA" (ajustes avançados) e do painel do
+# último boot — endereço estável para o sidecar E a GUI, mesmo racional do
+# resto desta camada (ADR-0004): a GUI nunca reimplementa a regra da dica,
+# só renderiza o que o backend já decidiu (REQ-NF-005).
+OrigemConfigLLM = Literal["padrao", "tela", "env"]
+
+
+class ConfigLLMEfetiva(BaseModel):
+    """Valores efetivos de `ctx_size`/`gpu_offload` + a origem de cada um.
+
+    Origem `env` quando `HF_LLAMA_FLAGS` está definida (vence tudo — a GUI
+    desabilita os controles nesse caso); `tela` quando veio do `llm.json`
+    (escolha salva na tela); `padrao` caso contrário.
+    """
+    ctx_size: int
+    ctx_size_origem: OrigemConfigLLM
+    gpu_offload: str | int
+    gpu_offload_origem: OrigemConfigLLM
+
+
+class MetricasBootOut(BaseModel):
+    """Espelho de `runtime_llm.MetricasBoot` — cada campo best-effort (`None`
+    quando o formato do build do llama.cpp não emitiu o dado)."""
+    camadas_offload: int | None = None
+    camadas_total: int | None = None
+    vram_bytes: int | None = None
+    ctx_efetivo: int | None = None
+    dispositivo: str | None = None
+    vram_total_bytes: int | None = None
+    vram_livre_bytes: int | None = None
+
+
+class BootInfoOut(BaseModel):
+    """Espelho de `runtime_llm.BootInfo` — diagnóstico do último boot.
+
+    `modo`: `"nunca_subiu"` | `"gpu"` | `"cpu_configurado"` | `"cpu_fallback"`.
+    """
+    modo: str = "nunca_subiu"
+    motivo_fallback: str | None = None
+    metricas: MetricasBootOut = Field(default_factory=MetricasBootOut)
+
+
+class ConfigLLMOut(BaseModel):
+    """Resposta de `GET /llm/config` (e de `PUT /llm/config` após persistir)."""
+    config: ConfigLLMEfetiva
+    boot_info: BootInfoOut
+    dica: str | None = None
+    dica_ctx_sugerido: int | None = None  # botão "Aplicar sugestão" (T-2503)
+
+
+class ConfigLLMIn(BaseModel):
+    """Corpo de `PUT /llm/config`: ambos os campos são opcionais — só valida
+    (e persiste) o que vier. `ctx_size` fechado nos 3 degraus da escada;
+    `gpu_offload` é `"auto"` | `"cpu"` | um inteiro de camadas (1..999)."""
+    ctx_size: Literal[2048, 4096, 8192] | None = None
+    gpu_offload: str | int | None = None
+
+    # `mode="before"`: precisa rodar ANTES da coerção do Pydantic para `int`
+    # (que aceitaria `True`/`False` como 1/0 — bool é subclasse de int em
+    # Python — e o `isinstance(v, bool)` abaixo já veria só o inteiro coagido).
+    @field_validator("gpu_offload", mode="before")
+    @classmethod
+    def _validar_gpu_offload(cls, v: str | int | None) -> str | int | None:
+        if v is None:
+            return v
+        if isinstance(v, bool):  # bool é int em Python — rejeita explicitamente
+            raise ValueError("gpu_offload inválido")
+        if isinstance(v, str):
+            if v not in ("auto", "cpu"):
+                raise ValueError("gpu_offload deve ser 'auto', 'cpu' ou um inteiro (1-999)")
+            return v
+        if isinstance(v, int):
+            if not (1 <= v <= 999):
+                raise ValueError("gpu_offload inteiro deve estar entre 1 e 999")
+            return v
+        raise ValueError("gpu_offload inválido")

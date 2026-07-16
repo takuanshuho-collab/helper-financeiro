@@ -856,9 +856,104 @@ class RuntimeLLM:
             proc.wait()
 
 
+# ------------------------- dica de contexto e aviso da análise (ADR-0022, T-2502)
+# Escada de degraus de contexto que a tela de Configuração da IA oferece
+# (ADR-0022): a dica sempre sugere o degrau ABAIXO do efetivo, nunca um valor
+# livre — mantém a UI fechada nos 3 valores validados por `PUT /llm/config`.
+ESCADA_CONTEXTO: tuple[int, ...] = (8192, 4096, 2048)
+
+
+def calcular_dica_contexto(
+    boot: BootInfo, ctx_configurado: int
+) -> tuple[str | None, int | None]:
+    """Regra ÚNICA da dica de contexto (ADR-0022, T-2502) — função PURA e
+    testável, vive no backend para a GUI nunca reimplementar a decisão
+    (REQ-NF-005).
+
+    Dispara quando o último boot caiu para CPU por falta de VRAM
+    (`cpu_fallback` + `GPU_SEM_MEMORIA`) OU quando o boot TENTOU GPU
+    (`modo in ("gpu", "cpu_fallback")`) e o offload real ficou abaixo de 50%
+    das camadas do modelo (quando `camadas_offload`/`camadas_total` estão
+    disponíveis) — nos dois casos, reduzir o contexto libera memória para a
+    próxima tentativa. A perna de offload baixo EXCLUI `cpu_configurado` de
+    propósito: um usuário que ESCOLHEU CPU puro na tela sempre tem
+    `camadas_offload=0` (0% < 50%), e sugerir "reduza o contexto para caber
+    na GPU" nesse caso brigaria com uma escolha explícita do usuário — a dica
+    não pode incomodar quem já decidiu não usar a GPU. `nunca_subiu` não tem
+    métricas (sempre `None`) e também não dispara essa perna. Sugere o degrau
+    abaixo do contexto EFETIVO do boot (`metricas.ctx_efetivo`); sem essa
+    métrica (build que não emite a linha), cai no `ctx_configurado` (o valor
+    pedido). Já no menor degrau (2048) ⇒ sem dica (`None, None`); fora das
+    condições acima, idem.
+    """
+    m = boot.metricas
+    memoria_insuficiente = (
+        boot.modo == "cpu_fallback" and boot.motivo_fallback == MotivoFalhaGPU.GPU_SEM_MEMORIA
+    )
+    offload_baixo = (
+        boot.modo in ("gpu", "cpu_fallback")
+        and m.camadas_offload is not None
+        and m.camadas_total is not None
+        and m.camadas_total > 0
+        and (m.camadas_offload / m.camadas_total) < 0.5
+    )
+    if not (memoria_insuficiente or offload_baixo):
+        return None, None
+    ctx_base = m.ctx_efetivo if m.ctx_efetivo is not None else ctx_configurado
+    # Degrau ATUAL: o primeiro da escada que cabe no contexto-base (um valor
+    # fora da escada, ex.: 6000, cai no degrau imediatamente abaixo dele).
+    atual = next((d for d in ESCADA_CONTEXTO if d <= ctx_base), ESCADA_CONTEXTO[-1])
+    idx = ESCADA_CONTEXTO.index(atual)
+    if idx + 1 >= len(ESCADA_CONTEXTO):
+        return None, None  # já no menor degrau — nada a sugerir
+    sugerido = ESCADA_CONTEXTO[idx + 1]
+    texto = (
+        f"O último boot da IA usou pouca (ou nenhuma) memória de vídeo "
+        f"disponível. Reduzir o contexto para {sugerido} pode ajudar a caber "
+        f"no que sobrar de memória na próxima tentativa."
+    )
+    return texto, sugerido
+
+
+# Motivo tipado → frase em linguagem simples, para o aviso da análise sênior
+# (`aviso_runtime`) e para o painel do último boot na GUI (T-2503) reaproveitar.
+_TEXTO_MOTIVO_FALHA: dict[MotivoFalhaGPU, str] = {
+    MotivoFalhaGPU.GPU_SEM_MEMORIA: "a GPU não tinha memória de vídeo suficiente para o modelo",
+    MotivoFalhaGPU.GPU_FIT_ABORTADO: "o ajuste automático de camadas na GPU não conseguiu concluir",
+    MotivoFalhaGPU.GENERICO: "a inicialização na GPU falhou por um motivo não identificado",
+}
+
+
+def mensagem_cpu_fallback(boot: BootInfo) -> str | None:
+    """Texto claro do aviso quando o boot que serviu uma análise caiu para
+    CPU (`cpu_fallback`, ADR-0022 T-2502); `None` fora desse modo — o
+    chamador só preenche `aviso_runtime` quando este texto existe."""
+    if boot.modo != "cpu_fallback":
+        return None
+    motivo_txt = (
+        _TEXTO_MOTIVO_FALHA[boot.motivo_fallback] if boot.motivo_fallback is not None
+        else "a inicialização na GPU falhou")
+    return (
+        f"Esta análise rodou com a IA em modo CPU porque {motivo_txt}; o "
+        "resultado é o mesmo, só ficou mais lenta. Ajuste o contexto/uso de "
+        "GPU em Configurações da IA se quiser tentar a GPU de novo."
+    )
+
+
 # ----------------------------------------------------------------- singleton
 _RUNTIME: RuntimeLLM | None = None
 _LOCK_SINGLETON = threading.Lock()
+
+
+def runtime_atual() -> RuntimeLLM | None:
+    """Instância JÁ criada, sem instanciar nem subir nada (ADR-0022, T-2502).
+
+    Usado por `GET /llm/config`: consultar o `boot_info` do último boot não
+    pode ter o efeito colateral de criar o runtime (que exigiria resolver
+    binário/modelo e ficaria preso no estado neutro `nunca_subiu` mesmo
+    quando o usuário nunca pediu uma análise)."""
+    with _LOCK_SINGLETON:
+        return _RUNTIME
 
 
 def runtime_embarcado() -> RuntimeLLM:

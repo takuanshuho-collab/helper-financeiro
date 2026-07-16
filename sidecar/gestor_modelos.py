@@ -327,6 +327,34 @@ def definir_modelo_ativo(caminho: str | os.PathLike[str],
     return validado
 
 
+def salvar_config_llm(
+    ctx_size: int | None = None,
+    gpu_offload: str | int | None = None,
+    ambiente: Mapping[str, str] | None = None,
+) -> None:
+    """Persiste `ctx_size`/`gpu_offload` em `llm.json` — só o que vier — e
+    encerra o runtime corrente, mesmo padrão de `definir_modelo_ativo`
+    (ADR-0022, T-2502): a próxima `base_url()` sobe já com a config nova. A
+    validação de domínio (degraus/{auto,cpu,int}) é do `ConfigLLMIn` do
+    endpoint — aqui só persistimos o que já chegou validado; nada a validar
+    de novo, então nunca levanta.
+
+    Sem nenhum dos dois campos, é um no-op (nem grava nem encerra o runtime) —
+    evita reiniciar o `llama-server` à toa por um `PUT` vazio.
+    """
+    if ctx_size is None and gpu_offload is None:
+        return
+    dados = ler_llm_config(ambiente)
+    if ctx_size is not None:
+        dados["ctx_size"] = ctx_size
+    if gpu_offload is not None:
+        dados["gpu_offload"] = gpu_offload
+    _salvar_atomico(caminho_llm_config(ambiente), dados)
+
+    from .runtime_llm import encerrar_runtime
+    encerrar_runtime()
+
+
 def _validar_gguf(caminho: str | os.PathLike[str]) -> Path:
     p = Path(caminho)
     if not p.is_file():

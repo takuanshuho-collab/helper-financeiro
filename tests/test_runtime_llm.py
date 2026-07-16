@@ -826,6 +826,148 @@ def test_sem_retry_quando_config_ja_e_cpu_puro(binario_e_modelo):
     assert estado["n"] == 1  # nenhuma retentativa
 
 
+# --------------------------- dica de contexto e aviso (ADR-0022, T-2502) ----
+def _boot(modo="nunca_subiu", motivo=None, ctx_efetivo=None,
+         camadas_offload=None, camadas_total=None):
+    return rt.BootInfo(
+        modo=modo, motivo_fallback=motivo,
+        metricas=rt.MetricasBoot(
+            ctx_efetivo=ctx_efetivo,
+            camadas_offload=camadas_offload, camadas_total=camadas_total),
+    )
+
+
+def test_dica_ausente_sem_cpu_fallback_e_offload_bom():
+    """Boot bom (offload alto, sem fallback) ⇒ sem dica."""
+    boot = _boot(modo="gpu", camadas_offload=30, camadas_total=33)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=4096)
+    assert texto is None
+    assert sugerido is None
+
+
+def test_dica_cpu_configurado_com_offload_zero_nao_dispara():
+    """`cpu_configurado` (usuário ESCOLHEU CPU puro) sempre tem offload 0/N
+    (0% < 50%) — a perna de offload baixo não pode disparar aqui, senão a
+    dica ficaria brigando eternamente com uma escolha explícita do usuário
+    (achado da revisão do T-2502)."""
+    boot = _boot(modo="cpu_configurado", camadas_offload=0, camadas_total=33,
+                ctx_efetivo=4096)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=4096)
+    assert texto is None
+    assert sugerido is None
+
+
+def test_dica_cpu_fallback_por_memoria_sugere_degrau_abaixo():
+    """`cpu_fallback` + `GPU_SEM_MEMORIA` ⇒ sugere o degrau abaixo do efetivo."""
+    boot = _boot(modo="cpu_fallback", motivo=rt.MotivoFalhaGPU.GPU_SEM_MEMORIA,
+                ctx_efetivo=8192)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=8192)
+    assert texto is not None
+    assert "4096" in texto
+    assert sugerido == 4096
+
+
+def test_dica_cpu_fallback_outro_motivo_nao_sugere():
+    """`cpu_fallback` por motivo QUE NÃO É falta de memória, sem offload baixo,
+    não dispara a dica — a regra é específica de `GPU_SEM_MEMORIA` (ou
+    offload baixo, testado à parte)."""
+    boot = _boot(modo="cpu_fallback", motivo=rt.MotivoFalhaGPU.GPU_FIT_ABORTADO,
+                camadas_offload=None, camadas_total=None)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=4096)
+    assert texto is None
+    assert sugerido is None
+
+
+def test_dica_offload_abaixo_de_50_por_cento_sugere_mesmo_sem_fallback():
+    """Boot que subiu na GPU mas offloadou pouco (< 50%) também dispara a
+    dica — segunda perna da regra (ADR-0022), independente de `cpu_fallback`."""
+    boot = _boot(modo="gpu", camadas_offload=10, camadas_total=33, ctx_efetivo=4096)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=4096)
+    assert texto is not None
+    assert sugerido == 2048
+
+
+def test_dica_offload_exatamente_50_por_cento_nao_dispara():
+    """Borda: offload == 50% NÃO é "abaixo de 50%" — sem dica."""
+    boot = _boot(modo="gpu", camadas_offload=16, camadas_total=32, ctx_efetivo=4096)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=4096)
+    assert texto is None
+    assert sugerido is None
+
+
+def test_dica_offload_49_por_cento_dispara():
+    """Borda: 49% já é "abaixo de 50%" — dispara."""
+    boot = _boot(modo="gpu", camadas_offload=49, camadas_total=100, ctx_efetivo=4096)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=4096)
+    assert texto is not None
+    assert sugerido == 2048
+
+
+def test_dica_ja_no_menor_degrau_sem_dica():
+    """Já em 2048 (o menor degrau) ⇒ sem dica, mesmo com fallback por memória."""
+    boot = _boot(modo="cpu_fallback", motivo=rt.MotivoFalhaGPU.GPU_SEM_MEMORIA,
+                ctx_efetivo=2048)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=2048)
+    assert texto is None
+    assert sugerido is None
+
+
+def test_dica_escada_completa_8192_4096_2048():
+    """Percorre a escada inteira: 8192→4096, 4096→2048, 2048→sem dica."""
+    motivo = rt.MotivoFalhaGPU.GPU_SEM_MEMORIA
+    _, sugerido_1 = rt.calcular_dica_contexto(
+        _boot(modo="cpu_fallback", motivo=motivo, ctx_efetivo=8192), ctx_configurado=8192)
+    _, sugerido_2 = rt.calcular_dica_contexto(
+        _boot(modo="cpu_fallback", motivo=motivo, ctx_efetivo=4096), ctx_configurado=4096)
+    _, sugerido_3 = rt.calcular_dica_contexto(
+        _boot(modo="cpu_fallback", motivo=motivo, ctx_efetivo=2048), ctx_configurado=2048)
+    assert (sugerido_1, sugerido_2, sugerido_3) == (4096, 2048, None)
+
+
+def test_dica_sem_ctx_efetivo_usa_o_configurado():
+    """Sem `ctx_efetivo` conhecido (build que não emite a linha), a regra cai
+    no `ctx_configurado` — não deve levantar nem devolver None por engano."""
+    boot = _boot(modo="cpu_fallback", motivo=rt.MotivoFalhaGPU.GPU_SEM_MEMORIA,
+                ctx_efetivo=None)
+    texto, sugerido = rt.calcular_dica_contexto(boot, ctx_configurado=8192)
+    assert texto is not None
+    assert sugerido == 4096
+
+
+# --------------------------------- aviso_runtime (ADR-0022, T-2502) ---------
+def test_mensagem_cpu_fallback_ausente_fora_do_modo():
+    for modo in ("nunca_subiu", "gpu", "cpu_configurado"):
+        assert rt.mensagem_cpu_fallback(_boot(modo=modo)) is None
+
+
+def test_mensagem_cpu_fallback_presente_e_com_motivo_claro():
+    boot = _boot(modo="cpu_fallback", motivo=rt.MotivoFalhaGPU.GPU_SEM_MEMORIA)
+    texto = rt.mensagem_cpu_fallback(boot)
+    assert texto is not None
+    assert "CPU" in texto
+    assert "memória de vídeo" in texto
+
+
+def test_mensagem_cpu_fallback_motivo_generico_nao_levanta():
+    boot = _boot(modo="cpu_fallback", motivo=rt.MotivoFalhaGPU.GENERICO)
+    assert rt.mensagem_cpu_fallback(boot) is not None
+
+
+# ------------------------------------------- runtime_atual (ADR-0022, T-2502)
+def test_runtime_atual_none_sem_instanciar(monkeypatch):
+    """Sem nenhuma chamada anterior a `runtime_embarcado()`, `runtime_atual()`
+    devolve `None` SEM criar a instância (sem efeito colateral)."""
+    monkeypatch.setattr(rt, "_RUNTIME", None)
+    assert rt.runtime_atual() is None
+
+
+def test_runtime_atual_devolve_a_instancia_existente(binario_e_modelo, monkeypatch):
+    binario, modelo = binario_e_modelo
+    instancia = RuntimeLLM(ConfigRuntime(binario=binario, modelo=modelo))
+    monkeypatch.setattr(rt, "_RUNTIME", instancia)
+    assert rt.runtime_atual() is instancia
+
+
 # ------------------------------------------------------- real (opt-in)
 @pytest.mark.skipif(
     not os.getenv(rt.VAR_TESTE_REAL),
