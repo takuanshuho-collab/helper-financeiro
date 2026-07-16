@@ -40,6 +40,10 @@ export default function Analise({
   const [erro, setErro] = useState('')
   const [ia, setIa] = useState<EstadoIa>({ fase: 'ocioso' })
   const [msgExport, setMsgExport] = useState('')
+  // Banner do runtime (T-2503, ADR-0022): preenchido quando o poll do job
+  // devolve `aviso_runtime` — a análise que rodou caiu para CPU no boot que a
+  // serviu. Informativo: não bloqueia nem esconde o resultado.
+  const [avisoRuntime, setAvisoRuntime] = useState<string | null>(null)
 
   const d = analise.diagnostico
 
@@ -66,6 +70,7 @@ export default function Analise({
   async function gerarIa() {
     setIa({ fase: 'rodando' })
     setSecaoIa(null)
+    setAvisoRuntime(null)
     try {
       const { job_id } = await hf.analiseIaIniciar(perfil, extra)
       for (;;) {
@@ -74,6 +79,7 @@ export default function Analise({
         if (st.status === 'rodando') continue
         if (st.status === 'pronto' && st.secao) {
           setSecaoIa(st.secao)
+          setAvisoRuntime(st.aviso_runtime)
           setIa({ fase: 'ocioso' })
         } else {
           setIa({ fase: 'erro', msg: st.erro || 'falha desconhecida' })
@@ -297,6 +303,7 @@ export default function Analise({
         {ia.fase === 'erro' && (
           <div className="aviso-erro">Erro ao gerar a análise: {ia.msg}</div>
         )}
+        {avisoRuntime && <div className="aviso-runtime">⚠ {avisoRuntime}</div>}
         {ia.fase === 'ocioso' && !secaoIa && (
           <p className="sub ia-vazia">
             A IA interpreta os números do diagnóstico e sugere prioridades e um

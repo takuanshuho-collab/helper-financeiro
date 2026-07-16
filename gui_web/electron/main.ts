@@ -125,7 +125,11 @@ async function aguardarSaude(timeoutMs = 15_000): Promise<void> {
   }
 }
 
-async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown> {
+async function chamarSidecar(
+  metodo: string,
+  payload: unknown,
+  metodoHttp?: 'GET' | 'POST' | 'PUT',
+): Promise<unknown> {
   // C-10 (ADR-0018): `metodo` vem do renderer via IPC e é concatenado direto
   // na URL (`http://127.0.0.1:${porta}${metodo}`). Sem o `/` inicial a URL
   // fica mal-formada — rejeitamos ANTES de qualquer fetch, no mesmo formato
@@ -141,8 +145,12 @@ async function chamarSidecar(metodo: string, payload: unknown): Promise<unknown>
     }
   }
   const temCorpo = payload !== undefined && payload !== null
+  // `metodoHttp` (T-2503, ADR-0022): o padrão infere GET/POST pela presença de
+  // corpo, mas `PUT /llm/config` PRECISA do verbo explícito (tem corpo, mas não
+  // é POST) — o renderer manda o verbo quando a inferência não serve.
+  const verbo = metodoHttp ?? (temCorpo ? 'POST' : 'GET')
   const resp = await fetchSidecar(`http://127.0.0.1:${sidecarPort}${metodo}`, {
-    method: temCorpo ? 'POST' : 'GET',
+    method: verbo,
     headers: {
       'Content-Type': 'application/json',
       'X-HF-Token': sidecarToken,
@@ -345,8 +353,14 @@ async function encerrarSidecar(): Promise<void> {
 
 void app.whenReady().then(async () => {
   aplicarCsp()
-  ipcMain.handle('hf:invoke', (_evento, metodo: string, payload: unknown) =>
-    chamarSidecar(metodo, payload),
+  ipcMain.handle(
+    'hf:invoke',
+    (
+      _evento,
+      metodo: string,
+      payload: unknown,
+      metodoHttp?: 'GET' | 'POST' | 'PUT',
+    ) => chamarSidecar(metodo, payload, metodoHttp),
   )
   // Exportações (T-902): o renderer pede o diálogo nativo e recebe só o
   // caminho; o arquivo em si é escrito pelo sidecar (núcleo Python).

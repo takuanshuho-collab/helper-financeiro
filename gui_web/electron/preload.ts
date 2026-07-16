@@ -5,8 +5,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('hf', {
-  invoke: (metodo: string, payload?: unknown): Promise<unknown> =>
-    ipcRenderer.invoke('hf:invoke', metodo, payload),
+  // `metodoHttp` (T-2503, ADR-0022): sobrepõe a inferência padrão do main
+  // (GET sem corpo / POST com corpo) — hoje só usado por `PUT /llm/config`.
+  invoke: (
+    metodo: string,
+    payload?: unknown,
+    metodoHttp?: 'GET' | 'POST' | 'PUT',
+  ): Promise<unknown> => ipcRenderer.invoke('hf:invoke', metodo, payload, metodoHttp),
   // Diálogo nativo de salvar (exportações da tela Análise, T-902). O renderer
   // só recebe o caminho escolhido; quem escreve o arquivo é o sidecar.
   dialogoSalvar: (opcoes: unknown): Promise<string | null> =>

@@ -12,6 +12,8 @@ import type {
   AuthStatusOut,
   CartaCamposIn,
   CartaPreviaOut,
+  ConfigLLMIn,
+  ConfigLLMOut,
   ContratoExtraidoOut,
   CsvImportadoOut,
   DiagnosticoOut,
@@ -87,9 +89,13 @@ function ponte(): NonNullable<Window['hf']> {
   return b
 }
 
-async function chamar<T>(metodo: string, payload?: unknown): Promise<T> {
+async function chamar<T>(
+  metodo: string,
+  payload?: unknown,
+  metodoHttp?: 'GET' | 'POST' | 'PUT',
+): Promise<T> {
   try {
-    const resultado = await ponte().invoke<unknown>(metodo, payload)
+    const resultado = await ponte().invoke<unknown>(metodo, payload, metodoHttp)
     if (ehErroSidecar(resultado)) {
       if (resultado.status === 423) {
         ouvintesBloqueio.forEach((ouvinte) => ouvinte())
@@ -235,4 +241,13 @@ export const hf = {
     caminho?: string
   }): Promise<LlmModeloDefinidoOut> =>
     chamar('/llm/modelo', { catalogo_id: args.catalogoId, caminho: args.caminho }),
+
+  // --- runtime LLM configurável (T-2503, ADR-0022) ------------------------
+  /** Config efetiva (com origem), diagnóstico do último boot e dica de
+   * contexto — sem subir o runtime. */
+  llmConfig: (): Promise<ConfigLLMOut> => chamar('/llm/config'),
+  /** Persiste só os campos alterados; o sidecar valida e derruba o runtime
+   * corrente (a próxima análise sobe já com a config nova). */
+  llmConfigSalvar: (patch: ConfigLLMIn): Promise<ConfigLLMOut> =>
+    chamar('/llm/config', patch, 'PUT'),
 }

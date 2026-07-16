@@ -1357,6 +1357,20 @@ body {
   padding: 12px 14px;
 }
 
+/* Banner âmbar do `aviso_runtime` (T-2503, ADR-0022): informativo — a análise
+ * rodou em modo CPU no boot que a serviu. Nunca bloqueia nem esconde o
+ * resultado (só aparece junto da seção pronta). */
+.aviso-runtime {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--orange);
+  background: var(--tint-orange);
+  border: 1px solid color-mix(in srgb, var(--orange) 35%, var(--border));
+  border-radius: var(--r-tile);
+  padding: 12px 14px;
+}
+
 .ia-secao {
   margin-top: 14px;
   font-size: 13px;
@@ -2287,4 +2301,202 @@ body {
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
+}
+
+/* ---- Ajustes avançados + painel do último boot (T-2503, ADR-0022) ---- */
+
+.cfgia-aviso-env {
+  background: var(--tint-orange);
+  color: var(--orange);
+  border-radius: var(--r-tile);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.cfgia-aviso-env code {
+  font-size: 12px;
+  background: var(--surface);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.cfgia-dica {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--nav-on-bg);
+  color: var(--nav-on-text);
+  border-radius: var(--r-tile);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.cfgia-dica .btn-secundario {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.cfgia-campo-avancado {
+  margin-bottom: 16px;
+}
+
+.cfgia-campo-avancado:last-of-type {
+  margin-bottom: 0;
+}
+
+.cfgia-campo-rotulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-soft);
+  margin-bottom: 8px;
+}
+
+.cfgia-degraus {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.cfgia-degrau {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  border: 1px solid var(--border-input);
+  background: var(--input-bg);
+  border-radius: var(--r-tile);
+  padding: 10px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.cfgia-degrau:hover:not(:disabled) {
+  border-color: var(--focus);
+}
+
+.cfgia-degrau.on {
+  border-color: var(--accent);
+  background: var(--nav-on-bg);
+}
+
+.cfgia-degrau:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cfgia-degrau-valor {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.cfgia-degrau.on .cfgia-degrau-valor {
+  color: var(--nav-on-text);
+}
+
+.cfgia-degrau-custo {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.cfgia-camadas-input {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 260px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-input);
+  border-radius: var(--r-chip);
+  padding: 8px 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.cfgia-camadas-input:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(106, 91, 240, 0.15);
+}
+
+.cfgia-salvar-linha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.cfgia-toast {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+.cfgia-boot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cfgia-boot-motivo {
+  margin: 0;
+}
+
+.cfgia-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
+}
+
+.cfgia-badge-gpu {
+  color: var(--green-2);
+  background: var(--tint-green);
+}
+
+.cfgia-badge-cpu {
+  color: var(--nav-on-text);
+  background: var(--nav-on-bg);
+}
+
+.cfgia-badge-fallback {
+  color: var(--orange);
+  background: var(--tint-orange);
+}
+
+.cfgia-boot-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.cfgia-boot-item {
+  border: 1px solid var(--border);
+  border-radius: var(--r-tile);
+  padding: 10px 12px;
+}
+
+.cfgia-boot-item-rotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.cfgia-boot-item-valor {
+  margin-top: 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
 }

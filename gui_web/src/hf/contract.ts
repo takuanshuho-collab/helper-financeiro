@@ -305,6 +305,9 @@ export interface IaStatusOut {
   status: 'rodando' | 'pronto' | 'erro'
   secao: SecaoIaOut | null
   erro: string
+  /** Preenchido (T-2503, ADR-0022) quando o boot que serviu esta análise caiu
+   * para CPU (`cpu_fallback`) — banner âmbar informativo na tela Análise. */
+  aviso_runtime: string | null
 }
 
 export interface ExportadoOut {
@@ -441,6 +444,57 @@ export interface LlmBaixarStatusOut {
 export interface LlmModeloDefinidoOut {
   ok: boolean
   modelo_ativo: string
+}
+
+// --- Runtime LLM configurável (T-2503, ADR-0022) ------------------------------
+// Espelho 1:1 de `contracts/schemas.py` (T-2502): a GUI só RENDERIZA o que o
+// backend já decidiu (regra da dica, resolução env > tela > padrão) — nunca
+// recalcula (REQ-NF-005).
+
+/** Origem de um valor efetivo: `env` (HF_LLAMA_FLAGS, vence tudo — controles
+ * desabilitados na tela) | `tela` (salvo em `llm.json`) | `padrao`. */
+export type OrigemConfigLLM = 'padrao' | 'tela' | 'env'
+
+export interface ConfigLLMEfetiva {
+  ctx_size: number
+  ctx_size_origem: OrigemConfigLLM
+  gpu_offload: string | number
+  gpu_offload_origem: OrigemConfigLLM
+}
+
+export interface MetricasBootOut {
+  camadas_offload: number | null
+  camadas_total: number | null
+  vram_bytes: number | null
+  ctx_efetivo: number | null
+  dispositivo: string | null
+  vram_total_bytes: number | null
+  vram_livre_bytes: number | null
+}
+
+/** `modo`: `nunca_subiu` (nunca subiu com sucesso nesta sessão) | `gpu` |
+ * `cpu_configurado` (a config pediu CPU puro) | `cpu_fallback` (a GPU falhou
+ * e a retentativa em CPU salvou o boot). `motivo_fallback` é a falha
+ * CLASSIFICADA do último boot — pode aparecer também em `nunca_subiu` (as
+ * duas tentativas falharam), então o texto nunca deve afirmar "a GPU
+ * falhou" sem qualificação (achado do mock E2E, `docs/TASKS.md` T-2503). */
+export interface BootInfoOut {
+  modo: 'nunca_subiu' | 'gpu' | 'cpu_configurado' | 'cpu_fallback'
+  motivo_fallback: 'GPU_SEM_MEMORIA' | 'GPU_FIT_ABORTADO' | 'GENERICO' | null
+  metricas: MetricasBootOut
+}
+
+export interface ConfigLLMOut {
+  config: ConfigLLMEfetiva
+  boot_info: BootInfoOut
+  dica: string | null
+  dica_ctx_sugerido: number | null
+}
+
+/** Corpo de `PUT /llm/config`: só os campos alterados (ambos opcionais). */
+export interface ConfigLLMIn {
+  ctx_size?: 2048 | 4096 | 8192
+  gpu_offload?: 'auto' | 'cpu' | number
 }
 
 // --- Estado de uma chamada assíncrona (para as telas) ------------------------

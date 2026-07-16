@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react'
 
 import { HfErro, hf } from '../hf/client'
-import type { CatalogoItemOut, LlmStatusOut } from '../hf/contract'
+import type {
+  CatalogoItemOut,
+  ConfigLLMIn,
+  ConfigLLMOut,
+  LlmStatusOut,
+} from '../hf/contract'
 
-/** Tela "Configuração da IA" (T-1702, ADR-0016 §F, REQ-F-028): estado do
- * runtime embarcado, catálogo curado de modelos GGUF com download gerenciado
- * (a ÚNICA exceção de rede do app, REQ-NF-007 — só por clique explícito) e
- * apontamento de um `.gguf` já presente no disco. Nenhum cálculo acontece
- * aqui: tudo vem pronto do sidecar (REQ-NF-005). */
+/** Tela "Configuração da IA" (T-1702, ADR-0016 §F, REQ-F-028; ajustes
+ * avançados e painel do último boot no T-2503, ADR-0022): estado do runtime
+ * embarcado, catálogo curado de modelos GGUF com download gerenciado (a
+ * ÚNICA exceção de rede do app, REQ-NF-007 — só por clique explícito),
+ * apontamento de um `.gguf` já presente no disco, contexto/uso de GPU e
+ * diagnóstico do último boot. Nenhum cálculo acontece aqui: tudo vem pronto
+ * do sidecar (REQ-NF-005) — inclusive a regra da dica de contexto. */
 
 function bytesLegiveis(n: number): string {
   if (n <= 0) return '0 MB'
@@ -35,11 +42,123 @@ function buscarLlm(): Promise<{ status: LlmStatusOut; catalogo: CatalogoItemOut[
   }))
 }
 
+// --- Ajustes avançados (T-2503, ADR-0022) -------------------------------------
+
+const DEGRAUS_CONTEXTO = [
+  { valor: 2048, custo: 'Menor memória, análises mais curtas' },
+  { valor: 4096, custo: 'Equilíbrio — validado como padrão' },
+  { valor: 8192, custo: 'Mais memória de vídeo/RAM, análises mais longas' },
+] as const
+
+/** Tradução em linguagem clara do motivo TIPADO devolvido pelo backend — a
+ * mesma classificação de `runtime_llm._TEXTO_MOTIVO_FALHA`, mantida aqui só
+ * como rótulo de exibição (nenhuma decisão nova, REQ-NF-005). */
+function textoMotivoFalha(motivo: string | null): string {
+  if (motivo === 'GPU_SEM_MEMORIA') {
+    return 'a GPU não tinha memória de vídeo suficiente para o modelo'
+  }
+  if (motivo === 'GPU_FIT_ABORTADO') {
+    return 'o ajuste automático de camadas na GPU não conseguiu concluir'
+  }
+  if (motivo === 'GENERICO') {
+    return 'a inicialização na GPU falhou por um motivo não identificado'
+  }
+  return ''
+}
+
+function formatarBytes(n: number | null): string | null {
+  if (n === null) return null
+  return bytesLegiveis(n)
+}
+
+type ModoOffloadTela = 'auto' | 'cpu' | 'camadas'
+
+function modoDoValor(v: string | number): ModoOffloadTela {
+  if (v === 'auto') return 'auto'
+  if (v === 'cpu') return 'cpu'
+  return 'camadas'
+}
+
 export default function ConfiguracaoIa() {
   const [status, setStatus] = useState<LlmStatusOut | null>(null)
   const [catalogo, setCatalogo] = useState<CatalogoItemOut[]>([])
   const [erro, setErro] = useState('')
   const [ocupado, setOcupado] = useState<string | null>(null) // id do item em ação
+
+  // Ajustes avançados + painel do último boot (T-2503, ADR-0022): estado
+  // próprio, independente do catálogo — a tela pode mostrar um sem o outro.
+  const [cfg, setCfg] = useState<ConfigLLMOut | null>(null)
+  const [erroCfg, setErroCfg] = useState('')
+  const [ctxSelecionado, setCtxSelecionado] = useState<2048 | 4096 | 8192>(4096)
+  const [modoOffload, setModoOffload] = useState<ModoOffloadTela>('auto')
+  const [camadasTexto, setCamadasTexto] = useState('')
+  const [salvandoCfg, setSalvandoCfg] = useState(false)
+  const [toastCfg, setToastCfg] = useState('')
+
+  // Hidrata os seletores com a config efetiva do backend (nunca inventa um
+  // valor default próprio — reflete o que `GET /llm/config` devolveu).
+  function hidratarSelecoes(c: ConfigLLMOut) {
+    setCtxSelecionado(c.config.ctx_size as 2048 | 4096 | 8192)
+    const modo = modoDoValor(c.config.gpu_offload)
+    setModoOffload(modo)
+    setCamadasTexto(modo === 'camadas' ? String(c.config.gpu_offload) : '')
+  }
+
+  useEffect(() => {
+    let ativo = true
+    hf.llmConfig()
+      .then((c) => {
+        if (!ativo) return
+        setCfg(c)
+        hidratarSelecoes(c)
+        setErroCfg('')
+      })
+      .catch((e: unknown) => {
+        if (ativo) {
+          setErroCfg(
+            e instanceof HfErro ? e.message : 'Não foi possível consultar a configuração da IA.',
+          )
+        }
+      })
+    return () => {
+      ativo = false
+    }
+  }, [])
+
+  const origemEnv = cfg?.config.ctx_size_origem === 'env'
+
+  async function salvarCfg() {
+    if (!cfg) return
+    setSalvandoCfg(true)
+    setErroCfg('')
+    try {
+      const patch: ConfigLLMIn = {}
+      if (ctxSelecionado !== cfg.config.ctx_size) patch.ctx_size = ctxSelecionado
+      const gpuAtual: 'auto' | 'cpu' | number =
+        modoOffload === 'camadas' ? Number(camadasTexto) : modoOffload
+      if (gpuAtual !== cfg.config.gpu_offload) patch.gpu_offload = gpuAtual
+      const novo = await hf.llmConfigSalvar(patch)
+      setCfg(novo)
+      hidratarSelecoes(novo)
+      setToastCfg('Salvo — vale a partir da próxima análise.')
+    } catch (e) {
+      setErroCfg(e instanceof HfErro ? e.message : 'Não foi possível salvar a configuração.')
+    } finally {
+      setSalvandoCfg(false)
+    }
+  }
+
+  function aplicarSugestao() {
+    if (cfg?.dica_ctx_sugerido) {
+      setCtxSelecionado(cfg.dica_ctx_sugerido as 2048 | 4096 | 8192)
+    }
+  }
+
+  useEffect(() => {
+    if (!toastCfg) return
+    const timer = setTimeout(() => setToastCfg(''), 4000)
+    return () => clearTimeout(timer)
+  }, [toastCfg])
 
   useEffect(() => {
     let ativo = true
@@ -175,6 +294,134 @@ export default function ConfiguracaoIa() {
       </section>
 
       {!status?.servidor_usuario && (
+        <>
+          {erroCfg && <div className="aviso-erro">{erroCfg}</div>}
+
+          <section className="card">
+            <div className="card-titulo">Ajustes avançados</div>
+            {!cfg ? (
+              <p className="sub">Consultando…</p>
+            ) : (
+              <>
+                {origemEnv && (
+                  <div className="cfgia-aviso-env">
+                    A variável <code>HF_LLAMA_FLAGS</code> está definida e sobrepõe estes
+                    ajustes — os controles abaixo ficam desabilitados porque salvar aqui
+                    não teria efeito enquanto ela existir.
+                  </div>
+                )}
+
+                {cfg.dica && (
+                  <div className="cfgia-dica">
+                    <span>{cfg.dica}</span>
+                    {cfg.dica_ctx_sugerido && (
+                      <button
+                        className="btn-secundario"
+                        disabled={origemEnv}
+                        onClick={aplicarSugestao}
+                      >
+                        Aplicar sugestão
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="cfgia-campo-avancado">
+                  <div className="cfgia-campo-rotulo">Contexto</div>
+                  <div className="cfgia-degraus">
+                    {DEGRAUS_CONTEXTO.map((d) => (
+                      <button
+                        key={d.valor}
+                        className={
+                          ctxSelecionado === d.valor
+                            ? 'cfgia-degrau on'
+                            : 'cfgia-degrau'
+                        }
+                        disabled={origemEnv}
+                        onClick={() => setCtxSelecionado(d.valor)}
+                      >
+                        <span className="cfgia-degrau-valor">{d.valor}</span>
+                        <span className="cfgia-degrau-custo">{d.custo}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="cfgia-campo-avancado">
+                  <div className="cfgia-campo-rotulo">Uso da GPU</div>
+                  <div className="cfgia-degraus">
+                    <button
+                      className={modoOffload === 'auto' ? 'cfgia-degrau on' : 'cfgia-degrau'}
+                      disabled={origemEnv}
+                      onClick={() => setModoOffload('auto')}
+                    >
+                      <span className="cfgia-degrau-valor">Auto</span>
+                      <span className="cfgia-degrau-custo">Recomendado</span>
+                    </button>
+                    <button
+                      className={modoOffload === 'cpu' ? 'cfgia-degrau on' : 'cfgia-degrau'}
+                      disabled={origemEnv}
+                      onClick={() => setModoOffload('cpu')}
+                    >
+                      <span className="cfgia-degrau-valor">Só CPU</span>
+                      <span className="cfgia-degrau-custo">Sem usar a GPU</span>
+                    </button>
+                    <button
+                      className={
+                        modoOffload === 'camadas' ? 'cfgia-degrau on' : 'cfgia-degrau'
+                      }
+                      disabled={origemEnv}
+                      onClick={() => setModoOffload('camadas')}
+                    >
+                      <span className="cfgia-degrau-valor">Fixar camadas</span>
+                      <span className="cfgia-degrau-custo">Escolha o número abaixo</span>
+                    </button>
+                  </div>
+                  {modoOffload === 'camadas' && (
+                    <input
+                      className="cfgia-camadas-input"
+                      type="number"
+                      min={1}
+                      max={999}
+                      placeholder="Nº de camadas (1–999)"
+                      value={camadasTexto}
+                      disabled={origemEnv}
+                      onChange={(e) => setCamadasTexto(e.target.value)}
+                    />
+                  )}
+                </div>
+
+                <div className="cfgia-salvar-linha">
+                  <button
+                    className="btn-add"
+                    disabled={
+                      origemEnv ||
+                      salvandoCfg ||
+                      (modoOffload === 'camadas' &&
+                        (!camadasTexto || Number(camadasTexto) < 1 || Number(camadasTexto) > 999))
+                    }
+                    onClick={() => void salvarCfg()}
+                  >
+                    {salvandoCfg ? 'Salvando…' : 'Salvar'}
+                  </button>
+                  {toastCfg && <span className="cfgia-toast">{toastCfg}</span>}
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className="card">
+            <div className="card-titulo">Último boot da IA</div>
+            {!cfg ? (
+              <p className="sub">Consultando…</p>
+            ) : (
+              <PainelBoot cfg={cfg} />
+            )}
+          </section>
+        </>
+      )}
+
+      {!status?.servidor_usuario && (
         <section className="card">
           <div className="card-titulo">Catálogo de modelos</div>
           <p className="sub-secao">
@@ -266,5 +513,83 @@ export default function ConfiguracaoIa() {
         </section>
       )}
     </>
+  )
+}
+
+/** Painel "Último boot da IA" (T-2503, ADR-0022): badge de modo + métricas do
+ * boot, todas prontas do backend (`GET /llm/config`) — a tela só formata
+ * bytes/rotula o motivo tipado, nunca decide o modo ou a falha.
+ *
+ * Achado de UX (docs/TASKS.md, T-2503): `motivo_fallback` é a FALHA
+ * CLASSIFICADA do último boot, não necessariamente "a GPU falhou" — um boot
+ * CPU puro que morre por falta de memória também ganha `GPU_SEM_MEMORIA`
+ * (o classificador olha o stderr, não a config pedida). Por isso o texto
+ * nunca afirma "a GPU falhou": fala em "falha classificada do último boot". */
+function PainelBoot({ cfg }: { cfg: ConfigLLMOut }) {
+  const { boot_info: boot } = cfg
+  const m = boot.metricas
+
+  if (boot.modo === 'nunca_subiu') {
+    return (
+      <div className="cfgia-boot">
+        <p className="sub">A IA ainda não foi iniciada nesta sessão.</p>
+        {boot.motivo_fallback && (
+          <p className="sub cfgia-boot-motivo">
+            A última tentativa de inicialização não subiu. Falha classificada do
+            último boot: {textoMotivoFalha(boot.motivo_fallback)}.
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const badge =
+    boot.modo === 'gpu'
+      ? { emoji: '🟢', texto: 'GPU', classe: 'cfgia-badge-gpu' }
+      : boot.modo === 'cpu_configurado'
+        ? { emoji: '🔵', texto: 'CPU (configurado)', classe: 'cfgia-badge-cpu' }
+        : { emoji: '🟠', texto: 'CPU por falha na GPU', classe: 'cfgia-badge-fallback' }
+
+  const vramAlocada = formatarBytes(m.vram_bytes)
+
+  return (
+    <div className="cfgia-boot">
+      <span className={`cfgia-badge ${badge.classe}`}>
+        {badge.emoji} {badge.texto}
+      </span>
+      {boot.modo === 'cpu_fallback' && boot.motivo_fallback && (
+        <p className="sub cfgia-boot-motivo">
+          Falha classificada do último boot: {textoMotivoFalha(boot.motivo_fallback)}.
+        </p>
+      )}
+      <div className="cfgia-boot-lista">
+        {m.dispositivo !== null && (
+          <div className="cfgia-boot-item">
+            <div className="cfgia-boot-item-rotulo">Dispositivo</div>
+            <div className="cfgia-boot-item-valor">{m.dispositivo}</div>
+          </div>
+        )}
+        {m.camadas_offload !== null && m.camadas_total !== null && (
+          <div className="cfgia-boot-item">
+            <div className="cfgia-boot-item-rotulo">Camadas na GPU</div>
+            <div className="cfgia-boot-item-valor">
+              {m.camadas_offload} de {m.camadas_total}
+            </div>
+          </div>
+        )}
+        {vramAlocada !== null && (
+          <div className="cfgia-boot-item">
+            <div className="cfgia-boot-item-rotulo">VRAM alocada</div>
+            <div className="cfgia-boot-item-valor">{vramAlocada}</div>
+          </div>
+        )}
+        {m.ctx_efetivo !== null && (
+          <div className="cfgia-boot-item">
+            <div className="cfgia-boot-item-rotulo">Contexto efetivo</div>
+            <div className="cfgia-boot-item-valor">{m.ctx_efetivo}</div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
