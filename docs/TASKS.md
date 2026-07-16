@@ -412,7 +412,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 
 | ID | Task | Alvo | Depende | Status |
 |----|------|-----|---------|--------|
-| T-2501 | Runtime: `_FLAGS_PADRAO` → auto-fit, `_CTX_PADRAO` → 4096; resolução `env > llm.json > default` (`ctx_size`, `gpu_offload`); captura de stderr (thread + ring buffer ~200 linhas) com classificador de motivos (`GPU_SEM_MEMORIA`, `GPU_FIT_ABORTADO`, `GENERICO`) e métricas do boot; retry único em CPU puro com `boot_info` consultável (Opus) | Bug de campo / P8 | ADR-0022 | ⬜ |
+| T-2501 | Runtime: `_FLAGS_PADRAO` → auto-fit, `_CTX_PADRAO` → 4096; resolução `env > llm.json > default` (`ctx_size`, `gpu_offload`); captura de stderr (thread + ring buffer ~200 linhas) com classificador de motivos (`GPU_SEM_MEMORIA`, `GPU_FIT_ABORTADO`, `GENERICO`) e métricas do boot; retry único em CPU puro com `boot_info` consultável (Opus) | Bug de campo / P8 | ADR-0022 | ✅ |
 | T-2502 | Contratos + endpoints: `GET /llm/config` (config efetiva + origens, `boot_info`, `dica` pela regra única no backend) e `PUT /llm/config` (valida, persiste no `llm.json`, encerra o runtime); `aviso_runtime` aditivo na resposta da análise sênior; Pydantic em `contracts/schemas.py` (Sonnet) | REQ-NF-005 | T-2501 | ⬜ |
 | T-2503 | GUI: seção "Ajustes avançados" (contexto 3 degraus + GPU Auto/CPU/camadas; desabilitados com `HF_LLAMA_FLAGS` ativa) + painel "Último boot da IA" (badge de modo, motivo, camadas, VRAM, contexto) + callout da dica com "Aplicar sugestão" + banner âmbar do `aviso_runtime` na análise; E2E Playwright dos estados (Sonnet) | REQ-F (GUI) | T-2502 | ⬜ |
 | T-2504 | Fechamento: gates + CI remoto verde + auditoria de deps (§5) + rebuild oficial 2.14.0 + smokes (§E.4) + aceitação de campo (análise sênior com o default novo na máquina do mantenedor, env removida) + ata `FREEZE.md` v2.14.0 (orquestrador) | Processo | todas | ⬜ |
@@ -495,8 +495,29 @@ do mantenedor e o 2.5.0 real desinstalado com cofre preservado); fase 2
 preparada (licença MIT, política no README, `release.yml` ensaiado com a
 tag `v2.13.0-rc` e a submissão SignPath atrás de flag). **Auditoria da v2.9
 ZERADA.** Ativação da fase 2 quando o SignPath aprovar = ligar
-`SIGNPATH_ATIVO` + secrets (hotfix com registro em ata). Próximo ciclo: a
-definir (começa por ADR).
+`SIGNPATH_ATIVO` + secrets (hotfix com registro em ata). **Ciclo v2.14
+ABERTO (ADR-0022, M25, 2026-07-15):** runtime LLM resiliente e configurável
+— fix do primeiro bug de produto pego em campo (`-ngl 99` × auto-fit do
+b9966).
+
+**Candidato ao ciclo v2.15 (registrado 2026-07-16, pesquisa do
+orquestrador): backends plugáveis do llama.cpp.** O ggml carrega backends
+dinamicamente (`GGML_BACKEND_DL`; os zips oficiais do Windows já vêm com
+uma DLL por backend — `ggml-vulkan.dll`, `ggml-cuda.dll`, `ggml-cpu-*.dll` —
+que o `llama-server` descobre na pasta em runtime). Proposta: verificador
+de hardware na tela de ajustes (`nvidia-smi --query-gpu=name,compute_cap,
+driver_version,memory.total` — vem com o driver, sem CUDA Toolkit; fallback
+WMI `Win32_VideoController` p/ AMD/Intel) que propõe o módulo ótimo e
+oferece **download opcional** do backend CUDA (`ggml-cuda.dll` + cudart
+~373 MB, hash travado como no `preparar_llama.py`), mantendo **Vulkan como
+default universal** (zero runtime extra). Elegibilidade CUDA 12.4: driver
+NVIDIA ≥ 551.61, compute capability suportada (GTX 1650/Turing sm_75 ok).
+**Pré-requisito obrigatório — fase 0** (disciplina do PaddleOCR-VL): medir
+`llama-bench` Vulkan vs CUDA no hardware-alvo ANTES de investir; evidência
+da pesquisa indica CUDA >> Vulkan em prompt processing mas empate em
+geração, e ganho marginal quando o offload é parcial (na GTX 1650 4 GB o
+auto-fit offloadou 5/33 camadas — o gargalo é VRAM, não backend). Ganho
+medido < 15% ⇒ arquivar com evidência.
 
 ### Histórico do ciclo v2.8 (fechado)
 
