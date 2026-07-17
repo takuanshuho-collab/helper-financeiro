@@ -418,6 +418,27 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-2505 | Fallback de gramática no `OpenAICompatProvider`: `json_schema` estrito recusado pelo `llama-server` com 400 de gramática ("Failed to initialize samplers"/"empty grammar stack" — bug do llama.cpp com o tokenizer do phi-3.5, achado da aceitação de campo de 2026-07-16, presente até o b10043) ⇒ reenvia UMA vez com `json_object` + schema injetado no prompt; validação segue 100% Pydantic + retry-correção + P8 (REQ-LLM-002 intacto) (Opus) | Aceitação de campo | T-2501 | ✅ |
 | T-2504 | Fechamento: gates + CI remoto verde + auditoria de deps (§5) + rebuild oficial 2.14.0 + smokes (§E.4) + aceitação de campo (análise sênior com o default novo na máquina do mantenedor, env removida) + ata `FREEZE.md` v2.14.0 (orquestrador) | Processo | todas | ✅ |
 
+## Milestone M26 — Checkpoint durável, persistência visível e progresso SSE (ciclo v2.15, ADR-0023)
+
+> Absorve, **no desktop**, os itens de valor real do documento externo
+> "Melhorias de App com LLM" (síntese em
+> `docs/RELATORIO-NOVA-VERSAO-STACK-WEB.md`; blueprint SaaS futuro em
+> `docs/PROJETO-SAAS-SERVER-EDITION.md`). Três frentes: **checkpoint durável**
+> do grafo dentro do cofre (resiliência a falha parcial — honesto que crash no
+> meio do LLM refaz o `gerar`), **persistência visível** da última análise
+> (reabrir e ver a de ontem sem pagar 2–4 min de novo) e **progresso em tempo
+> real por SSE** (fases + contador de tokens; conteúdo NUNCA exibido —
+> guardrails/desanonimização só no fim). Design, Decision Log e **revisão
+> multi-agente** (disposição REVISE, 15/17 objeções aplicadas) na **ADR-0023**.
+
+| ID | Task | Alvo | Depende | Status |
+|----|------|-----|---------|--------|
+| T-2601 | Checkpoint durável no cofre: `SqliteSaver` sobre a conexão SQLCipher (**spike dia 1** — `sqlcipher3`×`conn`, concorrência com o auto-save do repo, WAL+`busy_timeout`, escrita **não-fatal**, **plano C = `InMemorySaver`**; nunca falha a análise); `thread_id`=assinatura SHA-256 dos fatos; toggle "retomar análises interrompidas" em `llm.json` **default ligado** (ADR-0006) com ajuda de contexto; higiene (apaga no sucesso, máx 1 inacabado/grafo, retomada só de inacabado, precedência dos 3 mecanismos); **teste anti-PII do checkpoint INTEIRO por super-step incl. pós-`gerar` pré-`sanear`**; cobre os 2 grafos (Opus) | ADR-0006 / REQ-SEC-001/003 | ADR-0023 | ⬜ |
+| T-2602 | Persistência visível da última análise: tabela nova no cofre (assinatura + `SecaoIA` desanonimizada + modelo + carimbo, só a última/upsert); `GET /analise/ultima` (`analise_salva` + `assinatura_atual`, GUI só compara strings — REQ-NF-005); ordem persistir-ANTES-de-apagar-checkpoint; UX carimbo/selo âmbar "dados mudaram"; auto-lock esconde; `.docx` herda de graça (Sonnet) | `docs/RELATORIO-PERSISTENCIA-ANALISE.md` | T-2601 | ⬜ |
+| T-2603 | SSE núcleo: provider `stream=true` + contador com **throttle (≥200 ms/≥16 tokens)** via `on_progress` opcional (**spike dia 1** — 3 degraus do T-2505 sobrevivem ao stream; ordem 400-antes-token no build embarcado; degrada p/ POST único); nó `gerar` passa `StreamWriter`; job troca `ainvoke` por `astream(stream_mode=["updates","custom"])` (**expurgo T-1904 preservado — teste OBRIGATÓRIO**); `GET /analise/ia/{job_id}/eventos` (fase/progresso/terminal/erro; rótulos human-friendly SEM expor retry como falha — "refinando a resposta"; heartbeat 15 s; token no header; **fecha no auto-lock**; polling continua fallback) (Opus) | REQ-NF-005 / T-2505 / T-1904 | T-2601 | ⬜ |
+| T-2604 | GUI linha do tempo: consumo SSE via fetch streaming; fases (pulsando/✓) + "escrevendo… N tokens"; **retomada explicada** em linguagem clara; **queda→polling gracioso sem erro na tela**; integra T-2602 na mesma aba (abrir→`/analise/ultima`; Gerar→`/analise/ia`+SSE); E2E stream mockado (fases/contador/retomada/queda→polling/aviso) (Sonnet) | REQ-F (GUI) | T-2603 | ⬜ |
+| T-2605 | Fechamento: gates + CI remoto verde + auditoria de deps (§5; `langgraph-checkpoint-sqlite` casa com `langgraph 1.2.9` sem upgrade forçado, goldens sentinela) + rebuild oficial 2.15.0 + smokes (§E.4, incl. órfão) + **aceitação de campo quádrupla** (retoma entre nós; reabrir hidrata; linha do tempo — mantenedor julga contador vs pulso, fases-puras é recuo; T-2505 em streaming 4/4) + ata `FREEZE.md` v2.15.0 (orquestrador) | Processo | todas | ⬜ |
+
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
 harness cobrindo o REQ; (3) o teste passa offline; (4) nenhum guardrail é
@@ -546,6 +567,23 @@ biblioteca (o `RuntimeLLM`/provider mudam de forma), maturidade do
 DirectML vs Vulkan no hardware-alvo. Fase 0 obrigatória: mesmo protocolo
 do PaddleOCR-VL (medir qualidade/latência/VRAM com o phi-3.5 ONNX real na
 GTX 1650 ANTES de investir).
+
+**Ciclo v2.15 ABERTO (ADR-0023, M26, 2026-07-17) — checkpoint durável,
+persistência visível e progresso SSE.** Desenhado via `/brainstorming` +
+`/multi-agent-brainstorming` (disposição REVISE: 15/17 objeções aceitas e
+aplicadas na ADR antes do lançamento; S1/S6 rejeitadas por pressionarem
+decisões travadas sem causa nova). Absorve, **no desktop**, os itens de valor
+real do documento externo "Melhorias de App com LLM" (síntese em
+`docs/RELATORIO-NOVA-VERSAO-STACK-WEB.md` — a maioria já estava implementada;
+Java+MySQL rejeitados a favor de manter FastAPI; blueprint SaaS futuro em
+`docs/PROJETO-SAAS-SERVER-EDITION.md`). M26 = T-2601 checkpoint durável no
+cofre (Opus) + T-2602 persistência visível (Sonnet) + T-2603 SSE núcleo
+provider/job (Opus) + T-2604 GUI linha do tempo (Sonnet) + T-2605 fechamento.
+Risco concentrado em dois spikes do dia 1 (SqliteSaver×SQLCipher/concorrência;
+streaming×fallbacks do T-2505), cada um com degradação segura definida (plano
+C / POST único) — no pior caso o entregável encolhe, o produto nunca piora.
+**Os dois candidatos anteriores (backends plugáveis do llama.cpp, ONNX Runtime
+GenAI) seguem registrados para ciclos futuros** — v2.15 tomou outro rumo.
 
 ### Histórico do ciclo v2.8 (fechado)
 

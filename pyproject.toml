@@ -1,6 +1,6 @@
 [project]
 name = "helper-financeiro"
-version = "2.14.0"
+version = "2.15.0"
 description = "Diagnóstico de dívidas com estratégias de quitação, saídas em xlsx/docx e agente financeiro (LLM) sob guardrails"
 readme = "README.md"
 requires-python = ">=3.12"
