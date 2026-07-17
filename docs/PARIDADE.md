@@ -90,6 +90,7 @@ Legenda: ✅ paridade plena · ✨ web supera o tkinter · Δ mudou de lugar (se
 | Comprovante/extrato escaneado → importação (OCR local → mesmos grupos/revisão do CSV) (v2.7, ADR-0015) | Planilha, seção "Importar extrato (CSV ou imagem)" | ✨ | E2E "importação por OCR" + `tests/test_extrato.py::test_ler_extrato_ocr_*` + `test_importar_ocr_*` |
 | Cofre: onboarding forçado (senha → QR TOTP → códigos de recuperação → 1º login), desbloqueio com 401 genérico + contador 429, recuperação por código de uso único, overlay de auto-lock (v2.8, ADR-0016) | `Onboarding.tsx` / `Desbloqueio.tsx` / gate no `App.tsx` | ✨ | E2E "cofre" (`cofre.spec.ts`) + `tests/test_auth.py` + `tests/test_sessao.py` |
 | Configuração da IA: catálogo curado com download verificado (progresso/cancelar/retomada), apontar `.gguf` local, status do runtime embarcado (v2.8, ADR-0016) | 7ª aba (`ConfiguracaoIa.tsx`) | ✨ | E2E "configuração da IA" + `tests/test_gestor_modelos.py` + `tests/test_sidecar_llm.py` |
+| Ajustes avançados do runtime (contexto 3 degraus + GPU Auto/CPU/camadas), painel "Último boot da IA", dica de contexto com "Aplicar sugestão" e banner do `aviso_runtime` na Análise (v2.14, ADR-0022) | 7ª aba (`ConfiguracaoIa.tsx`) + `Analise.tsx` | ✨ | E2E `configuracao-ia-runtime.spec.ts` (4 cenários) + `tests/test_runtime_llm.py` + `tests/test_sidecar_llm.py` |
 
 ## Limitações conhecidas do E2E
 

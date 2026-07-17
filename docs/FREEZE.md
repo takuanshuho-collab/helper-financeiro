@@ -1,80 +1,68 @@
-# FREEZE — Ata de Congelamento v2.13.0
+# FREEZE — Ata de Congelamento v2.14.0
 
-- **Data:** 2026-07-15
+- **Data:** 2026-07-17
 - **Versão da Constituição:** 2.0.0
-- **Escopo congelado:** ciclo **v2.13** (ADR-0021): milestone **M24** —
-  **code signing (C-15)**, o último achado aberto da auditoria v2.9, em duas
-  fases. **Fase 1 — provada fim a fim com certificado de teste:**
-  `scripts/preparar_cert_teste.ps1` (cert PowerShell, validade 30 dias, PFX
-  sempre fora do repo, `.gitignore` com `*.pfx`) +
-  `scripts/build_assinado.ps1` (assina o `sidecar-hf.exe` ANTES do
-  empacotamento — o electron-builder não assina extraResources — e roda o
-  `npm run dist` com overrides `-c.win.signtoolOptions.*` lidos de envs
-  `HF_CSC_*`; **sem as envs o build é byte-idêntico ao atual**, inércia
-  provada). O smoke de auto-update ganhou o **degrau final**: com o cert
-  confiado (portão MANUAL do mantenedor, executado neste fechamento) e o
-  Helper Financeiro 2.5.0 real desinstalado (escolha A do mantenedor; cofre
-  em `%APPDATA%` preservado e verificado antes/depois —
-  `deleteAppDataOnUninstall: false`), a rodada completa provou:
-  `update-available` → download → **verificação de assinatura pelo updater
-  real** (`publisherName` no `app-update.yml`; `Get-AuthenticodeSignature`
-  Valid + CN conferido) → **instalação NSIS silenciosa do 99.0.0** →
-  asserção no registro → **desinstalação e limpeza verificadas** (5/5
-  cenários passed). **Verificação negativa** (pacote NÃO assinado é
-  recusado com `is not signed by the application owner`) roda sempre, sem
-  confiança. Salvaguardas permanentes: o cenário de instalação aborta se o
-  app real estiver instalado; duplo gating (`HF_E2E_PACOTE=1` +
-  `HF_E2E_UPDATE_INSTALL=1`); poll T-1907 no registro (o NSIS retorna antes
-  de concluir — corrida pega e corrigida na rodada real deste fechamento,
-  junto com a projeção camelCase do JSON PowerShell→TS). **Fase 2 — caminho
-  SignPath Foundation preparado e desligado:** licença **MIT** (bloqueador
-  de elegibilidade resolvido — o repo era público sem licença), política de
-  assinatura de código no README (atribuição exigida pelo programa; o
-  publisher das releases assinadas será **"SignPath Foundation"**),
-  e `.github/workflows/release.yml` — build verificável por tag `v*` em
-  `windows-latest` (gates → preparadores → PyInstaller → NSIS → **draft**
-  de Release; nada publica sozinho), com a submissão ao SignPath atrás da
-  Repository Variable **`SIGNPATH_ATIVO`** (desligada até a aprovação da
-  inscrição; segredos nomeados e documentados no YAML; escada do sidecar
-  embarcado registrada). **Ensaio executado:** tag `v2.13.0-rc` → workflow
-  verde → draft com instalador 2.13.0 + blockmap + latest.yml → tag e draft
-  do ensaio apagados. Única mudança de comportamento de produto: nenhuma
-  (scripts e testes; o `main.ts` não foi tocado neste ciclo).
+- **Escopo congelado:** ciclo **v2.14** (ADR-0022): milestone **M25** —
+  **runtime LLM resiliente e configurável**, aberto pelo **primeiro bug de
+  produto pego em campo** (2026-07-15): o default `-ngl 99` crashava o
+  `llama-server` b9966 Vulkan com `ErrorOutOfDeviceMemory` na GPU-alvo
+  (GTX 1650 4 GB) — o auto-fit do llama.cpp ABORTA quando `-ngl` é
+  explícito. **T-2501**: default novo = auto-fit (sem `-ngl`) + contexto
+  4096; resolução `env HF_LLAMA_FLAGS > llm.json (ctx_size/gpu_offload) >
+  default`; captura de stderr em ring buffer (400 linhas, SÓ memória —
+  REQ-SEC-001) com classificador de motivos (`GPU_SEM_MEMORIA` >
+  `GPU_FIT_ABORTADO` > `GENERICO`, fixtures REAIS de campo) e métricas do
+  boot (`-lv 4` no argv; VRAM ancorada em `Vulkan\d+`, última ocorrência;
+  dispositivo via `--list-devices` cacheado); **retentativa única em CPU
+  puro** com `boot_info` consultável. **T-2502**: `GET/PUT /llm/config`
+  (valores efetivos + origem `padrao|tela|env`; PUT valida no contrato,
+  persiste atômico e encerra o runtime; 422 sem tocar o disco), regra
+  ÚNICA da dica de contexto no backend (escada 8192→4096→2048; não
+  disparada para quem ESCOLHEU CPU puro — achado da revisão) e
+  `aviso_runtime` aditivo na análise servida por boot `cpu_fallback`.
+  **T-2503**: GUI — "Ajustes avançados" (contexto 3 degraus + GPU
+  Auto/CPU/camadas; desabilitados com aviso quando a origem é `env`),
+  painel "Último boot da IA" (badge, dispositivo, camadas, VRAM, contexto;
+  em `nunca_subiu` o texto fala em *falha classificada*, nunca "a GPU
+  falhou" — achado do mock E2E), callout da dica com "Aplicar sugestão"
+  (só pré-seleciona) e banner âmbar do `aviso_runtime`; ponte Electron com
+  verbo HTTP explícito (PUT); 4 cenários E2E novos, incluindo boot REAL
+  com fallback via llama-server fake. **T-2505 (adicionada no fechamento,
+  aval do mantenedor)**: a aceitação de campo revelou um SEGUNDO bug,
+  mascarado pelo primeiro — o llama.cpp (b9966 E b10043; com e sem
+  `--jinja`) recusa com HTTP 400 a gramática do `json_schema` estrito para
+  o tokenizer do phi-3.5 ("Unexpected empty grammar stack after accepting
+  piece: | (29989)"; issues #12597/#21017/#23677). Correção em três
+  degraus no `OpenAICompatProvider`, todos MEDIDOS no host real:
+  (1) fallback único `json_object` + schema injetado no prompt (memoizado
+  por instância); (2) temperatura 0 só nesse caminho (0.2 ⇒ 1/3 das
+  análises validava; 0.0 ⇒ 4/4); (3) conserto dirigido — JSON inválido
+  volta ao modelo UMA vez com os erros nomeados do Pydantic. A imposição
+  do contrato segue 100% Pydantic + retry-correção + P8 (REQ-LLM-002).
+  Validação final: **4/4 perfis variados em modo completo** pelo grafo
+  inteiro no hardware real, e **aceitação de campo dupla** (dados
+  alterados entre as análises) confirmada pelo mantenedor em 2026-07-17.
 - **Auditoria de dependências deste fechamento (regra ADR-0018 §5):**
-  `npm audit` = **0**; `pip-audit` = **0** (com `uv sync --group build`
-  antes, regra registrada na ata v2.12.1); Electron **43.1.1 = atual**.
-  Nenhum risco aceito pendente. **CI remoto (regra ADR-0020 hotfix):**
-  verde em todos os commits do ciclo, conferido antes desta ata.
-- **Build/pacote:** **sem rebuild oficial** (decisão da ADR-0021): a
-  assinatura de teste não vai a público (publisher fake não melhora nada
-  para o usuário) e sem as envs `HF_CSC_*` a config é inerte. Os binários
-  publicados seguem os da ata v2.12.1 (build 2.12.0: instalador
-  `bb1c899e…`, sidecar `69745b90…`); **eles não contêm o código v2.13**
-  (que é só harness/scripts/workflow — nada de produto). A primeira release
-  assinada de verdade nascerá do `release.yml` quando o SignPath aprovar.
-- **Higiene do host registrada:** o cert de teste confiado neste fechamento
-  (thumbprint `116B7EF53ADBFF9AB7BB78CB825AB78A927C22EC`, só a parte
-  pública — a chave privada foi destruída antes) deve ser removido de
-  `CurrentUser\Root` e `CurrentUser\TrustedPublisher` após a validação;
-  caduca sozinho em 30 dias se esquecido. O Helper Financeiro 2.5.0 do
-  mantenedor foi desinstalado para o teste (dados preservados) — reinstalar
-  a versão 2.12.0 (última oficial).
-- **Regra:** qualquer alteração nos artefatos abaixo exige nova ADR,
-  incremento de versão e nova ata.
-- **Atas anteriores:** v2.0.0..v2.2.0 (2026-07-04), v2.3.0..v2.5.0
-  (2026-07-07), v2.6.0/v2.7.0 (2026-07-08), v2.8.0 (2026-07-11), v2.9.0 e
-  v2.10.0 (2026-07-13), v2.11.0 (2026-07-14) e v2.12.0/v2.12.1
-  (2026-07-14/15) — substituídas por esta.
+  `npm audit` = **0**; `pip-audit` = **0** (runtime E grupos dev/build);
+  Electron **43.1.1** (mesma janela dos fechamentos v2.12/v2.13). Nenhum
+  risco aceito pendente. **CI remoto (regra ADR-0020 hotfix):** verde em
+  todos os commits do ciclo (conferido a cada push).
+- **Aceitação de campo e higiene do host:** a env de usuário
+  `HF_LLAMA_FLAGS='-c 4096'` (workaround aplicado em 2026-07-15) foi
+  REMOVIDA antes da aceitação; o app 2.14.0 foi instalado na máquina do
+  mantenedor e as análises saíram completas com a config padrão (Auto +
+  4096). Um processo remanescente do "app sob teste" do smoke de
+  auto-update confundiu a primeira rodada de aceitação (renderer antigo) —
+  encerrado pelos PIDs; lição registrada: o `afterAll` do smoke pode
+  vazar o app de teste quando o teardown estoura (flake conhecido).
+- **Fora do escopo versionado:** `docs/RELATORIO-MOCK-E2E-LLM.md` (mock
+  E2E do caminho do usuário, 21/21), `docs/PESQUISA-ONNX-RUNTIME-GENAI.md`
+  (plano B estrutural ao llama.cpp) e
+  `docs/RELATORIO-PERSISTENCIA-ANALISE.md` (proposta de persistir a última
+  análise no cofre) — untracked de propósito, como os do PaddleOCR-VL.
 
-> A lista congelada cobre todo o código de primeira parte (artefatos novos
-> do ciclo: `docs/adr/ADR-0021-ciclo-code-signing.md`, `LICENSE`,
-> `scripts/preparar_cert_teste.ps1`, `scripts/build_assinado.ps1`,
-> `.github/workflows/release.yml` e a extensão do
-> `gui_web/e2e/empacotado-update.spec.ts`) e o harness. `docs/INDEX.md` e
-> este `FREEZE.md` não se auto-hasheiam. Os arquivos
-> `docs/PaddleOCR-VL.en.md`, `docs/paddleocr_vl_sft.md` e
-> `docs/EXPERIMENTO-PADDLEOCR-VL-FASE0.md` permanecem **não versionados** e
-> fora do escopo congelado.
+Qualquer mudança nos artefatos congelados abaixo exige **nova ADR +
+incremento de versão + nova ata**.
 
 ## Checksums SHA-256 dos artefatos
 
@@ -86,12 +74,12 @@
 | `docs/PRD.md` | `7a0d731b4bf65918084da884ed70655afe0fc3d4595d268aa5c5f7c0840d7ff3` |
 | `docs/SPEC.md` | `800dd0b1801494f9a4120735ee0c5214ca913e4cc961ca347873b13f35e3a831` |
 | `docs/PLAN.md` | `e61a988b03683dbd66076924d59384917d59420c5e743d7d9b0f253e0590156f` |
-| `docs/TASKS.md` | `d28233fc5c67980fb516b1723e53385f573b89396a44b29ebe977fde1b1ace3d` |
-| `docs/HARNESS.md` | `a2fc74533c1e33784d337c2bfa8e67a9c84dd3ae8e9070f091bf2d43a8ee5f98` |
+| `docs/TASKS.md` | `69179d047b60388f1ec0853945b331724af626b1de6f6456e4f6fc8e162dddcb` |
+| `docs/HARNESS.md` | `87af9a1986b1531f609a3933c67475a1df3b9a7e8dc67601ad218a80622e0d80` |
 | `docs/AGENT.md` | `742de4d9d5bd1a16768f64bbf4dbcb74a39a5b01fa7d9d1e6995ea6952c0e842` |
 | `docs/REVISAO-SEGURANCA.md` | `ec6923ac3abbe8e4235db73c8b1472558be1336d6d4d6b621b3cb91512ed4a2b` |
 | `docs/SEGURANCA-SHELL.md` | `e59baca3c3023bb318dd231bce712fd6612524794fa9c5054f592ce772c19fd6` |
-| `docs/PARIDADE.md` | `390cc2ef3b473f4e31819f998b81070991e10aa61f13b4ec44834bfdd92ef6de` |
+| `docs/PARIDADE.md` | `5d1672dea293d7ca321fa1a8261ad53d3540ac768459823bd559fde4ad5b60be` |
 | `docs/RELATORIO-AUDITORIA.md` | `b81674da539bf81129c482bc19a564a0dc3847025288e3023f47b7518d7838ad` |
 | `AGENTS.md` | `678a2473998cab86146a1b4b4fd8d6dda40bbc38d4a6d56a3c85d49c52e7e1f0` |
 
@@ -120,13 +108,14 @@
 | `docs/adr/ADR-0019-ciclo-higiene-e-complexidade.md` | `6d389a871ccee5c435616fc00027f5bb2e86e53d5c401f31b85f3c9c7eb03204` |
 | `docs/adr/ADR-0020-ciclo-build-release.md` | `67fa63282e74500c3f598847ba73d30a3e1e6d0eddccb8542ddcb6bcc4046455` |
 | `docs/adr/ADR-0021-ciclo-code-signing.md` | `ca9c643f1aa5b60df5ea69955a7187debd8d1c802c9db1abde4952a191e297d9` |
+| `docs/adr/ADR-0022-ciclo-runtime-llm-configuravel.md` | `ebd5cf7e4f5ae887caac62342d01d5f70f2034e5569028206c82231b7ad6a6de` |
 
 ### Contratos de dados
 
 | Artefato | SHA-256 |
 |---|---|
-| `contracts/__init__.py` | `90b395b50166e4e31b8236aa8f452b9b5b93d0c57013920094bed6fed3ac98b0` |
-| `contracts/schemas.py` | `a6368d864ce25de33afb7c254b6da38b596dabd0ab6f89aa3629478d8513e437` |
+| `contracts/__init__.py` | `45bb5509b0070df695e5fba97b45e7beeaf80ad0f26d968fb2778898924d892c` |
+| `contracts/schemas.py` | `4bce084a717d6f7507453ea1d0eb7c3ecabb7815bbc2dc8fc2ae6d165f86f915` |
 
 ### Núcleo determinístico (core)
 
@@ -158,7 +147,7 @@
 | `agent/ingestao.py` | `5a80bf93dd28b792d39622b8dfb3ba02582b424cb804086a02b19f46430fe3fd` |
 | `agent/ocr.py` | `96c5bf1ded98eb637094ac0faa1225144d2bf41728e287807729baa12311e287` |
 | `agent/prompts.py` | `b3110d726d3abbca1ec97eb984ea7c401119a5861440e2c712d672a2fef49cd3` |
-| `agent/provider.py` | `c0e0b000b8de5d8fc67cee11ef6eb99d39ff780f494b3ad8f1a014fb8e3d2a55` |
+| `agent/provider.py` | `508e15ad047fee2299f8b204f66fb0fae16ad790f540cfac628c99f3b987c9c6` |
 | `agent/telemetria.py` | `508639cfed573988d84f3af75b88b54c37d22e0c5e2bbad5ecece7d464ff5753` |
 
 ### Guardrails
@@ -185,13 +174,13 @@
 |---|---|
 | `sidecar/__init__.py` | `0f55c31161b81aad9355fe5ad58fae8064defe1a7a7cfd238ed17e59073e5aad` |
 | `sidecar/__main__.py` | `7e57e7ff71a25020a25ec5c715fd58f6dafcff633121f6db49d83f14cff7b7c0` |
-| `sidecar/app.py` | `e55541a8fb0ebab0f715a63f530cb3daa87ec0da469e02762809c94076aad5d7` |
+| `sidecar/app.py` | `b739f23ccc61620fcaac73b10e1e191421f91e22d12e146a635749912921bfee` |
 | `sidecar/arquivos.py` | `e15cc431874ae3cb0a076a9b0d1809e281f0b796ebff771bf6409173ef73fe82` |
 | `sidecar/auth.py` | `26431b0a512199853cda420de97e67573b11fdfb9a55ca608fe52e404462a3e0` |
-| `sidecar/gestor_modelos.py` | `2e0f18d2cccac1734fbbf20e6667408de3bbfc6108566afe0a3fb9365f82caf0` |
+| `sidecar/gestor_modelos.py` | `fa7c05fad1909a254d11671197578d1679579cb84f84a54194bde9fbd8933d93` |
 | `sidecar/job_windows.py` | `5dc3f805f35cfcbc1b81357f4f0e1ca2830021c168f74fa31d55d56ef8436f95` |
 | `sidecar/persistencia.py` | `e68353677a06c7105e68137920da527df95548d2d5f3f366114adfeea7ca871a` |
-| `sidecar/runtime_llm.py` | `a3375b950aa72ff1e5a41dfa6f24f882d1ceff9b4779977917d1317c287a2149` |
+| `sidecar/runtime_llm.py` | `685b7824709472f1dc0f9a9625b197243b1b9d20d03efc67fb30bfe89f81fbe3` |
 | `sidecar/schemas.py` | `27bad92e479fa80877ddd9364dd1d9496cc6c568916a661b7a10d6231e79464b` |
 | `sidecar/security.py` | `1a6396f0e09140f6e0a599613071cb80ffe0508fc0c223241d1046993d68081b` |
 | `sidecar/sessao.py` | `994c8a0c7f56bbbf06c7924aac566189ec88865d4cb53b5d7739861644dd90e2` |
@@ -210,33 +199,35 @@
 | `gui_web/e2e/app.spec.ts` | `f578df02871759e23302145a316eeca956d29d865e18861932d2ece2fd4d0187` |
 | `gui_web/e2e/cofre-helpers.ts` | `765a7a6605d7b0105da9a53b390afa0d11bb5c8ebe6be82060c9d27ea6a5607e` |
 | `gui_web/e2e/cofre.spec.ts` | `2a499871e441b4a7069e5747d4fc634d0f6a2a81f214708b5bc46631ae367896` |
+| `gui_web/e2e/configuracao-ia-runtime.spec.ts` | `793e82d49cec26cb7d65b3bd60efaa58f1aff26dcbc0ac537d156971f518472b` |
 | `gui_web/e2e/configuracao-ia.spec.ts` | `bef5560ca0e2ec9e0ffdcf5b4218edfd161a93a1d5b9142fccef9bf30f4240c0` |
 | `gui_web/e2e/empacotado-llm.spec.ts` | `634e91e333a4c37269c17ec98baa61dcd4878097650565044eb694c8b54cd93d` |
 | `gui_web/e2e/empacotado-update.spec.ts` | `e60678e3a21499519b180b31b6a006827a886316e4470fc7a2f9900ce0b92e7a` |
 | `gui_web/e2e/empacotado.spec.ts` | `829dbd5b9092859c8c97ea4613ab723e78b50afeb1bc47900603543da8a703be` |
 | `gui_web/e2e/fixtures/comprovante-escaneado.png` | `e40b7dfe7b9b5523b1cf05a65b9743dd200b9bad6a207b4fbdd74df9eab41a8e` |
 | `gui_web/e2e/fixtures/contrato-escaneado.png` | `abca12f61ce1fef2323c5f818d9c076ed23c0b4506e3de1cb9b5965002d36747` |
-| `gui_web/electron/main.ts` | `cc7d51388f8acd91e0c953b1ff5b3749936091e6a6d665c74ce4a0e92787b8ca` |
-| `gui_web/electron/preload.ts` | `c78a0c0b185631100335db687cd99fc8e542d924325322c3bc7b0f5de6a605fa` |
+| `gui_web/e2e/fixtures/fake-llama-server.py` | `54ae2469b5e0cadede36ddbc6400ae4a3fe06328b6f6fea667c424f4355de441` |
+| `gui_web/electron/main.ts` | `0a510defcae6e9e08ae71c5cca67888b98980f1b4de53abc4f5241eee30d6587` |
+| `gui_web/electron/preload.ts` | `91f1607aeac901866cb400f49ca78d4655d8e50fd1d53f59595e260546f12f95` |
 | `gui_web/eslint.config.mjs` | `5f6f18f557d1fb301b6f3437d02a47ff372d9ced55d23582ff63c3003213c155` |
 | `gui_web/index.html` | `65d438e190c6a2eb076894d03bc2690dc7bc842d8ee58691c81690fb64555d8d` |
-| `gui_web/package.json` | `313465330724e56b2b59bb89bbf80de363e0da77e8463fb18c8c573268568800` |
+| `gui_web/package.json` | `64a7c6ebc22b242dc2061de899008e03419105d0c1bdc6ff274b881177aa01f7` |
 | `gui_web/playwright.config.ts` | `1fc12157bfc5c21d51f9f2ab7f237108a550501b387bcd7c3033081bb741ea29` |
 | `gui_web/src/App.tsx` | `1b9a7de77f16bd75a6eb76d1cd5e36d5b9e0d3bb6ff30cda033888e03920ecff` |
 | `gui_web/src/components/CampoMoeda.tsx` | `564687d9facbc452b9d15d8c5d919121a98d1d323a3a1b9111a459526286cc4a` |
 | `gui_web/src/components/CampoPercent.tsx` | `08a26bc4de92e4c6b6c7eba76c1a2f3e8bc3e62aef591c57ac0a7ef2c0bb83c3` |
 | `gui_web/src/components/Icones.tsx` | `3312534d790dd48a45b084441b7edd7813a2d61dee18567577b829051206c677` |
-| `gui_web/src/hf/client.ts` | `b6ae6c8b2ef7f76d0676ccb12f91e5eb7581812bf0c78959de222421e84b821e` |
-| `gui_web/src/hf/contract.ts` | `37ac21af615d80538c74946bc4ecce60f41ae8061d6d38a70c1680c4efe3e612` |
+| `gui_web/src/hf/client.ts` | `0d38e5d7100e43efde5be63627b228a8cef3fa6d91546d4b5693479fc76992c8` |
+| `gui_web/src/hf/contract.ts` | `41bd410a1981470a1d57c3b559bbeedc3d40d5336eacfed363d332f6e4d3e7a6` |
 | `gui_web/src/hf/useAnalise.ts` | `96cceff3430ea2f151383a6820902c9b3cf7bf66a50a2c0c977fb9fec608782e` |
 | `gui_web/src/hf/useContadorEspera.ts` | `d5b212be39fbbbd3d681d92c6c8d368a10d464759f8ef4acc40ee68ad5693485` |
 | `gui_web/src/lib/arquivo.ts` | `b62cdb2e2d5b0bd70b1b9bd76b89d71fa02bd0d7490ea1a55d578d85dec7076c` |
 | `gui_web/src/lib/format.ts` | `ea47dd440e7437ab296b0dc772d347c5dd7a689de4bf8ea1a8a49363116e9b2e` |
 | `gui_web/src/lib/orcamento.ts` | `d5d082919ec4c408e7670250fe45ec638246d24883e23ef2df1b27b44b5988ba` |
 | `gui_web/src/main.tsx` | `908e625518862c14c075ebc584fd1e40a6390b908206f685f3d7d865361c887c` |
-| `gui_web/src/screens/Analise.tsx` | `2975630873fe0b2a17152b9d6052c17fd2e2e854bb008bd910ba28e7858a4d34` |
+| `gui_web/src/screens/Analise.tsx` | `59c855d75e0567651f69ee175c994c189b0f5a4f5eb95a94b66310daad04109a` |
 | `gui_web/src/screens/Carta.tsx` | `dfe11757da61e7fdf8a3c8c2274d8d0acf2c64f467a4cf7882eeb710725d42c9` |
-| `gui_web/src/screens/ConfiguracaoIa.tsx` | `94556e271c52c8d744b83191201f8394f0634806fa53103a41249c7b8b2efb95` |
+| `gui_web/src/screens/ConfiguracaoIa.tsx` | `0a253497e6a5c896da00116ffd9b14a1010b928ccb88cf127e3c2bb075128143` |
 | `gui_web/src/screens/Contrato.tsx` | `cf23c4e472a948158aa08ccbf91b7ccd6c309cac78ddda3e2328234838158583` |
 | `gui_web/src/screens/Desbloqueio.tsx` | `31afaf550a9d593c45594639964bd81b20fc077935bbc5b40bc1aa1c4aa888c9` |
 | `gui_web/src/screens/Dividas.tsx` | `e5531e9041823be6d1a8a211266700e169f43825ba6b84c51ac1bcc15c838216` |
@@ -245,8 +236,8 @@
 | `gui_web/src/screens/Perfil.tsx` | `84a95595c2f30f84a0a6240ed77a17e9f53b6d3ae8e3dc1f3885670760e99834` |
 | `gui_web/src/screens/Planilha.tsx` | `965d08b87e801b2901b1a7adf3587a86bce465fc8629ff1b6fa5f7b29591b4e3` |
 | `gui_web/src/screens/VisaoGeral.tsx` | `cabe2c56e24693bddf2c9b53c20d6644ffa7c8c083d29b509257a30fa7dc3140` |
-| `gui_web/src/styles.css` | `2a9be11ea184f7dfc95120e3bd1d65c6d9109bfff4800a6688cb73d8d70733db` |
-| `gui_web/src/vite-env.d.ts` | `ff1194308ddcb162fb87e9fbcb0bbcff6657fcdec7ef8aa52d3339c36a62f28c` |
+| `gui_web/src/styles.css` | `630636a5933b2b9bd87583cd69612a033fe5f3f6d28d974c1f8b0ad2838f97f1` |
+| `gui_web/src/vite-env.d.ts` | `79731267745438c04c18f549ee2830d84f0282e7750b5972b81182754718bd1c` |
 | `gui_web/vite.config.ts` | `babedaf0e48959bea2faf692583ca7d63bd97739572284ca11c982c02c3816e3` |
 
 ### Entrypoint, build e empacotamento
@@ -254,7 +245,7 @@
 | Artefato | SHA-256 |
 |---|---|
 | `main.py` | `a979656c100f6d12b02e0d625f6197a6b792769aab885f328631faedc019a448` |
-| `pyproject.toml` | `1b7fd2e072147bc16061972d2ec5ac0daa979fd4458cf74fa525ea159b2e8dba` |
+| `pyproject.toml` | `4affdaecbd58bef8c204b49938e3f33b92f9947cc86b53bb3bb8e8576d94a259` |
 | `SidecarHF.spec` | `cc3471a70cb6ebf50da89c6eb8820fde375645fedcbe40785ff8b187561c3cfa` |
 | `scripts/sidecar_entry.py` | `c63c53e315cd42423f06832d120ab66c4ff66965bf038bfcf3012d638acae3d9` |
 | `scripts/preparar_ocr.py` | `fb305d8a58947eed84070e898cce647e2abebd7d7aec409a2ad0899cbb96b0a5` |
@@ -306,57 +297,49 @@
 | `tests/test_pii.py` | `9e0b052158b1f1af14f89c80bfcedc4be4c33d0e49bd40cebb29790d235c9dbc` |
 | `tests/test_preparar_llama.py` | `f55fbe488449bcfbac1261a5d886c3e3153571406c9f6f478e2fac6393c691a9` |
 | `tests/test_propriedades.py` | `a3dceb73aa42df79840b9b44925e8c2d3a736faf9df697146e82029035dcb358` |
-| `tests/test_providers.py` | `af4d8df65c614b9295dd4e65523fe421d42c01240b14e40d950fc74aeb598b5f` |
+| `tests/test_providers.py` | `060b08161e3c3440d82f8b1d3357c836c1317c1784b57f4a7816958c9636132d` |
 | `tests/test_recuperacao.py` | `94129e9a3fcf8bca1d180bcc61ea23010107ffeedc15659db961565f666d15c9` |
 | `tests/test_rubricas.py` | `74dc0e22bd922ec6d890bf203d6063b7c78176e247bb562a500a31d9d3f4545f` |
-| `tests/test_runtime_llm.py` | `4bb6ac86c120aef376495571fcde98943b1b4d0bf0610f2fa547b5820300c180` |
+| `tests/test_runtime_llm.py` | `3c4a8fe9f42ecd223776411b747cef27001d14167e449941f2dc84bc8998092c` |
 | `tests/test_sessao.py` | `b3e658562bc6b5a2d2dbb928c9fe714ce203b4439e61034c8bd81824771ba0e5` |
-| `tests/test_sidecar.py` | `3ee347a00b2960672b7e035fc9bb4efff4357834be8f068295ce1f7bacadb958` |
-| `tests/test_sidecar_llm.py` | `a745551db84dc598337469a97ba83e5f7cadb4e5f3164d846085405f0d058d0b` |
+| `tests/test_sidecar.py` | `75cb6e656c4182e34db96758fcdae12d2888c670f26ac2a2b9a0c30d112e469f` |
+| `tests/test_sidecar_llm.py` | `0de056f6864382d50f990f0f6df52e378a301d64fdc68d45fd501d7ba9804519` |
 | `tests/test_telemetria.py` | `f5750e70fe314e187d25f464ea0c5871c2a807e518821cb1a41a4ec1580bdbe8` |
 | `tests/test_validacao_texto.py` | `4c9482f0ea98fc9af46a3ea89d4f2262eda6a207e54da9d5ed322ecebdfce3e7` |
 
-## Binários publicados (sem rebuild neste ciclo)
+## Binários oficiais deste ciclo (build 2.14.0, rebuild ADR-0017 §E)
 
 | Artefato | SHA-256 | Tamanho |
 |---|---|---|
-| `gui_web/release/Helper Financeiro Setup 2.12.0.exe` (ata v2.12.1) | `bb1c899e7ac001eb570a5f573fe85361af3b8130c46d2c6b8b224e6e0f8031c1` | 347,0 MB |
-| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador, ata v2.12.1) | `69745b90c7b3e93c3e4906d82a0305e421634b7b4e74cacffa776fd4cb881079` | 22,6 MB |
+| `gui_web/release/Helper Financeiro Setup 2.14.0.exe` | `b12a7efaa76f02351d6cbb0b1f298ef9614bf39693829d1f9c43d504262ba914` | 347,1 MB |
+| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `c53deb4ca45357becc3de2194ac67c57c501679df102b3f68d170f26e6c07d32` | 22,7 MB |
 
-> **Este ciclo não gerou build oficial** (ADR-0021: a assinatura de teste não
-> vai a público; nada de produto mudou — só harness, scripts e workflow). Os
-> hashes acima são os da ata v2.12.1, repetidos por referência. A **primeira
-> release oficial assinada** nascerá do `release.yml` (tag `v*`, build
-> verificável em CI) quando a inscrição no SignPath Foundation for aprovada
-> — ligar `SIGNPATH_ATIVO` + secrets e rodar a tag (registro em nova ata).
-> O ensaio do workflow (tag `v2.13.0-rc`, flag desligada) foi executado e
-> ficou verde: draft com instalador 2.13.0 + blockmap + latest.yml, apagado
-> após a validação. **Nenhum modelo GGUF é embarcado** (REQ-NF-007).
+> Build sem assinatura (fase 2 do C-15 segue aguardando o SignPath; as
+> linhas "signing with signtool" do electron-builder 26 sem certificado são
+> log inerte — instalador conferido `NotSigned`, nenhuma env `CSC`/`SIGN`
+> presente). **Nenhum modelo GGUF é embarcado** (REQ-NF-007).
 
 ## Estado do harness no congelamento
 
 ```text
-489 passed, 2 skipped — suíte offline (Gate A); cobertura ≥ 96,6% (piso 90%)
+555 passed, 2 skipped — suíte offline (Gate A); cobertura 96,7% (piso 90%)
 Catraca C901: ativa (max-complexity = 13); golden-master: 9/9
-E2E Playwright: 19 passed no app dev; smokes do pacote com o degrau final
-NOVO: 5/5 no empacotado-update.spec.ts com cert de teste confiado —
-update-available → verificação de assinatura REAL → instalação NSIS
-silenciosa (99.0.0) → desinstalação e registro limpo; verificação negativa
-(pacote não assinado recusado) roda sem confiança. Gating:
-HF_E2E_PACOTE=1 + HF_E2E_UPDATE_INSTALL=1; NUNCA roda com o app real
-instalado (trava de aborto).
+E2E Playwright: 23 passed no app dev (inclui os 4 cenários novos do
+runtime configurável); smokes do pacote: 8 passed + 1 gated
+(HF_E2E_UPDATE_INSTALL) por rodada, repetidos a cada rebuild (3 rebuilds
+neste fechamento — T-2503, temp 0 e conserto dirigido); smoke do órfão OK
+em todos (Job Object no exe congelado).
 Gate Front (CI): ESLint + tsc + build Vite verdes
 CI remoto: verde em todos os commits do ciclo (regra ADR-0020)
-Release: workflow `release.yml` ensaiado (run 29412113083, verde)
-Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 0 · Electron
-43.1.1 atual — nenhum risco aceito pendente
-Observações: (1) O smoke de instalação real exige preparo manual do host
-(cert de teste confiado + app real ausente) — é deliberado: portões de
-segurança do mantenedor, não automatizáveis. (2) `actions/setup-node@v4`
-ainda emite o warning de Node 20 deprecado no runner — bump candidato para
-o próximo toque no CI (anotação, não erro). (3) Modelos com menos de ~1B
-de parâmetros tendem a degradar por REQ-LLM-002:SCHEMA (P8 correto).
+Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 0 (runtime+dev+
+build) · Electron 43.1.1 — nenhum risco aceito pendente
+Validação de campo do fechamento: 4/4 perfis variados em modo completo
+pelo grafo inteiro (llama-server + phi-3.5 reais, GTX 1650); aceitação
+dupla do mantenedor com dados alterados entre análises.
+Observações: (1) flake de teardown no afterAll do empacotado-update
+(fechar o app de teste após download de ~350 MB estourou 60 s; 1 de 4
+rodadas; pode deixar o app-sob-teste VIVO — matar pelos PIDs, nunca por
+nome de imagem); (2) análises com o phi-3.5 no caminho de fallback levam
+2–7 min na GTX 1650 (2 a 3 chamadas ao modelo no pior caso); (3) modelos
+com menos de ~1B seguem degradando por SCHEMA (P8 correto).
 ```
-
-Gerado automaticamente. Recalcule com `Get-FileHash -Algorithm SHA256`
-(PowerShell) ou `sha256sum` (Linux/macOS) para verificar integridade.

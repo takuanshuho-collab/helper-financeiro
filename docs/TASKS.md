@@ -415,7 +415,8 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-2501 | Runtime: `_FLAGS_PADRAO` → auto-fit, `_CTX_PADRAO` → 4096; resolução `env > llm.json > default` (`ctx_size`, `gpu_offload`); captura de stderr (thread + ring buffer ~200 linhas) com classificador de motivos (`GPU_SEM_MEMORIA`, `GPU_FIT_ABORTADO`, `GENERICO`) e métricas do boot; retry único em CPU puro com `boot_info` consultável (Opus) | Bug de campo / P8 | ADR-0022 | ✅ |
 | T-2502 | Contratos + endpoints: `GET /llm/config` (config efetiva + origens, `boot_info`, `dica` pela regra única no backend) e `PUT /llm/config` (valida, persiste no `llm.json`, encerra o runtime); `aviso_runtime` aditivo na resposta da análise sênior; Pydantic em `contracts/schemas.py` (Sonnet) | REQ-NF-005 | T-2501 | ✅ |
 | T-2503 | GUI: seção "Ajustes avançados" (contexto 3 degraus + GPU Auto/CPU/camadas; desabilitados com `HF_LLAMA_FLAGS` ativa) + painel "Último boot da IA" (badge de modo, motivo, camadas, VRAM, contexto; **achado do mock E2E de 2026-07-16**: em `nunca_subiu` o motivo é a *falha classificada do stderr*, não necessariamente culpa da GPU — um boot CPU puro que morre com OOM também ganha `GPU_SEM_MEMORIA`; o texto do painel deve dizer "falha classificada do último boot", nunca afirmar "a GPU falhou") + callout da dica com "Aplicar sugestão" + banner âmbar do `aviso_runtime` na análise; E2E Playwright dos estados (Sonnet) | REQ-F (GUI) | T-2502 | ✅ |
-| T-2504 | Fechamento: gates + CI remoto verde + auditoria de deps (§5) + rebuild oficial 2.14.0 + smokes (§E.4) + aceitação de campo (análise sênior com o default novo na máquina do mantenedor, env removida) + ata `FREEZE.md` v2.14.0 (orquestrador) | Processo | todas | ⬜ |
+| T-2505 | Fallback de gramática no `OpenAICompatProvider`: `json_schema` estrito recusado pelo `llama-server` com 400 de gramática ("Failed to initialize samplers"/"empty grammar stack" — bug do llama.cpp com o tokenizer do phi-3.5, achado da aceitação de campo de 2026-07-16, presente até o b10043) ⇒ reenvia UMA vez com `json_object` + schema injetado no prompt; validação segue 100% Pydantic + retry-correção + P8 (REQ-LLM-002 intacto) (Opus) | Aceitação de campo | T-2501 | ✅ |
+| T-2504 | Fechamento: gates + CI remoto verde + auditoria de deps (§5) + rebuild oficial 2.14.0 + smokes (§E.4) + aceitação de campo (análise sênior com o default novo na máquina do mantenedor, env removida) + ata `FREEZE.md` v2.14.0 (orquestrador) | Processo | todas | ✅ |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -496,9 +497,16 @@ preparada (licença MIT, política no README, `release.yml` ensaiado com a
 tag `v2.13.0-rc` e a submissão SignPath atrás de flag). **Auditoria da v2.9
 ZERADA.** Ativação da fase 2 quando o SignPath aprovar = ligar
 `SIGNPATH_ATIVO` + secrets (hotfix com registro em ata). **Ciclo v2.14
-ABERTO (ADR-0022, M25, 2026-07-15):** runtime LLM resiliente e configurável
-— fix do primeiro bug de produto pego em campo (`-ngl 99` × auto-fit do
-b9966).
+FECHADO (ADR-0022, M25, 2026-07-17, ata `FREEZE.md` v2.14.0):** runtime
+LLM resiliente e configurável — fix do primeiro bug de produto pego em
+campo (`-ngl 99` × auto-fit do b9966) + contexto/GPU na tela + painel do
+último boot + dica + `aviso_runtime`. A aceitação de campo achou e o
+T-2505 corrigiu um SEGUNDO bug mascarado: o llama.cpp (b9966 e b10043)
+recusa a gramática do `json_schema` estrito com o tokenizer do phi-3.5 —
+fallback `json_object` + schema no prompt + temperatura 0 + conserto
+dirigido (JSON inválido volta ao modelo com os erros nomeados do
+Pydantic); validado com 4/4 perfis variados completos no host e aceitação
+de campo dupla (dados alterados entre análises) pelo mantenedor.
 
 **Candidato ao ciclo v2.15 (registrado 2026-07-16, pesquisa do
 orquestrador): backends plugáveis do llama.cpp.** O ggml carrega backends
@@ -518,6 +526,26 @@ da pesquisa indica CUDA >> Vulkan em prompt processing mas empate em
 geração, e ganho marginal quando o offload é parcial (na GTX 1650 4 GB o
 auto-fit offloadou 5/33 camadas — o gargalo é VRAM, não backend). Ganho
 medido < 15% ⇒ arquivar com evidência.
+
+**Candidato irmão (registrado 2026-07-17, pesquisa do orquestrador após o
+achado do T-2505): trilha de saída do llama.cpp — ONNX Runtime GenAI.** O
+bug de gramática do phi-3.5 (T-2505) mostrou o risco estrutural de depender
+do llama.cpp: Ollama/LM Studio/llamafile/koboldcpp são o MESMO motor por
+dentro (herdam os bugs); vLLM/SGLang/TensorRT-LLM são classe servidor
+(Linux/datacenter, não embarcáveis num app de 350 MB); ExLlama exige
+NVIDIA e o formato EXL2; MLC-LLM (Apache-2.0, Vulkan via TVM) exige
+requantizar modelos no formato próprio. O candidato sério é **ONNX Runtime
+GenAI** (MIT, Microsoft): roda EM PROCESSO (sem servidor HTTP), DirectML
+(qualquer GPU Windows) ou CPU, modelos **phi oficiais em ONNX publicados
+pela Microsoft**, e saída estruturada por **constrained decoding via
+llguidance** — o líder do JSONSchemaBench em cobertura de schema,
+exatamente onde o conversor GBNF do llama.cpp quebrou. Sinergia: o app JÁ
+embarca `onnxruntime` (RapidOCR/ADR-0015). Custos a medir na fase 0:
+formato de modelo muda (GGUF→ONNX; catálogo/downloads novos), API é
+biblioteca (o `RuntimeLLM`/provider mudam de forma), maturidade do
+DirectML vs Vulkan no hardware-alvo. Fase 0 obrigatória: mesmo protocolo
+do PaddleOCR-VL (medir qualidade/latência/VRAM com o phi-3.5 ONNX real na
+GTX 1650 ANTES de investir).
 
 ### Histórico do ciclo v2.8 (fechado)
 

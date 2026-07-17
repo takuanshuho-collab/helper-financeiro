@@ -244,6 +244,14 @@ Ollama/LM Studio (a env definida tem precedência sobre o runtime embarcado);
 um endpoint OpenAI-compatible na nuvem entra por variável de ambiente e **só
 recebe dados anonimizados** (H2).
 
+Desde o v2.14 (ADR-0022) o runtime embarcado usa o **auto-fit** do llama.cpp
+por padrão (as camadas na GPU são dimensionadas pela VRAM livre a cada boot;
+contexto padrão 4096) e a tela "Configuração da IA" ganhou os **Ajustes
+avançados** (contexto e uso da GPU) mais o painel **"Último boot da IA"**.
+Se a GPU falhar no boot, o app tenta **uma vez em CPU puro** e avisa o
+motivo na análise — nada de análise perdida. `HF_LLAMA_FLAGS`, quando
+definida, continua vencendo tudo (os controles da tela avisam e desabilitam).
+
 ```bash
 # 1. instalar o Ollama (https://ollama.com) e baixar os modelos
 ollama pull qwen2.5:3b        # padrão: roda 100% numa GPU de 4 GB

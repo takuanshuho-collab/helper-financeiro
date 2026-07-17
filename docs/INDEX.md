@@ -158,7 +158,22 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   verificável por tag → draft de Release) com a submissão **SignPath
   Foundation** atrás de flag até a aprovação da inscrição — quando sair, o
   publisher das releases será "SignPath Foundation" (modelo do programa).
-- **Mudanças nos artefatos congelados (v2.13.0) exigem nova ADR + incremento
+- **Ciclo v2.14 FECHADO (`FREEZE.md` v2.14.0, ADR-0022, M25):** runtime LLM
+  **resiliente e configurável** — correção do primeiro bug de produto pego
+  em campo (o default `-ngl 99` crashava o `llama-server` Vulkan por falta
+  de VRAM na GPU-alvo; o auto-fit aborta com `-ngl` explícito). Novo
+  default: **auto-fit + contexto 4096**; `ctx_size`/`gpu_offload`
+  configuráveis na tela de Configuração da IA (`GET/PUT /llm/config`, com a
+  origem de cada valor: padrão/tela/env); falha de boot ⇒ **retentativa
+  única em CPU puro** com motivo classificado do stderr (ring buffer só em
+  memória, REQ-SEC-001); painel **"Último boot da IA"** (modo, dispositivo,
+  camadas, VRAM, contexto) + **dica de contexto** (regra única no backend)
+  + banner `aviso_runtime` na análise que rodou em CPU por falha de GPU.
+  A aceitação de campo achou (e o **T-2505** corrigiu) um segundo bug
+  mascarado: o llama.cpp recusa a gramática do `json_schema` estrito com o
+  tokenizer do phi-3.5 — fallback `json_object` + temperatura 0 + conserto
+  dirigido no provider, validado com 4/4 perfis completos no hardware real.
+- **Mudanças nos artefatos congelados (v2.14.0) exigem nova ADR + incremento
   de versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar

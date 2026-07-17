@@ -1,6 +1,6 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.13.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.14.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
@@ -51,6 +51,20 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 > assinado é recusado) roda sempre. Salvaguardas: aborta se o app real
 > estiver instalado; poll T-1907 no registro (o NSIS retorna antes de
 > concluir). Workflow `release.yml` (build verificável por tag) ensaiado.
+
+> **v2.14 (ADR-0022):** runtime LLM resiliente e configurável. Testes novos
+> em `tests/test_runtime_llm.py` (resolução `env > llm.json > default`,
+> classificador de falha com fixtures REAIS de campo, extração de métricas,
+> retry único em CPU, regra da dica de contexto) e `tests/test_sidecar_llm.py`
+> (`GET/PUT /llm/config` com as 3 origens, 422 sem tocar o disco,
+> `aviso_runtime`) e `tests/test_providers.py` (T-2505: fallback de
+> gramática com o corpo REAL do 400 como fixture, temperatura 0 no
+> `json_object` e conserto dirigido com os erros do Pydantic — 9 testes).
+> E2E novo `configuracao-ia-runtime.spec.ts` (4 cenários,
+> incluindo boot REAL com fallback CPU via llama-server fake em
+> `e2e/fixtures/fake-llama-server.py`). Fora do harness versionado: mock E2E
+> do caminho completo do usuário executado no fechamento (21/21, relatório
+> não-versionado `docs/RELATORIO-MOCK-E2E-LLM.md`).
 
 ---
 

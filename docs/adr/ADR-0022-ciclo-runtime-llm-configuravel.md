@@ -135,3 +135,28 @@ v2.14.0. Golden-master e catraca C901 intactos.
   do `modelo_ativo` (`llm.json`); números e caminhos não são segredo.
 - **Log do llama-server em arquivo:** REQ-SEC-001 — ring buffer só em
   memória.
+
+## Registro da execução (2026-07-17, fechamento)
+
+- T-2501..T-2504 entregues conforme o design. A **aceitação de campo**
+  (critério do T-2504) encontrou um SEGUNDO bug, mascarado pelo primeiro: o
+  `llama-server` (b9966 **e** b10043 — bump não corrige; com e sem
+  `--jinja`) recusa com HTTP 400 a gramática derivada de `json_schema`
+  estrito para o tokenizer do **phi-3.5** (`Failed to initialize samplers:
+  Unexpected empty grammar stack after accepting piece: | (29989)`; bug
+  conhecido do llama.cpp, issues #12597/#21017/#23677). O smoke do T-1703
+  nunca o viu porque usou o Qwen2.5-1.5B (outro tokenizer).
+- **T-2505 (adicionada ao M25 com aval do mantenedor):** fallback no
+  `OpenAICompatProvider` em três degraus, todos medidos no host real —
+  (1) 400 de gramática ⇒ reenvio único com `json_object` + schema injetado
+  no prompt (memoizado por instância); (2) **temperatura 0** só nesse
+  caminho (com 0.2, 1/3 das análises validava o schema; com 0.0, 4/4);
+  (3) **conserto dirigido**: JSON que não valida volta ao modelo UMA vez
+  com os erros nomeados do Pydantic (com temp 0 o retry cego do grafo
+  repetiria o erro byte a byte). Validação final: **4/4 perfis variados**
+  em modo completo pelo grafo inteiro no host, e aceitação de campo dupla
+  (dados alterados entre as análises) pelo mantenedor. A imposição do
+  contrato segue 100% Pydantic + retry-correção + P8 (REQ-LLM-002).
+- Plano B estrutural registrado: `docs/PESQUISA-ONNX-RUNTIME-GENAI.md`
+  (não versionado) + candidato no TASKS.md — ONNX Runtime GenAI
+  (constrained decoding via llguidance) caso a classe de bug reapareça.
