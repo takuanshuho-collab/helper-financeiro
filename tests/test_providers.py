@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
+from pydantic import ValidationError
 
 from agent.agente import analisar, montar_fatos
 from agent.config import ConfigAgente
@@ -304,3 +305,75 @@ def test_fallback_preserva_correcao_do_guardrail(perfil_atencao, monkeypatch):
     assert any("CORRECAO_NUMEROS_ORFAOS" in c for c in conteudos)
     # O schema segue como ÚLTIMA mensagem, depois da correção.
     assert json.dumps(schema_estrito()) in conteudos[-1]
+
+
+# --------------------- Conserto dirigido do fallback json_object (T-2505 rodada 3)
+def _json_invalido(perfil) -> str:
+    """Uma análise QUASE aderente, mas com `alertas_risco` do tipo errado —
+    o modo de falha real do phi-3.5 com temp 0 (JSON estruturalmente ok que
+    não valida contra o schema Pydantic)."""
+    fatos, _ = montar_fatos(perfil)
+    dados = FakeProvider().analisar(fatos).model_dump()
+    dados["alertas_risco"] = 123  # esperado: lista de strings
+    return json.dumps(dados)
+
+
+def test_conserto_dirigido_recupera_json_invalido(perfil_atencao, monkeypatch):
+    """(g) fallback devolve JSON inválido ⇒ 1 conserto dirigido válido."""
+    invalido = _json_invalido(perfil_atencao)
+    fake = _PostFake([
+        _http_error(400, CORPO_400_GRAMATICA),
+        {"choices": [{"message": {"content": invalido}}]},  # fallback: inválido
+        _resposta_openai(perfil_atencao),                   # conserto: válido
+    ])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    analise = _provider_local().analisar(fatos)
+
+    assert isinstance(analise, AnaliseAgente)
+    assert len(fake.payloads) == 3  # json_schema(400) → fallback → conserto
+    # A chamada de conserto recoloca o JSON inválido como turno do assistente e
+    # nomeia os erros na mensagem de usuário seguinte.
+    msgs = fake.payloads[2]["messages"]
+    assert msgs[-2]["role"] == "assistant"
+    assert msgs[-2]["content"] == invalido
+    assert msgs[-1]["role"] == "user"
+    assert "alertas_risco" in msgs[-1]["content"]
+    assert fake.payloads[2]["response_format"] == {"type": "json_object"}
+
+
+def test_conserto_falha_de_novo_propaga_sem_loop(perfil_atencao, monkeypatch):
+    """(h) inválido nas duas ⇒ ValidationError sobe; exatamente 2 chamadas."""
+    invalido = _json_invalido(perfil_atencao)
+    fake = _PostFake([
+        {"choices": [{"message": {"content": invalido}}]},  # fallback inválido
+        {"choices": [{"message": {"content": invalido}}]},  # conserto inválido
+    ])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+    prov = _provider_local()
+    prov._gramatica_recusada = True  # isola o caminho json_object (sem schema)
+
+    with pytest.raises(ValidationError):
+        prov.analisar(fatos)
+    assert len(fake.payloads) == 2  # fallback + 1 conserto, sem loop
+
+
+def test_memoizado_com_conserto_dispensa_json_schema(perfil_atencao, monkeypatch):
+    """(i) instância memoizada + inválido ⇒ conserta em 2 chamadas json_object."""
+    invalido = _json_invalido(perfil_atencao)
+    fake = _PostFake([
+        {"choices": [{"message": {"content": invalido}}]},  # fallback inválido
+        _resposta_openai(perfil_atencao),                   # conserto válido
+    ])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+    prov = _provider_local()
+    prov._gramatica_recusada = True
+
+    analise = prov.analisar(fatos)
+
+    assert isinstance(analise, AnaliseAgente)
+    assert len(fake.payloads) == 2  # sem a tentativa json_schema
+    assert all(p["response_format"] == {"type": "json_object"} for p in fake.payloads)

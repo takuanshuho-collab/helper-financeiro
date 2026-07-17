@@ -24,6 +24,8 @@ import urllib.request
 from dataclasses import replace
 from typing import Any, Protocol
 
+from pydantic import ValidationError
+
 from contracts import AnaliseAgente, FatosFinanceiros, PassoNegociacao, Prioridade
 from core.utils import formatar_brl
 
@@ -209,6 +211,24 @@ _INSTRUCAO_JSON_OBJECT = (
     "objeto JSON.\nJSON Schema:\n"
 )
 
+# Teto de erros nomeados no conserto dirigido: um JSON grosseiramente errado
+# gera dezenas de violações; as primeiras já orientam a correção e a lista curta
+# não estoura o contexto do modelo pequeno.
+_MAX_ERROS_CONSERTO = 10
+
+
+def _resumo_erros_pydantic(erro: ValidationError) -> str:
+    """Traduz os erros do Pydantic em linhas legíveis para o modelo consertar.
+
+    Para cada erro: caminho do campo, a mensagem e o tipo — o suficiente para o
+    modelo saber ONDE e O QUE corrigir sem receber o dump cru do Pydantic.
+    """
+    linhas = []
+    for err in erro.errors()[:_MAX_ERROS_CONSERTO]:
+        caminho = ".".join(map(str, err["loc"])) or "(raiz)"
+        linhas.append(f"- {caminho}: {err['msg']} (tipo esperado: {err['type']})")
+    return "\n".join(linhas)
+
 
 class OpenAICompatProvider:
     """Endpoint OpenAI-compatible — nuvem OU servidor local (LM Studio, etc.).
@@ -289,12 +309,8 @@ class OpenAICompatProvider:
         conteudo = resposta["choices"][0]["message"]["content"]
         return AnaliseAgente.model_validate_json(conteudo)
 
-    def _analisar_json_object(self, fatos: FatosFinanceiros,
-                              correcao: str | None) -> AnaliseAgente:
-        """Fallback: `json_object` (JSON livre) + o schema injetado no prompt.
-
-        A eventual correção do guardrail (retry do grafo) é preservada — entra
-        via `_mensagens`; o schema vem DEPOIS dela, como última mensagem `user`.
+    def _post_json_object(self, mensagens: list[dict[str, str]]) -> str:
+        """Uma requisição `json_object` (temp 0) → conteúdo bruto (string JSON).
 
         Temperatura ZERO só aqui, de propósito: sem a gramática restringindo a
         amostragem, o formato depende do modelo "se comportar" — medido em
@@ -303,19 +319,51 @@ class OpenAICompatProvider:
         (`json_schema` estrito) mantém a `TEMPERATURA` normal — lá a gramática
         garante o formato e a variação melhora o texto.
         """
-        mensagens = _mensagens(fatos, correcao)
-        mensagens.append({
-            "role": "user",
-            "content": _INSTRUCAO_JSON_OBJECT + json.dumps(schema_estrito()),
-        })
         resposta = _post_json(self.url, {
             "model": self.cfg.model,
             "messages": mensagens,
             "temperature": 0.0,  # aderência ao schema > variação de texto
             "response_format": {"type": "json_object"},
         }, headers=self._headers(), timeout_s=self.cfg.timeout_s)
-        conteudo = resposta["choices"][0]["message"]["content"]
-        return AnaliseAgente.model_validate_json(conteudo)
+        conteudo: str = resposta["choices"][0]["message"]["content"]
+        return conteudo
+
+    def _analisar_json_object(self, fatos: FatosFinanceiros,
+                              correcao: str | None) -> AnaliseAgente:
+        """Fallback: `json_object` (JSON livre) + o schema injetado no prompt.
+
+        A eventual correção do guardrail (retry do grafo) é preservada — entra
+        via `_mensagens`; o schema vem DEPOIS dela, como última mensagem `user`.
+
+        Conserto dirigido (T-2505, rodada 3): se o JSON produzido não validar,
+        faz UMA única chamada de correção antes de propagar. Com temperatura 0 o
+        modelo é determinístico POR PROMPT, então o retry CEGO do grafo (o
+        `except ValidationError` de `chamar_llm`, que reenvia SEM `correcao`)
+        repetiria o mesmo JSON inválido byte a byte. Devolver ao modelo o JSON
+        que ele mesmo produziu + os erros nomeados do Pydantic quebra esse
+        determinismo na direção certa — mesmo princípio do retry-correção do
+        ADR-0011, aplicado ao FORMATO em vez de aos números. Um conserto por
+        chamada de `analisar` (sem loop); se ele também falhar, a exceção sobe e
+        o grafo degrada com `REQ-LLM-002:SCHEMA` (honesto).
+        """
+        mensagens = _mensagens(fatos, correcao)
+        mensagens.append({
+            "role": "user",
+            "content": _INSTRUCAO_JSON_OBJECT + json.dumps(schema_estrito()),
+        })
+        conteudo = self._post_json_object(mensagens)
+        try:
+            return AnaliseAgente.model_validate_json(conteudo)
+        except ValidationError as e:
+            mensagens.append({"role": "assistant", "content": conteudo})
+            mensagens.append({"role": "user", "content": (
+                "Seu JSON NÃO validou contra o schema. Erros:\n"
+                + _resumo_erros_pydantic(e)
+                + "\nDevolva SOMENTE o objeto JSON corrigido, completo, "
+                "sem comentários."
+            )})
+            corrigido = self._post_json_object(mensagens)
+            return AnaliseAgente.model_validate_json(corrigido)  # falha ⇒ propaga
 
     def analisar_com_correcao(self, fatos: FatosFinanceiros,
                               correcao: str) -> AnaliseAgente:
