@@ -295,6 +295,13 @@ class OpenAICompatProvider:
 
         A eventual correção do guardrail (retry do grafo) é preservada — entra
         via `_mensagens`; o schema vem DEPOIS dela, como última mensagem `user`.
+
+        Temperatura ZERO só aqui, de propósito: sem a gramática restringindo a
+        amostragem, o formato depende do modelo "se comportar" — medido em
+        campo (GTX 1650, phi-3.5, 2026-07-17): com `TEMPERATURA` (0.2) só 1 de
+        3 análises validou o schema; com 0.0/0.1, 4 de 4. O caminho forte
+        (`json_schema` estrito) mantém a `TEMPERATURA` normal — lá a gramática
+        garante o formato e a variação melhora o texto.
         """
         mensagens = _mensagens(fatos, correcao)
         mensagens.append({
@@ -304,7 +311,7 @@ class OpenAICompatProvider:
         resposta = _post_json(self.url, {
             "model": self.cfg.model,
             "messages": mensagens,
-            "temperature": TEMPERATURA,
+            "temperature": 0.0,  # aderência ao schema > variação de texto
             "response_format": {"type": "json_object"},
         }, headers=self._headers(), timeout_s=self.cfg.timeout_s)
         conteudo = resposta["choices"][0]["message"]["content"]

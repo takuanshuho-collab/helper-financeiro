@@ -232,6 +232,11 @@ def test_fallback_gramatica_recupera_com_json_object(perfil_atencao, monkeypatch
     ultima = fake.payloads[1]["messages"][-1]
     assert ultima["role"] == "user"
     assert json.dumps(schema_estrito()) in ultima["content"]
+    # Sem a gramática restringindo a amostragem, a aderência ao schema depende
+    # do modelo — temperatura ZERO no fallback (medição de campo 2026-07-17:
+    # 0.2 ⇒ 1/3 análises válidas; 0.0 ⇒ 4/4). O caminho forte mantém 0.2.
+    assert fake.payloads[1]["temperature"] == 0.0
+    assert fake.payloads[0]["temperature"] == 0.2
 
 
 def test_fallback_gramatica_nas_duas_propaga(perfil_atencao, monkeypatch):
