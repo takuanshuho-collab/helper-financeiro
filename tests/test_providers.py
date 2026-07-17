@@ -6,8 +6,11 @@ OpenAI-compatible, então o caminho REAL de rede (urllib, headers, corpo,
 parse) é exercitado sem tocar a internet. O T-206 (provider fora do ar)
 está em `tests/test_degradacao.py`.
 """
+import email.message
+import io
 import json
 import threading
+import urllib.error
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -16,6 +19,7 @@ import pytest
 from agent.agente import analisar, montar_fatos
 from agent.config import ConfigAgente
 from agent.provider import FakeProvider, OllamaProvider, OpenAICompatProvider, schema_estrito
+from contracts import AnaliseAgente
 
 
 @dataclass
@@ -165,3 +169,133 @@ def test_schema_estrito_endurece_todos_os_objetos():
 
     verificar(schema)
     assert "$defs" in schema  # os modelos aninhados (Prioridade etc.) estão lá
+
+
+# ------------------------- Fallback de gramática do llama-server (T-2505)
+# Corpo REAL do 400 capturado na aceitação de campo de 2026-07-16 (phi-3.5,
+# builds b9966/b10043): o `llama-server` recusa a gramática do json_schema
+# estrito por bug do llama.cpp com o tokenizer (issues #12597/#21017/#23677).
+CORPO_400_GRAMATICA = json.dumps({"error": {
+    "code": 400,
+    "message": ("Failed to initialize samplers: Unexpected empty grammar "
+                "stack after accepting piece: | (29989)"),
+    "type": "invalid_request_error",
+}})
+
+
+def _http_error(codigo: int, corpo: str) -> urllib.error.HTTPError:
+    """Constrói um HTTPError legível (com `.read()`) como o urllib levantaria."""
+    return urllib.error.HTTPError(
+        "http://127.0.0.1:1234/v1/chat/completions", codigo, "erro",
+        email.message.Message(), io.BytesIO(corpo.encode("utf-8")))
+
+
+class _PostFake:
+    """Substitui `agent.provider._post_json`: para cada chamada, ou levanta a
+    exceção enfileirada, ou devolve o dict enfileirado. Grava os payloads."""
+
+    def __init__(self, acoes: list) -> None:
+        self.acoes = list(acoes)
+        self.payloads: list[dict] = []
+
+    def __call__(self, url, payload, headers, timeout_s):  # noqa: ANN001, ARG002
+        self.payloads.append(payload)
+        acao = self.acoes.pop(0)
+        if isinstance(acao, BaseException):
+            raise acao
+        return acao
+
+
+def _resposta_openai(perfil) -> dict:
+    return {"choices": [{"message": {"content": _analise_valida_json(perfil)}}]}
+
+
+def _provider_local() -> OpenAICompatProvider:
+    return OpenAICompatProvider(ConfigAgente(
+        provider="openai_compat", base_url="http://localhost:1234/v1"))
+
+
+def test_fallback_gramatica_recupera_com_json_object(perfil_atencao, monkeypatch):
+    """400 de gramática na 1ª ⇒ reenvia com json_object + schema no prompt."""
+    fake = _PostFake([_http_error(400, CORPO_400_GRAMATICA),
+                      _resposta_openai(perfil_atencao)])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    analise = _provider_local().analisar(fatos)
+
+    assert isinstance(analise, AnaliseAgente)
+    assert len(fake.payloads) == 2
+    assert fake.payloads[0]["response_format"]["type"] == "json_schema"
+    # A 2ª requisição troca para json_object e injeta o schema na última msg.
+    assert fake.payloads[1]["response_format"] == {"type": "json_object"}
+    ultima = fake.payloads[1]["messages"][-1]
+    assert ultima["role"] == "user"
+    assert json.dumps(schema_estrito()) in ultima["content"]
+
+
+def test_fallback_gramatica_nas_duas_propaga(perfil_atencao, monkeypatch):
+    """Recusa de gramática nas duas tentativas ⇒ o HTTPError da 2ª sobe (P8)."""
+    fake = _PostFake([_http_error(400, CORPO_400_GRAMATICA),
+                      _http_error(400, CORPO_400_GRAMATICA)])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    with pytest.raises(urllib.error.HTTPError):
+        _provider_local().analisar(fatos)
+    assert len(fake.payloads) == 2
+
+
+def test_400_de_outro_corpo_propaga_sem_fallback(perfil_atencao, monkeypatch):
+    """400 que NÃO é recusa de gramática sobe direto, sem 2ª chamada."""
+    corpo = json.dumps({"error": {"message": "context length exceeded"}})
+    fake = _PostFake([_http_error(400, corpo)])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    with pytest.raises(urllib.error.HTTPError):
+        _provider_local().analisar(fatos)
+    assert len(fake.payloads) == 1  # uma única chamada
+
+
+def test_500_propaga_sem_fallback(perfil_atencao, monkeypatch):
+    """Erro de servidor (500) sobe direto, sem fallback."""
+    fake = _PostFake([_http_error(500, "boom")])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    with pytest.raises(urllib.error.HTTPError):
+        _provider_local().analisar(fatos)
+    assert len(fake.payloads) == 1
+
+
+def test_memoizacao_segunda_analise_vai_direto_ao_fallback(perfil_atencao, monkeypatch):
+    """Após a 1ª recusa, a MESMA instância pula o json_schema (1 requisição)."""
+    fake = _PostFake([_http_error(400, CORPO_400_GRAMATICA),
+                      _resposta_openai(perfil_atencao),   # fallback da 1ª análise
+                      _resposta_openai(perfil_atencao)])  # 2ª análise: direto
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+    prov = _provider_local()
+
+    prov.analisar(fatos)
+    assert len(fake.payloads) == 2  # 1ª análise: schema (400) + fallback
+
+    prov.analisar(fatos)
+    assert len(fake.payloads) == 3  # 2ª análise: uma só, já no fallback
+    assert fake.payloads[2]["response_format"] == {"type": "json_object"}
+
+
+def test_fallback_preserva_correcao_do_guardrail(perfil_atencao, monkeypatch):
+    """No fallback, a correção do retry-correção vem ANTES do schema injetado."""
+    fake = _PostFake([_http_error(400, CORPO_400_GRAMATICA),
+                      _resposta_openai(perfil_atencao)])
+    monkeypatch.setattr("agent.provider._post_json", fake)
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    _provider_local().analisar_com_correcao(fatos, "CORRECAO_NUMEROS_ORFAOS")
+
+    conteudos = [m["content"] for m in fake.payloads[1]["messages"]]
+    assert any("CORRECAO_NUMEROS_ORFAOS" in c for c in conteudos)
+    # O schema segue como ÚLTIMA mensagem, depois da correção.
+    assert json.dumps(schema_estrito()) in conteudos[-1]

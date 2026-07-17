@@ -19,6 +19,7 @@ import copy
 import json
 import logging
 import os
+import urllib.error
 import urllib.request
 from dataclasses import replace
 from typing import Any, Protocol
@@ -183,12 +184,46 @@ class OllamaProvider:
         return self.analisar(fatos, correcao)
 
 
+# Padrões (case-insensitive) do corpo com que o `llama-server` RECUSA, com
+# HTTP 400, a gramática derivada de `json_schema` estrito para certos
+# tokenizers — provado em campo com o phi-3.5 (1º do catálogo) nos builds b9966
+# e b10043: `{"error":{...,"message":"Failed to initialize samplers: Unexpected
+# empty grammar stack after accepting piece: | (29989)",...}}`. É bug conhecido
+# do llama.cpp (issues #12597/#21017/#23677), não do nosso schema. Guardados
+# numa tupla-constante como os `_PADROES_FALHA` do runtime.
+_PADROES_RECUSA_GRAMATICA: tuple[str, ...] = (
+    "failed to initialize samplers",
+    "empty grammar stack",
+)
+
+# Instrução do fallback: o modo de falha REAL observado foi o modelo ECOAR os
+# FATOS em vez de produzir a análise (por isso a validação Pydantic quase
+# passou, a 1 erro). A mensagem é curta e imperativa e deixa explícito que a
+# resposta é a ANÁLISE, não uma cópia da entrada. O JSON Schema é anexado logo
+# depois desta frase (ver `_analisar_json_object`).
+_INSTRUCAO_JSON_OBJECT = (
+    "Responda com UM ÚNICO objeto JSON — a sua ANÁLISE — que valide contra o "
+    "JSON Schema abaixo. NÃO repita nem ecoe os FATOS: o objeto é o seu parecer "
+    "(sumário executivo, diagnóstico, prioridades, roteiro de negociação, "
+    "alertas), jamais uma cópia dos dados de entrada. Não escreva nada fora do "
+    "objeto JSON.\nJSON Schema:\n"
+)
+
+
 class OpenAICompatProvider:
     """Endpoint OpenAI-compatible — nuvem OU servidor local (LM Studio, etc.).
 
     A chave vem SÓ via env (SEC-002) e é EXIGIDA apenas para endpoints remotos;
     um servidor local em loopback dispensa chave (ADR-0010). O documento/os
     fatos nunca saem da máquina quando o endpoint é local.
+
+    Structured output com fallback (T-2505): a 1ª chamada usa `json_schema`
+    estrito — a forma mais forte, que funciona com Qwen/Granite/LM Studio/nuvem.
+    Se o servidor recusar essa gramática com um 400 conhecido (bug do llama.cpp
+    com o tokenizer do phi-3.5, ver `_PADROES_RECUSA_GRAMATICA`), reenvia UMA
+    vez com `response_format=json_object` + o JSON Schema injetado no prompt. A
+    validação segue 100% Pydantic; o retry-correção (ADR-0011) e a degradação
+    P8 do grafo continuam intactos — o fallback é ORTOGONAL a eles.
     """
 
     def __init__(self, cfg: ConfigAgente):
@@ -198,11 +233,49 @@ class OpenAICompatProvider:
                 "de ambiente (REQ-SEC-002).")
         self.cfg = cfg
         self.url = cfg.base_url.rstrip("/") + "/chat/completions"
+        # Memoização por INSTÂNCIA: assim que este servidor recusa a gramática
+        # do `json_schema` estrito, as chamadas seguintes DESTA instância vão
+        # direto ao fallback, sem gastar a 1ª requisição fadada ao 400 (o retry
+        # do grafo faz uma 2ª chamada `analisar` na mesma instância). Como o
+        # provider é RECRIADO a cada análise (`obter_provider`), isso nunca
+        # gruda entre sessões: um servidor/modelo que aceita o schema estrito
+        # volta ao caminho forte na próxima análise.
+        self._gramatica_recusada = False
+
+    def _headers(self) -> dict[str, str]:
+        return ({"Authorization": f"Bearer {self.cfg.api_key}"}
+                if self.cfg.api_key else {})
 
     def analisar(self, fatos: FatosFinanceiros,
                  correcao: str | None = None) -> AnaliseAgente:
-        headers = ({"Authorization": f"Bearer {self.cfg.api_key}"}
-                   if self.cfg.api_key else {})
+        if self._gramatica_recusada:
+            return self._analisar_json_object(fatos, correcao)
+        try:
+            return self._analisar_json_schema(fatos, correcao)
+        except urllib.error.HTTPError as e:
+            # Só o 400 de recusa de gramática vira fallback; qualquer outro
+            # HTTPError (400 de outro tipo, 401, 500…) SOBE como hoje (P8).
+            if e.code == 400 and self._e_recusa_de_gramatica(e):
+                log.info("llama-server recusou a gramática do json_schema "
+                         "estrito (400); reenviando com json_object + schema "
+                         "no prompt (T-2505).")
+                self._gramatica_recusada = True
+                return self._analisar_json_object(fatos, correcao)
+            raise
+
+    def _e_recusa_de_gramatica(self, erro: urllib.error.HTTPError) -> bool:
+        """True se o corpo do 400 casa (case-insensitive) com uma recusa de
+        gramática conhecida. Lê o corpo do erro apenas uma vez; falha de leitura
+        é tratada como 'não é recusa de gramática' (o erro original propaga)."""
+        try:
+            corpo = erro.read().decode("utf-8", "replace").lower()
+        except Exception:  # noqa: BLE001 — corpo ilegível ⇒ não é a recusa alvo
+            return False
+        return any(padrao in corpo for padrao in _PADROES_RECUSA_GRAMATICA)
+
+    def _analisar_json_schema(self, fatos: FatosFinanceiros,
+                              correcao: str | None) -> AnaliseAgente:
+        """1ª forma (forte): a gramática de amostragem é restrita pelo schema."""
         resposta = _post_json(self.url, {
             "model": self.cfg.model,
             "messages": _mensagens(fatos, correcao),
@@ -212,7 +285,28 @@ class OpenAICompatProvider:
                 "json_schema": {"name": "AnaliseAgente", "strict": True,
                                 "schema": schema_estrito()},
             },
-        }, headers=headers, timeout_s=self.cfg.timeout_s)
+        }, headers=self._headers(), timeout_s=self.cfg.timeout_s)
+        conteudo = resposta["choices"][0]["message"]["content"]
+        return AnaliseAgente.model_validate_json(conteudo)
+
+    def _analisar_json_object(self, fatos: FatosFinanceiros,
+                              correcao: str | None) -> AnaliseAgente:
+        """Fallback: `json_object` (JSON livre) + o schema injetado no prompt.
+
+        A eventual correção do guardrail (retry do grafo) é preservada — entra
+        via `_mensagens`; o schema vem DEPOIS dela, como última mensagem `user`.
+        """
+        mensagens = _mensagens(fatos, correcao)
+        mensagens.append({
+            "role": "user",
+            "content": _INSTRUCAO_JSON_OBJECT + json.dumps(schema_estrito()),
+        })
+        resposta = _post_json(self.url, {
+            "model": self.cfg.model,
+            "messages": mensagens,
+            "temperature": TEMPERATURA,
+            "response_format": {"type": "json_object"},
+        }, headers=self._headers(), timeout_s=self.cfg.timeout_s)
         conteudo = resposta["choices"][0]["message"]["content"]
         return AnaliseAgente.model_validate_json(conteudo)
 
