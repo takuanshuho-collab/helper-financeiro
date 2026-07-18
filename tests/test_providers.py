@@ -377,3 +377,164 @@ def test_memoizado_com_conserto_dispensa_json_schema(perfil_atencao, monkeypatch
     assert isinstance(analise, AnaliseAgente)
     assert len(fake.payloads) == 2  # sem a tentativa json_schema
     assert all(p["response_format"] == {"type": "json_object"} for p in fake.payloads)
+
+
+# ------------------------- Streaming do contador (T-2603, ADR-0023)
+# O spike do dia 1 (build embarcado real b9966 + phi-3.5) provou: (1) o 400 de
+# recusa de gramática chega no `urlopen` ANTES de qualquer chunk; (2) chunks
+# `data: {...}` + `[DONE]` parseiam e o texto acumulado é JSON válido; (3) erro
+# no meio do stream descarta o parcial. Aqui os fakes exercitam o parser sem rede.
+def _sse_bytes(texto: str, por_chunk: int = 1, com_done: bool = True) -> bytes:
+    """Serializa `texto` como um stream SSE OpenAI-compat: um `data:` por delta
+    de conteúdo, `data: [DONE]` no fim (o formato que o llama-server emite)."""
+    linhas = [
+        "data: " + json.dumps({"choices": [{"delta": {"content": texto[i:i + por_chunk]}}]})
+        for i in range(0, len(texto), por_chunk)
+    ]
+    if com_done:
+        linhas.append("data: [DONE]")
+    return ("\n".join(linhas) + "\n").encode("utf-8")
+
+
+def test_streaming_texto_identico_ao_post_unico(perfil_atencao, monkeypatch):
+    """Sentinela: para o MESMO corpo, streaming e POST único devolvem o MESMO
+    texto (o contador não pode alterar o conteúdo que os guardrails recebem)."""
+    texto = _analise_valida_json(perfil_atencao)
+    payload = {"model": "m", "messages": [], "response_format": {"type": "json_object"}}
+
+    # POST único (on_progress ausente).
+    prov1 = _provider_local()
+    monkeypatch.setattr("agent.provider._post_json",
+                        _PostFake([{"choices": [{"message": {"content": texto}}]}]))
+    via_post = prov1._conteudo_chat(dict(payload))
+
+    # Streaming (on_progress presente) — mesmo texto fatiado em chunks SSE.
+    prov2 = _provider_local()
+    prov2.on_progress = lambda n, t: None
+    monkeypatch.setattr("agent.provider._abrir_stream",
+                        lambda *a: io.BytesIO(_sse_bytes(texto, por_chunk=3)))
+    via_stream = prov2._conteudo_chat(dict(payload))
+
+    assert via_post == via_stream == texto
+
+
+def test_streaming_parseia_done_e_valida(perfil_atencao, monkeypatch):
+    """Uma análise completa via stream parseia até `[DONE]` e valida no Pydantic."""
+    texto = _analise_valida_json(perfil_atencao)
+    prov = _provider_local()
+    prov._gramatica_recusada = True  # isola o caminho json_object
+    prov.on_progress = lambda n, t: None
+    monkeypatch.setattr("agent.provider._abrir_stream",
+                        lambda *a: io.BytesIO(_sse_bytes(texto)))
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    analise = prov.analisar(fatos)
+    assert isinstance(analise, AnaliseAgente)
+
+
+def test_streaming_400_gramatica_cai_no_fallback(perfil_atencao, monkeypatch):
+    """400 de gramática no stream (chega no urlopen, antes de token) ⇒ fallback
+    json_object, exatamente como o POST único do T-2505 — sem mudar expectativa."""
+    texto = _analise_valida_json(perfil_atencao)
+    corpos: list[dict] = []
+
+    def _abrir(url, corpo, headers, timeout_s):  # noqa: ANN001, ARG001
+        corpos.append(json.loads(corpo))
+        if len(corpos) == 1:
+            raise _http_error(400, CORPO_400_GRAMATICA)
+        return io.BytesIO(_sse_bytes(texto))
+
+    monkeypatch.setattr("agent.provider._abrir_stream", _abrir)
+    prov = _provider_local()
+    prov.on_progress = lambda n, t: None
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    analise = prov.analisar(fatos)
+    assert isinstance(analise, AnaliseAgente)
+    assert len(corpos) == 2
+    assert corpos[0]["response_format"]["type"] == "json_schema"
+    assert corpos[0]["stream"] is True  # o degrau forte também streama
+    assert corpos[1]["response_format"] == {"type": "json_object"}
+
+
+def test_streaming_tokens_e_entao_erro_descarta_parcial(monkeypatch):
+    """Erro NO MEIO do stream (chunk malformado) ⇒ descarta o parcial e propaga
+    pelo mesmo caminho de erro; nunca devolve um JSON truncado (revisão S4)."""
+    corrompido = (
+        b'data: {"choices":[{"delta":{"content":"{\\"sum"}}]}\n'
+        b'data: {"choices":[{"delta":{"content":"ario"}}]}\n'
+        b'data: {truncado sem fechar\n'
+    )
+    prov = _provider_local()
+    prov.on_progress = lambda n, t: None
+    monkeypatch.setattr("agent.provider._abrir_stream", lambda *a: io.BytesIO(corrompido))
+
+    with pytest.raises(json.JSONDecodeError):
+        prov._chat_stream({"model": "m", "messages": []})
+
+
+def test_contador_throttle_por_tokens(monkeypatch):
+    """Relógio parado ⇒ só o gatilho de ≥16 tokens dispara: emite em 16 e 32
+    (40 tokens); os 8 finais não estouram o limiar e não emitem (revisão G3)."""
+    prov = OpenAICompatProvider(
+        ConfigAgente(provider="openai_compat", base_url="http://localhost:1234/v1"),
+        relogio=lambda: 0.0)
+    emissoes: list[tuple[int, int]] = []
+    prov.on_progress = lambda n, t: emissoes.append((n, t))
+    monkeypatch.setattr("agent.provider._abrir_stream",
+                        lambda *a: io.BytesIO(_sse_bytes("x" * 40, por_chunk=1)))
+
+    prov._chat_stream({"model": "m", "messages": []})
+    assert [n for n, _ in emissoes] == [16, 32]
+    assert {t for _, t in emissoes} == {1}  # 1ª chamada HTTP ⇒ tentativa 1
+
+
+def test_contador_throttle_por_tempo(monkeypatch):
+    """Poucos tokens (<16) mas relógio avançando ≥200 ms por token ⇒ o gatilho de
+    tempo dispara a cada token. Passos folgados (1 s) evitam drift de float."""
+    tempos = iter([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])  # init + 5 tokens
+
+    prov = OpenAICompatProvider(
+        ConfigAgente(provider="openai_compat", base_url="http://localhost:1234/v1"),
+        relogio=lambda: next(tempos))
+    emissoes: list[int] = []
+    prov.on_progress = lambda n, t: emissoes.append(n)
+    monkeypatch.setattr("agent.provider._abrir_stream",
+                        lambda *a: io.BytesIO(_sse_bytes("xxxxx", por_chunk=1)))
+
+    prov._chat_stream({"model": "m", "messages": []})
+    assert emissoes == [1, 2, 3, 4, 5]
+
+
+def test_tentativa_e_semantica_nao_numero_de_chamada(perfil_atencao, monkeypatch):
+    """`tentativa` é SEMÂNTICA (correção do revisor, T-2603): o cenário REAL do
+    phi-3.5 — 400 de gramática na 1ª chamada (sem memoização) ⇒ o `json_object`
+    que gera a análise continua sendo tentativa 1 ("o modelo está escrevendo");
+    só o conserto dirigido vira 2 ("refinando a resposta"). Sem esta correção,
+    TODA análise com phi-3.5 nasceria rotulada como refino (U3)."""
+    invalido = _json_invalido(perfil_atencao)
+    valido = _analise_valida_json(perfil_atencao)
+
+    def _acoes():
+        yield _http_error(400, CORPO_400_GRAMATICA)  # json_schema recusado
+        yield io.BytesIO(_sse_bytes(invalido))       # fallback: gera (inválido)
+        yield io.BytesIO(_sse_bytes(valido))         # conserto dirigido
+    acoes = _acoes()
+
+    def _abrir_fake(*_a):
+        acao = next(acoes)
+        if isinstance(acao, Exception):
+            raise acao
+        return acao
+    monkeypatch.setattr("agent.provider._abrir_stream", _abrir_fake)
+    prov = _provider_local()  # SEM memoizar: a 1ª chamada é o json_schema real
+    tentativas: list[int] = []
+    prov.on_progress = lambda n, t: tentativas.append(t)
+    fatos, _ = montar_fatos(perfil_atencao)
+
+    analise = prov.analisar(fatos)
+    assert isinstance(analise, AnaliseAgente)
+    # O 400 não emitiu progresso; a geração pós-fallback é tentativa 1; só o
+    # conserto dirigido é 2.
+    assert 1 in tentativas and 2 in tentativas
+    assert tentativas == sorted(tentativas)  # 1s primeiro, depois os 2s

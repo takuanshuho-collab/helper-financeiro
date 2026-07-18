@@ -19,8 +19,10 @@ import copy
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Protocol
 
@@ -39,6 +41,13 @@ TEMPERATURA = 0.2
 # Os FATOS serializados crescem com o nº de dívidas; o padrão de 2048 tokens
 # de contexto do Ollama truncaria carteiras grandes.
 NUM_CTX = 8192
+
+# Streaming do contador (T-2603, ADR-0023): o `OpenAICompatProvider` emite o
+# progresso (n tokens) no máximo a cada `_STREAM_THROTTLE_TOKENS` tokens OU a
+# cada `_STREAM_THROTTLE_S` segundos — o que vier PRIMEIRO — para não inundar o
+# event loop/SSE (revisão G3). O contador reseta a cada chamada HTTP.
+_STREAM_THROTTLE_TOKENS = 16
+_STREAM_THROTTLE_S = 0.2
 
 
 class LLMProvider(Protocol):
@@ -110,6 +119,22 @@ def _post_json(url: str, payload: dict[str, Any],
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         dados: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
     return dados
+
+
+def _abrir_stream(url: str, corpo: bytes, headers: dict[str, str],
+                  timeout_s: int) -> Any:
+    """Abre um POST `stream=true` e devolve a resposta file-like (iterável por
+    linhas `data: ...`) — SEM ler o corpo inteiro (ADR-0023, T-2603).
+
+    Seam de teste espelhando `_post_json`: os testes trocam esta função por um
+    file-like que emite chunks SSE, exercitando o parser sem tocar a rede. Um
+    HTTP 400 (ex.: a recusa de gramática do phi-3.5) levanta `HTTPError` AQUI, no
+    `urlopen`, ANTES de qualquer chunk — provado no spike do dia 1 contra o build
+    embarcado real —, então o fallback do T-2505 dispara igual ao POST único."""
+    req = urllib.request.Request(
+        url, data=corpo, method="POST",
+        headers={"Content-Type": "application/json", **headers})
+    return urllib.request.urlopen(req, timeout=timeout_s)
 
 
 def _mensagens(fatos: FatosFinanceiros,
@@ -246,13 +271,31 @@ class OpenAICompatProvider:
     P8 do grafo continuam intactos — o fallback é ORTOGONAL a eles.
     """
 
-    def __init__(self, cfg: ConfigAgente):
+    #: Callback de progresso OPCIONAL (T-2603, ADR-0023). Setado por INSTÂNCIA
+    #: pelo nó `chamar_llm` quando a análise roda sob stream (o provider é
+    #: recriado a cada análise — `obter_provider` —, logo um provider por
+    #: análise: sem corrida entre jobs). `None` (default) ⇒ POST único como
+    #: sempre; ausente na extração/Ollama/Fake ⇒ retrocompatível. Args:
+    #: `(n_tokens_acumulados, tentativa)` — `tentativa` é SEMÂNTICA, não nº de
+    #: chamada HTTP (correção do revisor, T-2603): 1 = gerando a análise
+    #: (INCLUSIVE quando o fallback de gramática do T-2505 refez a chamada —
+    #: mecânica interna transparente, o phi-3.5 400a a 1ª chamada de TODA
+    #: análise e o usuário não pode ler isso como "refinando"); 2 = refinando
+    #: de verdade (retry do grafo com feedback do guardrail, ou o conserto
+    #: dirigido do JSON inválido). Quem traduz para rótulo é o backend (nunca
+    #: expõe retry como falha — revisão U3).
+    on_progress: Callable[[int, int], None] | None = None
+
+    def __init__(self, cfg: ConfigAgente,
+                 relogio: Callable[[], float] = time.monotonic):
         if not cfg.api_key and not cfg.endpoint_local:
             raise RuntimeError(
                 "HF_API_KEY ausente: endpoint remoto exige chave via variável "
                 "de ambiente (REQ-SEC-002).")
         self.cfg = cfg
         self.url = cfg.base_url.rstrip("/") + "/chat/completions"
+        # Relógio injetável para o throttle do contador (teste sem dormir).
+        self._relogio = relogio
         # Memoização por INSTÂNCIA: assim que este servidor recusa a gramática
         # do `json_schema` estrito, as chamadas seguintes DESTA instância vão
         # direto ao fallback, sem gastar a 1ª requisição fadada ao 400 (o retry
@@ -293,10 +336,77 @@ class OpenAICompatProvider:
             return False
         return any(padrao in corpo for padrao in _PADROES_RECUSA_GRAMATICA)
 
+    def _conteudo_chat(self, payload: dict[str, Any], *,
+                       refinando: bool = False) -> str:
+        """Faz o POST do chat e devolve `choices[0].message.content`.
+
+        Ponto ÚNICO por onde os 3 degraus do T-2505 falam com o servidor: com
+        `on_progress` ligado usa `stream=true` (conta tokens e emite progresso);
+        sem ele, POST único via `_post_json` — BYTE A BYTE idêntico ao caminho
+        pré-T-2603 (mesmo payload, sem a chave `stream`), o que preserva a
+        resiliência do T-2505 e os testes existentes sem mudança de expectativa.
+        A sentinela de teste garante: para o MESMO corpo, stream e POST único
+        devolvem o MESMO texto. `refinando` é a semântica que o chamador declara
+        para o progresso (ver o docstring de `on_progress`)."""
+        if self.on_progress is not None:
+            return self._chat_stream(payload, refinando=refinando)
+        resposta = _post_json(self.url, payload, headers=self._headers(),
+                              timeout_s=self.cfg.timeout_s)
+        conteudo: str = resposta["choices"][0]["message"]["content"]
+        return conteudo
+
+    def _chat_stream(self, payload: dict[str, Any], *,
+                     refinando: bool = False) -> str:
+        """Consome um chat `stream=true` acumulando o texto EXATAMENTE como o
+        corpo não-streaming produziria, contando tokens e emitindo o progresso
+        com throttle (ADR-0023, T-2603).
+
+        Defensivo (revisão S4): qualquer erro NO MEIO do stream (chunk malformado,
+        conexão caída) propaga e o texto parcial é DESCARTADO — nunca retornamos
+        um JSON truncado. Como o `return` só ocorre após o `[DONE]`/EOF, uma
+        exceção no laço aborta sem devolver nada, e o erro sobe pelo MESMO caminho
+        do POST único: o 400 de gramática (que chega no `urlopen`, antes de
+        qualquer token) continua caindo no fallback `json_object`; os demais
+        degradam no grafo (P8)."""
+        tentativa = 2 if refinando else 1
+        corpo = json.dumps({**payload, "stream": True}).encode("utf-8")
+        pedacos: list[str] = []
+        n_tokens = 0
+        marco_t = self._relogio()
+        marco_n = 0
+        with _abrir_stream(self.url, corpo, self._headers(),
+                           self.cfg.timeout_s) as resp:
+            for linha_bruta in resp:
+                linha = (linha_bruta.decode("utf-8") if isinstance(linha_bruta, bytes)
+                         else linha_bruta).strip()
+                if not linha.startswith("data:"):
+                    continue  # linhas em branco / comentários SSE (`: ping`)
+                dado = linha[len("data:"):].strip()
+                if dado == "[DONE]":
+                    break
+                delta = json.loads(dado)["choices"][0].get("delta", {})
+                conteudo = delta.get("content")
+                if not conteudo:
+                    continue  # chunks de role/finish_reason sem texto
+                pedacos.append(conteudo)
+                n_tokens += 1
+                agora = self._relogio()
+                if (n_tokens - marco_n >= _STREAM_THROTTLE_TOKENS
+                        or agora - marco_t >= _STREAM_THROTTLE_S):
+                    self._emitir_progresso(n_tokens, tentativa)
+                    marco_t, marco_n = agora, n_tokens
+        return "".join(pedacos)
+
+    def _emitir_progresso(self, n_tokens: int, tentativa: int) -> None:
+        """Chama o callback de progresso, se houver (mantém `_chat_stream` enxuto)."""
+        callback = self.on_progress
+        if callback is not None:
+            callback(n_tokens, tentativa)
+
     def _analisar_json_schema(self, fatos: FatosFinanceiros,
                               correcao: str | None) -> AnaliseAgente:
         """1ª forma (forte): a gramática de amostragem é restrita pelo schema."""
-        resposta = _post_json(self.url, {
+        conteudo = self._conteudo_chat({
             "model": self.cfg.model,
             "messages": _mensagens(fatos, correcao),
             "temperature": TEMPERATURA,
@@ -305,11 +415,11 @@ class OpenAICompatProvider:
                 "json_schema": {"name": "AnaliseAgente", "strict": True,
                                 "schema": schema_estrito()},
             },
-        }, headers=self._headers(), timeout_s=self.cfg.timeout_s)
-        conteudo = resposta["choices"][0]["message"]["content"]
+        }, refinando=correcao is not None)  # retry do guardrail = refino real
         return AnaliseAgente.model_validate_json(conteudo)
 
-    def _post_json_object(self, mensagens: list[dict[str, str]]) -> str:
+    def _post_json_object(self, mensagens: list[dict[str, str]], *,
+                          refinando: bool = False) -> str:
         """Uma requisição `json_object` (temp 0) → conteúdo bruto (string JSON).
 
         Temperatura ZERO só aqui, de propósito: sem a gramática restringindo a
@@ -319,14 +429,12 @@ class OpenAICompatProvider:
         (`json_schema` estrito) mantém a `TEMPERATURA` normal — lá a gramática
         garante o formato e a variação melhora o texto.
         """
-        resposta = _post_json(self.url, {
+        return self._conteudo_chat({
             "model": self.cfg.model,
             "messages": mensagens,
             "temperature": 0.0,  # aderência ao schema > variação de texto
             "response_format": {"type": "json_object"},
-        }, headers=self._headers(), timeout_s=self.cfg.timeout_s)
-        conteudo: str = resposta["choices"][0]["message"]["content"]
-        return conteudo
+        }, refinando=refinando)
 
     def _analisar_json_object(self, fatos: FatosFinanceiros,
                               correcao: str | None) -> AnaliseAgente:
@@ -351,7 +459,11 @@ class OpenAICompatProvider:
             "role": "user",
             "content": _INSTRUCAO_JSON_OBJECT + json.dumps(schema_estrito()),
         })
-        conteudo = self._post_json_object(mensagens)
+        # `refinando`: o fallback de gramática NÃO é refino (mecânica interna,
+        # transparente ao usuário — correção do revisor T-2603); só o retry do
+        # guardrail (correcao) e o conserto dirigido abaixo contam como refino.
+        conteudo = self._post_json_object(mensagens,
+                                          refinando=correcao is not None)
         try:
             return AnaliseAgente.model_validate_json(conteudo)
         except ValidationError as e:
@@ -362,7 +474,7 @@ class OpenAICompatProvider:
                 + "\nDevolva SOMENTE o objeto JSON corrigido, completo, "
                 "sem comentários."
             )})
-            corrigido = self._post_json_object(mensagens)
+            corrigido = self._post_json_object(mensagens, refinando=True)
             return AnaliseAgente.model_validate_json(corrigido)  # falha ⇒ propaga
 
     def analisar_com_correcao(self, fatos: FatosFinanceiros,

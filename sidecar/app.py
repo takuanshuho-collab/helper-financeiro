@@ -10,23 +10,26 @@ from __future__ import annotations
 import base64
 import binascii
 import io
+import json
 import logging
 import math
 import os
 import re
 import threading
 import time
-from collections.abc import AsyncIterator
+from collections import deque
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
+import anyio
 import qrcode
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from qrcode.image.pure import PyPNGImage
 
 from agent.agente import analisar, montar_fatos
@@ -814,6 +817,7 @@ def _varrer_jobs_terminais(jobs: dict[str, dict], termino: dict[str, float]) -> 
     for jid in expirados:
         jobs.pop(jid, None)
         termino.pop(jid, None)
+        _JOBS_IA_EVENTOS.pop(jid, None)  # a fila de eventos morre com o job
     return expirados
 
 
@@ -826,16 +830,88 @@ def _varrer_jobs_terminais(jobs: dict[str, dict], termino: dict[str, float]) -> 
 _JOBS_IA: dict[str, dict] = {}
 _JOBS_IA_LOCK = threading.Lock()
 _JOBS_IA_FIM: dict[str, float] = {}
+# Fila de eventos de progresso por job (SSE, T-2603), à PARTE do dict de estado
+# para o contrato do `GET /analise/ia/{job_id}` (`{status, secao, erro,
+# aviso_runtime}`) não vazar uma `deque` não-serializável. Fica sob o MESMO
+# `_JOBS_IA_LOCK` e com o MESMO ciclo de vida de `_JOBS_IA`: a disciplina C-04
+# (só grava se a entrada ainda existe em `_JOBS_IA`) vale igual. Ring buffer
+# bounded (~128, padrão do ADR-0022): se a GUI não consumir, eventos velhos caem
+# — o `terminal` sempre carrega o estado completo, então nenhum evento é crítico.
+_JOBS_IA_EVENTOS: dict[str, deque[str]] = {}
+_MAX_EVENTOS_JOB = 128
+
+# Poll e heartbeat do endpoint SSE (injetáveis nos testes para não dormir 15 s).
+_SSE_POLL_S = 0.2
+_SSE_HEARTBEAT_S = 15.0
+
+# Rótulos human-friendly de cada nó do grafo, montados no BACKEND (REQ-NF-005: a
+# GUI nunca reimplementa a decisão). Um nó desconhecido (grafo futuro) cai no
+# genérico em vez de quebrar. O teste `test_rotulos_cobrem_os_nos_do_grafo`
+# compara este mapa com os nós REAIS do StateGraph — um nó novo quebra o teste e
+# força um rótulo, nunca passa despercebido.
+_ROTULOS_FASE: dict[str, str] = {
+    "verificar_pii": "conferindo a privacidade dos dados",
+    "consultar_cache": "consultando análise anterior",
+    "chamar_llm": "o modelo está escrevendo",
+    "validar_guardrails": "validando a resposta",
+    "sanear": "ajustando a redação",
+    "aprovar": "concluindo",
+    "degradar": "concluindo",
+}
+_ROTULO_FASE_GENERICO = "processando"
+# Progresso com `tentativa >= 2` (fallback/conserto do T-2505) NUNCA aparece como
+# "tentativa 2 de 2" (leria como "a IA errou" — revisão U3/S7): vira este rótulo
+# neutro. `tentativa == 1` reaproveita o rótulo do nó que escreve.
+_ROTULO_REFINANDO = "refinando a resposta"
+
+
+def _evento_sse(evento: str, dados: dict) -> str:
+    """Monta um frame SSE `event: <nome>\\ndata: <json>\\n\\n` (uma linha por
+    campo, corpo em JSON — o padrão que o `fetch`+leitura de stream da GUI
+    consome; nunca `EventSource`, para o token viajar no header)."""
+    return f"event: {evento}\ndata: {json.dumps(dados)}\n\n"
+
+
+def _rotular_evento(tipo: str, dados: dict) -> tuple[str, dict]:
+    """Traduz um evento cru do grafo (`fase`/`progresso`) no par
+    (nome_evento_sse, payload com rótulo pt-BR). O CONTEÚDO do LLM nunca entra
+    aqui — só o nome do nó e a CONTAGEM de tokens."""
+    if tipo == "fase":
+        no = dados.get("no", "")
+        return "fase", {"no": no, "rotulo": _ROTULOS_FASE.get(no, _ROTULO_FASE_GENERICO)}
+    # progresso: {"tipo":"tokens", "n":int, "tentativa":int} vindo do provider.
+    tentativa = int(dados.get("tentativa", 1))
+    rotulo = _ROTULO_REFINANDO if tentativa >= 2 else _ROTULOS_FASE["chamar_llm"]
+    return "progresso", {"n": int(dados.get("n", 0)), "tentativa": tentativa,
+                         "rotulo": rotulo}
+
+
+def _empilhar_evento(job_id: str, tipo: str, dados: dict) -> None:
+    """Enfileira um evento de progresso na deque do job — SÓ se a entrada ainda
+    existe em `_JOBS_IA` (C-04: um job já descartado pelo auto-lock não pode
+    ganhar eventos que ressuscitem estado). Chamado pelo worker do job via o
+    callback `ao_evento` de `executar_analise`."""
+    evento, payload = _rotular_evento(tipo, dados)
+    frame = _evento_sse(evento, payload)
+    with _JOBS_IA_LOCK:
+        if job_id not in _JOBS_IA:
+            return  # descartado no meio: não ressuscita nada (C-04)
+        fila = _JOBS_IA_EVENTOS.get(job_id)
+        if fila is not None:
+            fila.append(frame)
 
 
 def _descartar_jobs_ia() -> None:
     """Esvazia `_JOBS_IA` — armado como `ao_bloquear` da sessão do cofre, roda
     quando ela bloqueia (manual OU auto-lock). A seção da análise sênior guarda
     credores DESANONIMIZADOS (REQ-SEC-003): a PII não pode sobreviver à janela
-    desbloqueada, então some junto com a DEK (C-04)."""
+    desbloqueada, então some junto com a DEK (C-04). A fila de eventos some
+    junto: um evento pendente poderia carregar contagem de um job morto e o
+    stream SSE, ao ver a entrada sumida, encerra com `erro` (G6)."""
     with _JOBS_IA_LOCK:
         _JOBS_IA.clear()
         _JOBS_IA_FIM.clear()
+        _JOBS_IA_EVENTOS.clear()
 
 
 def _persistir_ultima_analise_se_completo(
@@ -885,6 +961,12 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
     # evita reconsultar `carregar_config()` duas vezes e correr o risco de
     # gravar um modelo diferente do que de fato gerou a análise.
     cfg = cfg or carregar_config()
+
+    def _ao_evento(tipo: str, dados: dict) -> None:
+        # Ponte grafo → fila SSE do job. Roda na thread do worker; escreve sob o
+        # lock e só se o job ainda existe (C-04). Nunca carrega conteúdo do LLM.
+        _empilhar_evento(job_id, tipo, dados)
+
     try:
         # `retomar=True` (ADR-0023, T-2601): thread_id determinístico (assinatura
         # dos fatos) + retomada de checkpoint inacabado. `apagar_no_fim=False`
@@ -892,8 +974,10 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
         # `_persistir_ultima_analise_se_completo`, DEPOIS de persistir. Com o
         # cofre aberto e o toggle ligado, o checkpoint é durável (SqliteSaver no
         # cofre); senão cai em memória e `retomar` simplesmente não acha nada.
+        # `ao_evento` (T-2603) faz o grafo streamar fase+contador para a fila SSE.
         resultado = analisar(perfil, extra_mensal=extra, cfg=cfg,
-                             provider=provider, retomar=True, apagar_no_fim=False)
+                             provider=provider, retomar=True, apagar_no_fim=False,
+                             ao_evento=_ao_evento)
         # O mapa é reconstruível: os tokens CREDOR_n seguem a ordem das dívidas.
         # A desanonimização acontece SÓ aqui, na fronteira da exibição local
         # (REQ-SEC-003) — o que foi ao LLM só tinha tokens.
@@ -952,6 +1036,7 @@ def analise_ia_iniciar(
         _varrer_jobs_terminais(_JOBS_IA, _JOBS_IA_FIM)  # coleta preguiçosa
         _JOBS_IA[job_id] = {"status": "rodando", "secao": None, "erro": "",
                            "aviso_runtime": None}
+        _JOBS_IA_EVENTOS[job_id] = deque(maxlen=_MAX_EVENTOS_JOB)  # fila SSE (T-2603)
     threading.Thread(
         target=_rodar_job_ia,
         args=(job_id, perfil, entrada.extra, cfg, provider, sess),
@@ -971,7 +1056,76 @@ def analise_ia_status(job_id: str) -> dict:
         if job["status"] != "rodando":
             del _JOBS_IA[job_id]  # leitura final: libera a memória do job
             _JOBS_IA_FIM.pop(job_id, None)
+            _JOBS_IA_EVENTOS.pop(job_id, None)  # fila SSE morre com o job
     return {"job_id": job_id, **job}
+
+
+async def _gerar_eventos_sse(
+    job_id: str, *, intervalo_s: float = _SSE_POLL_S,
+    heartbeat_s: float = _SSE_HEARTBEAT_S,
+    relogio: Callable[[], float] = time.monotonic,
+    dormir: Callable[[float], Awaitable[None]] = anyio.sleep,
+) -> AsyncIterator[str]:
+    """Gerador do stream SSE de um job (T-2603, ADR-0023).
+
+    A cada `intervalo_s`, sob o lock, DRENA os eventos de fase/progresso da fila
+    do job e, se o job já é terminal, captura o payload terminal AINDA sob o lock
+    (mesmo shape do `GET /analise/ia/{job_id}`, incl. `aviso_runtime`) — assim um
+    poll concorrente que apague o job não faz o stream perder o terminal. Regras
+    de encerramento (o stream NUNCA fica pendurado):
+      - job terminal (pronto OU erro) ⇒ emite os eventos pendentes, depois
+        `terminal` com o payload, e ENCERRA. Job já terminal na conexão ⇒
+        `terminal` direto (a GUI pode conectar atrasada).
+      - job sumido (auto-lock/descarte/TTL, revisão G6) ⇒ `erro`
+        `{"erro":"job encerrado"}` e ENCERRA — nada de PII ressuscita depois.
+      - heartbeat `: ping` a cada `heartbeat_s` para a conexão não expirar.
+    Relógio/sleep/intervalos injetáveis para o teste não dormir 15 s."""
+    ultimo_heartbeat = relogio()
+    while True:
+        pendentes: list[str] = []
+        terminal: dict | None = None
+        sumiu = False
+        with _JOBS_IA_LOCK:
+            job = _JOBS_IA.get(job_id)
+            if job is None:
+                sumiu = True
+            else:
+                fila = _JOBS_IA_EVENTOS.get(job_id)
+                if fila is not None:
+                    while fila:
+                        pendentes.append(fila.popleft())
+                if job["status"] != "rodando":
+                    terminal = {"job_id": job_id, **job}  # snapshot sob o lock
+        for frame in pendentes:
+            yield frame
+        if terminal is not None:
+            yield _evento_sse("terminal", terminal)
+            return
+        if sumiu:
+            yield _evento_sse("erro", {"erro": "job encerrado"})
+            return
+        agora = relogio()
+        if agora - ultimo_heartbeat >= heartbeat_s:
+            yield ": ping\n\n"  # comentário SSE: mantém a conexão viva
+            ultimo_heartbeat = agora
+        await dormir(intervalo_s)
+
+
+@app.get("/analise/ia/{job_id}/eventos",
+         dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
+async def analise_ia_eventos(job_id: str) -> StreamingResponse:
+    """Progresso da análise sênior em tempo real (SSE, T-2603).
+
+    `fase`/`progresso` (contagem de tokens, nunca o conteúdo) durante a corrida,
+    `terminal` com o MESMO payload do `GET /analise/ia/{job_id}` ao fim, `erro`
+    se o job sumiu (auto-lock). Token no header (via `exigir_token`); o polling
+    do `GET` continua como fallback (contrato intacto). Cabeçalhos anti-buffering
+    para o proxy/loopback não segurar os frames."""
+    return StreamingResponse(
+        _gerar_eventos_sse(job_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/analise/ultima", dependencies=[Depends(exigir_token)])

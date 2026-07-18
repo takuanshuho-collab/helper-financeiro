@@ -5,11 +5,13 @@ Usam o `TestClient` do FastAPI (sem rede real). Cobrem a autenticação por
 token, a validação de entrada e o roundtrip determinístico core <-> JSON,
 incluindo os casos de borda (sem dívidas, reserva sem despesas, ordenação).
 """
+import asyncio
 import base64
 import logging
 import os
 import threading
 import time
+from collections import deque
 
 import pytest
 from fastapi.testclient import TestClient
@@ -810,6 +812,170 @@ def test_job_ia_descartado_no_meio_nao_ressuscita_pii(monkeypatch, _sessao_sem_c
     with app_mod._JOBS_IA_LOCK:
         assert "j2" not in app_mod._JOBS_IA      # resultado morreu com o descarte
         assert "j2" not in app_mod._JOBS_IA_FIM
+
+
+# --- SSE de progresso da análise sênior (T-2603, ADR-0023) --------------------
+def _coletar_sse(job_id: str, timeout_s: float = 10.0) -> str:
+    """Abre o SSE e acumula o texto até ver `terminal`/`erro` (ou timeout)."""
+    partes: list[str] = []
+    with cliente.stream("GET", f"/analise/ia/{job_id}/eventos",
+                        headers=CABECALHO) as resp:
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        for pedaco in resp.iter_text():
+            partes.append(pedaco)
+            texto = "".join(partes)
+            if "event: terminal" in texto or "event: erro" in texto:
+                break
+    return "".join(partes)
+
+
+def test_sse_sequencia_fase_ate_terminal_com_aviso_runtime():
+    """fase→…→terminal: o terminal carrega o MESMO contrato do
+    `GET /analise/ia/{job_id}` (status/secao/erro/aviso_runtime)."""
+    espiao = ProviderEspiao()
+    cfg = ConfigAgente(provider="fake", cache=False)
+    cliente.app.dependency_overrides[contexto_analise] = lambda: (cfg, espiao)
+    try:
+        job_id = cliente.post("/analise/ia", json={"perfil": PERFIL_ANALISE},
+                              headers=CABECALHO).json()["job_id"]
+        texto = _coletar_sse(job_id)
+        assert "event: fase" in texto
+        assert '"rotulo"' in texto  # rótulo human-friendly montado no backend
+        assert "event: terminal" in texto
+        assert '"status": "pronto"' in texto
+        assert "aviso_runtime" in texto  # campo aditivo presente no terminal
+        # O conteúdo desanonimizado só aparece no terminal (não em fase/progresso).
+        assert "event: progresso" not in texto or texto.index("event: terminal") > 0
+    finally:
+        cliente.app.dependency_overrides.clear()
+        app_mod = __import__("sidecar.app", fromlist=["_descartar_jobs_ia"])
+        app_mod._descartar_jobs_ia()
+
+
+def test_sse_job_inexistente_emite_erro_e_encerra():
+    """Job desconhecido (auto-lock/sumido, revisão G6) ⇒ `erro` e encerra — o
+    stream nunca fica pendurado."""
+    texto = _coletar_sse("nao-existe-jamais")
+    assert "event: erro" in texto
+    assert "job encerrado" in texto
+
+
+def test_sse_job_ja_terminal_emite_terminal_direto():
+    """A GUI pode conectar atrasada: job já terminal ⇒ `terminal` direto."""
+    from sidecar import app as app_mod
+
+    with app_mod._JOBS_IA_LOCK:
+        app_mod._JOBS_IA["jt"] = {"status": "pronto", "secao": {"modo": "completo"},
+                                  "erro": "", "aviso_runtime": None}
+        app_mod._JOBS_IA_EVENTOS["jt"] = deque()
+    try:
+        texto = _coletar_sse("jt")
+        assert "event: terminal" in texto
+        assert '"status": "pronto"' in texto
+    finally:
+        with app_mod._JOBS_IA_LOCK:
+            app_mod._JOBS_IA.pop("jt", None)
+            app_mod._JOBS_IA_EVENTOS.pop("jt", None)
+
+
+def _drena_async(gen) -> list[str]:
+    async def _run() -> list[str]:
+        return [frame async for frame in gen]
+    return asyncio.run(_run())
+
+
+def test_sse_bloqueio_no_meio_encerra_com_erro_sem_pii():
+    """G4 (obrigatório): cofre bloqueia ENQUANTO o job streama ⇒ o stream encerra
+    com `erro`, NUNCA emite `terminal` e nenhuma PII ressuscita depois. O terminal
+    (que carregaria a `secao` desanonimizada) jamais se forma após o descarte."""
+    from sidecar import app as app_mod
+
+    with app_mod._JOBS_IA_LOCK:
+        # Job "rodando" com a secao já preenchida com PII sentinela e um evento
+        # de fase pendente (fases nunca carregam PII, mas provam a drenagem).
+        app_mod._JOBS_IA["jg"] = {"status": "rodando",
+                                  "secao": {"credor": "PII-SENTINELA-XYZ"},
+                                  "erro": "", "aviso_runtime": None}
+        fila: deque[str] = deque(maxlen=128)
+        fila.append(app_mod._evento_sse("fase", {"no": "chamar_llm",
+                                                 "rotulo": "o modelo está escrevendo"}))
+        app_mod._JOBS_IA_EVENTOS["jg"] = fila
+
+    bloqueou = {"feito": False}
+
+    async def _dormir_que_bloqueia(_s: float) -> None:
+        if not bloqueou["feito"]:
+            bloqueou["feito"] = True
+            app_mod._descartar_jobs_ia()  # cofre bloqueia no meio (C-04)
+
+    try:
+        gen = app_mod._gerar_eventos_sse(
+            "jg", intervalo_s=0.0, heartbeat_s=1e9, relogio=lambda: 0.0,
+            dormir=_dormir_que_bloqueia)
+        frames = _drena_async(gen)
+        texto = "".join(frames)
+        assert "event: fase" in texto            # o evento pré-bloqueio saiu
+        assert "event: erro" in texto            # encerrou com erro (G6)
+        assert "job encerrado" in texto
+        assert "event: terminal" not in texto    # terminal nunca se formou
+        assert "PII-SENTINELA-XYZ" not in texto  # nenhuma PII ressuscitou
+    finally:
+        app_mod._descartar_jobs_ia()
+
+
+def test_sse_heartbeat_emite_ping():
+    """Heartbeat `: ping` a cada `heartbeat_s` (relógio/sleep injetáveis — o teste
+    não dorme 15 s de verdade)."""
+    from sidecar import app as app_mod
+
+    with app_mod._JOBS_IA_LOCK:
+        app_mod._JOBS_IA["jh"] = {"status": "rodando", "secao": None, "erro": "",
+                                  "aviso_runtime": None}
+        app_mod._JOBS_IA_EVENTOS["jh"] = deque()
+
+    relogio = {"t": 0.0}
+
+    async def _dormir(_s: float) -> None:
+        relogio["t"] += 20.0  # avança além do heartbeat (15 s)
+        if relogio["t"] >= 40.0:  # depois de 2 saltos, encerra o job
+            with app_mod._JOBS_IA_LOCK:
+                app_mod._JOBS_IA["jh"]["status"] = "pronto"
+
+    try:
+        gen = app_mod._gerar_eventos_sse(
+            "jh", intervalo_s=0.0, heartbeat_s=15.0,
+            relogio=lambda: relogio["t"], dormir=_dormir)
+        texto = "".join(_drena_async(gen))
+        assert ": ping" in texto            # heartbeat saiu
+        assert "event: terminal" in texto   # e o stream encerrou ao virar terminal
+    finally:
+        with app_mod._JOBS_IA_LOCK:
+            app_mod._JOBS_IA.pop("jh", None)
+            app_mod._JOBS_IA_EVENTOS.pop("jh", None)
+
+
+def test_rotulos_cobrem_os_nos_do_grafo():
+    """O mapa de rótulos cobre TODOS os nós reais do StateGraph — um nó novo no
+    futuro quebra o teste e força um rótulo (REQ-NF-005)."""
+    from agent.grafo import grafo_analise
+    from sidecar.app import _ROTULOS_FASE
+
+    nos = {n for n in grafo_analise().get_graph().nodes if not n.startswith("__")}
+    faltando = nos - set(_ROTULOS_FASE)
+    assert not faltando, f"nós sem rótulo: {faltando}"
+
+
+def test_sse_progresso_com_tentativa_2_e_refinando():
+    """Progresso com `tentativa >= 2` (fallback/conserto do T-2505) vira o rótulo
+    neutro 'refinando a resposta' — NUNCA expõe o retry como falha (revisão U3)."""
+    from sidecar import app as app_mod
+
+    _, payload1 = app_mod._rotular_evento("progresso", {"n": 5, "tentativa": 1})
+    _, payload2 = app_mod._rotular_evento("progresso", {"n": 9, "tentativa": 2})
+    assert payload1["rotulo"] == "o modelo está escrevendo"
+    assert payload2["rotulo"] == "refinando a resposta"
+    assert "tentativa 2" not in payload2["rotulo"].lower()
 
 
 # --- Carta ao credor (T-903, REQ-F-016) ---------------------------------------

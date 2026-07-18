@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired, TypedDict
 from uuid import uuid4
@@ -32,6 +32,7 @@ from uuid import uuid4
 from langgraph.checkpoint.base import BaseCheckpointSaver, RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
@@ -259,6 +260,37 @@ class ContextoAnalise:
     cfg: ConfigAgente
     mapa: MapaAnonimizacao
     provider: LLMProvider | None = None
+    # Liga o contador de tokens (T-2603): só `True` quando a análise roda sob
+    # `.stream(...,"custom",...)` com um `ao_evento` — o caminho `.invoke()`
+    # (todos os chamadores de hoje) mantém `False` e o provider faz POST único.
+    emitir_progresso: bool = False
+
+
+def _conectar_progresso_ao_stream(ctx: ContextoAnalise) -> None:
+    """Liga (ou desliga) o `on_progress` do provider ao `StreamWriter` do run.
+
+    Só o `OpenAICompatProvider` expõe `on_progress` (Ollama/Fake não têm o
+    atributo — `hasattr` protege). Fora de um run com stream custom,
+    `get_stream_writer()` levanta `RuntimeError` (sem contexto runnable): tratado
+    como "sem stream" ⇒ desliga o callback e o provider faz POST único. O
+    contador escreve `{"tipo":"tokens", ...}` no canal **custom** — nunca o
+    conteúdo do LLM, só a CONTAGEM (o texto só é liberado após os guardrails)."""
+    provider = ctx.provider
+    if not hasattr(provider, "on_progress"):
+        return
+    if not ctx.emitir_progresso:
+        provider.on_progress = None  # type: ignore[union-attr]
+        return
+    try:
+        writer = get_stream_writer()
+    except RuntimeError:
+        provider.on_progress = None  # type: ignore[union-attr]
+        return
+
+    def _ao_progresso(n_tokens: int, tentativa: int) -> None:
+        writer({"tipo": "tokens", "n": n_tokens, "tentativa": tentativa})
+
+    provider.on_progress = _ao_progresso  # type: ignore[union-attr]
 
 
 # ------------------------------------------------------------------- nós
@@ -303,6 +335,9 @@ def chamar_llm(state: EstadoAnalise,
             log.debug("Falha ao obter provider (config): %s", type(e).__name__)
             return {"motivos": [f"ERRO_CONFIG:{type(e).__name__}"],
                     "tentativas": MAX_TENTATIVAS}
+
+    # Liga o contador de tokens ao stream do run (no-op no caminho `.invoke()`).
+    _conectar_progresso_ao_stream(ctx)
 
     tentativas = state.get("tentativas", 0) + 1
     correcao = state.get("correcao")
@@ -532,11 +567,42 @@ def _entrada_da_retomada(grafo: GrafoAnalise, config: RunnableConfig, tid: str,
     return entrada_fresca
 
 
+def _executar_com_stream(
+    grafo: GrafoAnalise, entrada: EstadoAnalise | None, config: RunnableConfig,
+    contexto: ContextoAnalise, ao_evento: Callable[[str, dict[str, Any]], None],
+) -> dict[str, Any]:
+    """Roda o grafo por `.stream()` SÍNCRONO (o job roda em thread síncrona —
+    decisão do orquestrador: sem tocar asyncio) emitindo fase + progresso, e
+    devolve o MESMO estado final que o `.invoke()` produziria (ADR-0023, T-2603).
+
+    `updates` ⇒ um `ao_evento("fase", {"no": <nome>})` por nó concluído; `custom`
+    ⇒ `ao_evento("progresso", chunk)` (o `{"tipo":"tokens", ...}` do provider);
+    `values` é consumido AQUI (não vira evento — conteúdo do estado nunca sai
+    como progresso) só para capturar o estado final materializado. O último
+    `values` é byte a byte o retorno de `.invoke()` (verificado na versão
+    instalada), então o `ResultadoAnalise` resultante é idêntico."""
+    estado_final: dict[str, Any] = {}
+    for modo, chunk in grafo.stream(
+            entrada, config=config, context=contexto,
+            stream_mode=["updates", "custom", "values"]):
+        dados: Any = chunk
+        if modo == "updates":
+            for nome_no in dados:  # dados = {nome_no: update} (um nó por emissão)
+                ao_evento("fase", {"no": nome_no})
+        elif modo == "custom":
+            ao_evento("progresso", dados)  # {"tipo":"tokens", "n":.., "tentativa":..}
+        else:  # "values": estado acumulado do super-step (o último é o final)
+            estado_final = dados
+    return estado_final
+
+
 def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
                      cfg: ConfigAgente, provider: LLMProvider | None = None,
                      thread_id: str | None = None,
                      retomar: bool = False,
-                     apagar_no_fim: bool = True) -> ResultadoAnalise:
+                     apagar_no_fim: bool = True,
+                     ao_evento: Callable[[str, dict[str, Any]], None] | None = None,
+                     ) -> ResultadoAnalise:
     """Invoca o grafo e materializa o `ResultadoAnalise` da aplicação.
 
     `retomar=True` (opt-in do job da análise): usa o thread_id determinístico
@@ -548,7 +614,13 @@ def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
     completo órfão, inócuo, podado no próximo início), então ele mesmo chama
     `apagar_thread_analise` depois de gravar. Os chamadores existentes não
     passam nenhum dos dois parâmetros ⇒ semântica antiga intacta (thread
-    efêmero por `uuid4`, sem poda/retomada/apagar)."""
+    efêmero por `uuid4`, sem poda/retomada/apagar).
+
+    `ao_evento` (T-2603): `None` ⇒ caminho `.invoke()` de sempre (intacto para
+    todos os chamadores atuais). Presente ⇒ `.stream()` síncrono emitindo
+    `("fase", {...})` por nó e `("progresso", {...})` por chunk do contador; o
+    `ResultadoAnalise` materializado é IDÊNTICO ao do `.invoke()` (mesmo fake,
+    dois caminhos). Retomada/higiene funcionam igual nos dois caminhos."""
     grafo = grafo_analise()
     tid = thread_id or (thread_id_analise(cfg, fatos) if retomar else str(uuid4()))
     config: RunnableConfig = {"configurable": {"thread_id": tid}}
@@ -556,10 +628,12 @@ def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
     entrada: EstadoAnalise | None = entrada_fresca
     if retomar:
         entrada = _entrada_da_retomada(grafo, config, tid, entrada_fresca)
-    estado = grafo.invoke(
-        entrada, config=config,
-        context=ContextoAnalise(cfg=cfg, mapa=mapa, provider=provider),
-    )
+    contexto = ContextoAnalise(cfg=cfg, mapa=mapa, provider=provider,
+                               emitir_progresso=ao_evento is not None)
+    if ao_evento is None:
+        estado = grafo.invoke(entrada, config=config, context=contexto)
+    else:
+        estado = _executar_com_stream(grafo, entrada, config, contexto, ao_evento)
     if retomar and apagar_no_fim:
         apagar_thread_analise(tid)  # fim legítimo ⇒ higiene (T-2602 reordena)
     modo = estado.get("modo", "degradado")

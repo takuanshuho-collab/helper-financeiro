@@ -12,6 +12,8 @@ sem o essencial por causa do LLM.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from contracts import DividaFato, EstrategiaFato, FatosFinanceiros, ResultadoAnalise
 from core.diagnostico import resumo_diagnostico
@@ -94,7 +96,9 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
              cfg: ConfigAgente | None = None,
              provider: LLMProvider | None = None,
              retomar: bool = False,
-             apagar_no_fim: bool = True) -> ResultadoAnalise:
+             apagar_no_fim: bool = True,
+             ao_evento: Callable[[str, dict[str, Any]], None] | None = None,
+             ) -> ResultadoAnalise:
     """Ponto de entrada da análise assistida por IA, com guardrails e degradação.
 
     Desde o ADR-0006 a orquestração (cache → LLM com 1 retry → guardrails →
@@ -106,8 +110,9 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
     determinístico + retomada de checkpoint inacabado + higiene. `apagar_no_fim`
     só importa com `retomar=True` (T-2602): `False` deixa o job persistir a
     `SecaoIA` ANTES de apagar o checkpoint (ordem "persistir-antes-de-apagar").
-    Os demais chamadores omitem os dois parâmetros ⇒ comportamento antigo
-    intacto.
+    `ao_evento` (T-2603): callback opcional de progresso (fase/contador) — `None`
+    mantém o caminho `.invoke()` de sempre. Os demais chamadores omitem os
+    parâmetros novos ⇒ comportamento antigo intacto.
     """
     cfg = cfg or carregar_config()
     fatos, mapa = montar_fatos(perfil, extra_mensal)
@@ -117,4 +122,4 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
         return _degradado(fatos, ["MODO_DEGRADADO"])
 
     return executar_analise(fatos, mapa, cfg, provider, retomar=retomar,
-                            apagar_no_fim=apagar_no_fim)
+                            apagar_no_fim=apagar_no_fim, ao_evento=ao_evento)
