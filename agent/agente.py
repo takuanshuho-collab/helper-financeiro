@@ -93,7 +93,8 @@ def _verificar_pii_pre_envio(fatos: FatosFinanceiros,
 def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
              cfg: ConfigAgente | None = None,
              provider: LLMProvider | None = None,
-             retomar: bool = False) -> ResultadoAnalise:
+             retomar: bool = False,
+             apagar_no_fim: bool = True) -> ResultadoAnalise:
     """Ponto de entrada da análise assistida por IA, com guardrails e degradação.
 
     Desde o ADR-0006 a orquestração (cache → LLM com 1 retry → guardrails →
@@ -102,8 +103,11 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
     comportamento observável são os mesmos de antes.
 
     `retomar=True` (opt-in do job da análise sênior, ADR-0023): liga o thread_id
-    determinístico + retomada de checkpoint inacabado + higiene. Os demais
-    chamadores omitem o parâmetro ⇒ comportamento antigo intacto.
+    determinístico + retomada de checkpoint inacabado + higiene. `apagar_no_fim`
+    só importa com `retomar=True` (T-2602): `False` deixa o job persistir a
+    `SecaoIA` ANTES de apagar o checkpoint (ordem "persistir-antes-de-apagar").
+    Os demais chamadores omitem os dois parâmetros ⇒ comportamento antigo
+    intacto.
     """
     cfg = cfg or carregar_config()
     fatos, mapa = montar_fatos(perfil, extra_mensal)
@@ -112,4 +116,5 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
     if cfg.modo_degradado:
         return _degradado(fatos, ["MODO_DEGRADADO"])
 
-    return executar_analise(fatos, mapa, cfg, provider, retomar=retomar)
+    return executar_analise(fatos, mapa, cfg, provider, retomar=retomar,
+                            apagar_no_fim=apagar_no_fim)

@@ -1417,6 +1417,32 @@ body {
   border-top: 1px solid var(--divisor);
 }
 
+/* Persistência visível da última análise (T-2602, ADR-0023). */
+.ia-carimbo {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Selo âmbar "os dados mudaram" — mesmo padrão visual do `.aviso-runtime`. */
+.ia-selo-desatualizada {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--orange);
+  background: var(--tint-orange);
+  border: 1px solid color-mix(in srgb, var(--orange) 35%, var(--border));
+  border-radius: var(--r-tile);
+  padding: 12px 14px;
+}
+
+/* A análise salva some esmaecida quando os dados vivos já divergem dela —
+ * ainda legível, mas visualmente marcada como desatualizada. */
+.ia-secao-desatualizada {
+  opacity: 0.55;
+  filter: grayscale(0.3);
+}
+
 /* Exportações */
 .export-linha {
   display: flex;

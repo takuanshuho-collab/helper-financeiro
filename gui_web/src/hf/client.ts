@@ -7,6 +7,7 @@
  */
 import type {
   AnaliseOut,
+  AnaliseUltimaOut,
   ArquivadoOut,
   AuthCadastroOut,
   AuthStatusOut,
@@ -170,6 +171,12 @@ export const hf = {
     chamar('/analise/ia', { perfil, extra }),
   analiseIaStatus: (jobId: string): Promise<IaStatusOut> =>
     chamar(`/analise/ia/${jobId}`),
+  /** Hidratação da última análise sênior salva (T-2602, ADR-0023). POST (não
+   * GET, desvio deliberado): o backend precisa do perfil+extra VIVOS no corpo
+   * para calcular `assinatura_atual` sem a GUI reimplementar o cálculo
+   * (REQ-NF-005) — a GUI só compara a string devolvida. */
+  analiseUltima: (perfil: PerfilIn, extra = 0): Promise<AnaliseUltimaOut> =>
+    chamar('/analise/ultima', { perfil, extra }),
   exportarPlanilha: (
     perfil: PerfilIn,
     caminho: string,

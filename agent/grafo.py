@@ -535,14 +535,20 @@ def _entrada_da_retomada(grafo: GrafoAnalise, config: RunnableConfig, tid: str,
 def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
                      cfg: ConfigAgente, provider: LLMProvider | None = None,
                      thread_id: str | None = None,
-                     retomar: bool = False) -> ResultadoAnalise:
+                     retomar: bool = False,
+                     apagar_no_fim: bool = True) -> ResultadoAnalise:
     """Invoca o grafo e materializa o `ResultadoAnalise` da aplicação.
 
     `retomar=True` (opt-in do job da análise): usa o thread_id determinístico
     (assinatura dos fatos), retoma um thread inacabado do checkpoint durável e,
     ao terminar (aprovado OU degradado — ambos são fim legítimo), apaga o thread
-    (higiene). Os chamadores existentes não passam `retomar` ⇒ semântica antiga
-    intacta (thread efêmero por `uuid4`, sem poda/retomada)."""
+    (higiene) — A MENOS que `apagar_no_fim=False` (T-2602, ADR-0023): o job da
+    análise sênior precisa persistir a `SecaoIA` ANTES de apagar o checkpoint
+    (ordem "persistir-antes-de-apagar" — crash entre os dois deixa um thread
+    completo órfão, inócuo, podado no próximo início), então ele mesmo chama
+    `apagar_thread_analise` depois de gravar. Os chamadores existentes não
+    passam nenhum dos dois parâmetros ⇒ semântica antiga intacta (thread
+    efêmero por `uuid4`, sem poda/retomada/apagar)."""
     grafo = grafo_analise()
     tid = thread_id or (thread_id_analise(cfg, fatos) if retomar else str(uuid4()))
     config: RunnableConfig = {"configurable": {"thread_id": tid}}
@@ -554,7 +560,7 @@ def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
         entrada, config=config,
         context=ContextoAnalise(cfg=cfg, mapa=mapa, provider=provider),
     )
-    if retomar:
+    if retomar and apagar_no_fim:
         apagar_thread_analise(tid)  # fim legítimo ⇒ higiene (T-2602 reordena)
     modo = estado.get("modo", "degradado")
     analise_dump = estado.get("analise")
@@ -565,4 +571,8 @@ def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
         modo=modo,
         guardrails_violados=estado.get("motivos", []) if modo == "degradado" else [],
         aviso_legal=AVISO_LEGAL,
+        # T-2602: exposto para o job usar como assinatura persistida (fonte
+        # ÚNICA de `thread_id_analise`, nunca recalculada fora daqui) e para
+        # apagar o checkpoint DEPOIS de persistir, quando `apagar_no_fim=False`.
+        thread_id=tid,
     )

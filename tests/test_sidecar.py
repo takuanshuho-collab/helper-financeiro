@@ -793,7 +793,7 @@ def test_descartar_jobs_ia_esvazia_dicionarios():
         assert app_mod._JOBS_IA_FIM == {}
 
 
-def test_job_ia_descartado_no_meio_nao_ressuscita_pii(monkeypatch):
+def test_job_ia_descartado_no_meio_nao_ressuscita_pii(monkeypatch, _sessao_sem_cofre):
     """C-04 (revisão): se o cofre bloqueia ENQUANTO o job roda, o worker não
     pode regravar a seção desanonimizada ao terminar — sem a guarda no
     `_rodar_job_ia`, a PII ressuscitava em `_JOBS_IA` depois do bloqueio."""
@@ -806,7 +806,7 @@ def test_job_ia_descartado_no_meio_nao_ressuscita_pii(monkeypatch):
     with app_mod._JOBS_IA_LOCK:
         app_mod._JOBS_IA["j2"] = {"status": "rodando", "secao": None, "erro": ""}
     app_mod._descartar_jobs_ia()          # cofre bloqueou no meio do job
-    app_mod._rodar_job_ia("j2", PerfilFinanceiro(), 0.0, None, None)
+    app_mod._rodar_job_ia("j2", PerfilFinanceiro(), 0.0, None, None, _sessao_sem_cofre)
     with app_mod._JOBS_IA_LOCK:
         assert "j2" not in app_mod._JOBS_IA      # resultado morreu com o descarte
         assert "j2" not in app_mod._JOBS_IA_FIM

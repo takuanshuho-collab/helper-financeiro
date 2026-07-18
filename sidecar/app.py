@@ -18,6 +18,7 @@ import threading
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
@@ -28,11 +29,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from qrcode.image.pure import PyPNGImage
 
-from agent.agente import analisar
+from agent.agente import analisar, montar_fatos
 from agent.classificacao import Classificador, classificar_grupos
 from agent.config import ConfigAgente, carregar_config
 from agent.exibicao import ROTULOS_EXTRACAO, campos_para_formulario, preparar_exibicao
 from agent.extracao import Extrator, confirmar_extracao, iniciar_extracao
+from agent.grafo import apagar_thread_analise, thread_id_analise
 from agent.ingestao import preparar_contexto
 from agent.ocr import Motor, OCRIndisponivel, obter_motor, ocr_documento
 from agent.provider import LLMProvider
@@ -43,6 +45,7 @@ from contracts import (
     ConfigLLMOut,
     MetricasBootOut,
     OrigemConfigLLM,
+    ResultadoAnalise,
     SecaoIA,
 )
 from core.diagnostico import resumo_diagnostico
@@ -88,6 +91,7 @@ from .persistencia import ChaveInvalida, Repositorio
 from .schemas import (
     AnaliseIaIn,
     AnaliseIn,
+    AnaliseUltimaOut,
     AplicarImportacaoIn,
     ArquivarMesIn,
     BaixarModeloIn,
@@ -110,6 +114,7 @@ from .schemas import (
     RubricaEditIn,
     RubricaIn,
     TrocarSenhaCofreIn,
+    UltimaAnaliseOut,
 )
 from .security import exigir_token
 from .sessao import SessaoBloqueada, SessaoCofre
@@ -833,15 +838,62 @@ def _descartar_jobs_ia() -> None:
         _JOBS_IA_FIM.clear()
 
 
+def _persistir_ultima_analise_se_completo(
+    job_id: str, resultado: ResultadoAnalise, secao: SecaoIA,
+    cfg: ConfigAgente, sess: SessaoCofre,
+) -> None:
+    """Persiste a `SecaoIA` da última análise ANTES de apagar o checkpoint do
+    T-2601 (ordem "persistir-antes-de-apagar", ADR-0023/T-2602) — crash entre
+    os dois passos deixa um thread completo órfão, inócuo, podado no próximo
+    início da mesma assinatura.
+
+    Best-effort e silenciosamente no-op nos três casos em que NÃO persiste:
+    (1) modo degradado — não há seção que valha os 2–4 min, a antiga salva
+    permanece; (2) job sumiu de `_JOBS_IA` (C-04: o cofre bloqueou no meio,
+    `_descartar_jobs_ia` já limpou) — mesmo critério do estado final do job;
+    (3) o cofre fechou entre o fim do job e esta escrita (`SessaoBloqueada`)
+    ou a gravação falhou por outro motivo — o checkpoint some pela poda da
+    PRÓXIMA análise da mesma assinatura (`podar_threads_analise`/
+    `_entrada_da_retomada`), nunca serve resultado velho."""
+    if resultado.modo != "completo" or resultado.thread_id is None:
+        return
+    with _JOBS_IA_LOCK:
+        if job_id not in _JOBS_IA:
+            return  # cofre bloqueou no meio do job (C-04): não ressuscita nada
+    try:
+        repo = sess.repositorio_ativo()
+        repo.salvar_ultima_analise({
+            "secao": secao.model_dump(),
+            "assinatura": resultado.thread_id,
+            "carimbo": datetime.now().astimezone().isoformat(),
+            "modelo": cfg.model,
+        })
+    except SessaoBloqueada:
+        return  # cofre fechou entre o fim do job e a escrita: best-effort
+    except Exception:  # noqa: BLE001 — persistência é best-effort (P8)
+        log.warning("Falha ao persistir a última análise sênior; seguindo "
+                    "(ADR-0023/T-2602).")
+        return
+    apagar_thread_analise(resultado.thread_id)  # SÓ ENTÃO — ordem segura
+
+
 def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
-                  cfg: ConfigAgente | None, provider: LLMProvider | None) -> None:
+                  cfg: ConfigAgente | None, provider: LLMProvider | None,
+                  sess: SessaoCofre) -> None:
+    # Resolve a config UMA vez aqui (T-2602): a mesma instância alimenta
+    # `analisar` (thread_id/provider) E o `modelo` gravado na persistência —
+    # evita reconsultar `carregar_config()` duas vezes e correr o risco de
+    # gravar um modelo diferente do que de fato gerou a análise.
+    cfg = cfg or carregar_config()
     try:
         # `retomar=True` (ADR-0023, T-2601): thread_id determinístico (assinatura
-        # dos fatos) + retomada de checkpoint inacabado + higiene no fim. Com o
+        # dos fatos) + retomada de checkpoint inacabado. `apagar_no_fim=False`
+        # (T-2602): quem apaga o checkpoint agora é
+        # `_persistir_ultima_analise_se_completo`, DEPOIS de persistir. Com o
         # cofre aberto e o toggle ligado, o checkpoint é durável (SqliteSaver no
         # cofre); senão cai em memória e `retomar` simplesmente não acha nada.
         resultado = analisar(perfil, extra_mensal=extra, cfg=cfg,
-                             provider=provider, retomar=True)
+                             provider=provider, retomar=True, apagar_no_fim=False)
         # O mapa é reconstruível: os tokens CREDOR_n seguem a ordem das dívidas.
         # A desanonimização acontece SÓ aqui, na fronteira da exibição local
         # (REQ-SEC-003) — o que foi ao LLM só tinha tokens.
@@ -858,6 +910,7 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
         aviso_runtime = mensagem_cpu_fallback(instancia.boot_info()) if instancia else None
         estado: dict[str, object] = {"status": "pronto", "secao": secao.model_dump(),
                                      "erro": "", "aviso_runtime": aviso_runtime}
+        _persistir_ultima_analise_se_completo(job_id, resultado, secao, cfg, sess)
     except Exception as e:  # noqa: BLE001 — o erro vira status consultável no poll
         # C-34: nunca engolir em silêncio. `perfil` carrega dados financeiros
         # do usuário (credores, valores) — `str(e)` pode ecoar fragmentos dele
@@ -880,12 +933,17 @@ def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
 @app.post("/analise/ia", dependencies=[Depends(exigir_token), Depends(exigir_cofre)])
 def analise_ia_iniciar(
     entrada: AnaliseIaIn,
+    sess: Annotated[SessaoCofre, Depends(sessao_dependencia)],
     ctx: tuple[ConfigAgente | None, LLMProvider | None] = Depends(contexto_analise),
 ) -> dict:
     """Dispara a análise sênior (IA, sob guardrails) e devolve o id do job.
 
     Os fatos vão ANONIMIZADOS ao LLM (tokens CREDOR_n, REQ-GRD-002/H2); toda
-    falha degrada para o diagnóstico determinístico (P8) — nunca 500.
+    falha degrada para o diagnóstico determinístico (P8) — nunca 500. `sess`
+    viaja para a thread do job (T-2602): é o acesso ao repositório que
+    `_persistir_ultima_analise_se_completo` usa para gravar a última análise
+    ao terminar — o job roda fora do ciclo de vida de uma requisição HTTP,
+    então não pode usar `Depends(exigir_cofre)` normalmente.
     """
     cfg, provider = ctx
     perfil = _para_perfil(entrada.perfil)
@@ -895,7 +953,8 @@ def analise_ia_iniciar(
         _JOBS_IA[job_id] = {"status": "rodando", "secao": None, "erro": "",
                            "aviso_runtime": None}
     threading.Thread(
-        target=_rodar_job_ia, args=(job_id, perfil, entrada.extra, cfg, provider),
+        target=_rodar_job_ia,
+        args=(job_id, perfil, entrada.extra, cfg, provider, sess),
         daemon=True,
     ).start()
     return {"job_id": job_id}
@@ -913,6 +972,31 @@ def analise_ia_status(job_id: str) -> dict:
             del _JOBS_IA[job_id]  # leitura final: libera a memória do job
             _JOBS_IA_FIM.pop(job_id, None)
     return {"job_id": job_id, **job}
+
+
+@app.post("/analise/ultima", dependencies=[Depends(exigir_token)])
+def analise_ultima(
+    entrada: AnaliseIaIn,
+    repo: Annotated[Repositorio, Depends(exigir_cofre)],
+    ctx: tuple[ConfigAgente | None, LLMProvider | None] = Depends(contexto_analise),
+) -> AnaliseUltimaOut:
+    """Hidratação da última análise sênior salva (T-2602, ADR-0023).
+
+    **POST, não GET** — desvio deliberado da letra da ADR: (1) a ponte
+    Electron (`electron/main.ts`) escolhe o verbo HTTP pela presença de corpo
+    na chamada, e este endpoint recebe perfil+extra no corpo; (2) o backend
+    precisa dos FATOS VIVOS para calcular `assinatura_atual` sem a GUI
+    reimplementar `thread_id_analise` (REQ-NF-005 — a GUI só compara strings).
+    Mesmo shape de entrada de `POST /analise/ia` (`AnaliseIaIn`).
+    """
+    cfg, _ = ctx
+    cfg = cfg or carregar_config()
+    perfil = _para_perfil(entrada.perfil)
+    fatos, _ = montar_fatos(perfil, entrada.extra)
+    assinatura_atual = thread_id_analise(cfg, fatos)
+    salvo = repo.ultima_analise()
+    analise_salva = UltimaAnaliseOut.model_validate(salvo) if salvo else None
+    return AnaliseUltimaOut(analise_salva=analise_salva, assinatura_atual=assinatura_atual)
 
 
 # ------------------------------------------------------- exportações (T-902)  # noqa: ERA001 — cabeçalho de seção, não código comentado

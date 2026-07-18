@@ -73,6 +73,12 @@ class ResultadoAnalise(BaseModel):
     modo: str                        # "completo" | "degradado"
     guardrails_violados: list[str] = Field(default_factory=list)
     aviso_legal: str = ""
+    # Campo ADITIVO (T-2602, ADR-0023): o thread_id usado por `executar_analise`
+    # (determinístico = "analise:" + assinatura dos fatos, quando `retomar=True`;
+    # None nos chamadores que não passam `retomar`). O job da análise sênior usa
+    # este valor como a `assinatura` persistida (fonte ÚNICA — `thread_id_analise`,
+    # nunca recalculada aqui) e para apagar o checkpoint DEPOIS de persistir.
+    thread_id: str | None = None
 
 
 # ----------------------------- Extração Code-First (Fase 2.5) -----------------

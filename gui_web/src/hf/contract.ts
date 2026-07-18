@@ -310,6 +310,23 @@ export interface IaStatusOut {
   aviso_runtime: string | null
 }
 
+/** Última análise sênior salva no cofre (T-2602, ADR-0023). `assinatura` é o
+ * mesmo thread_id determinístico do T-2601 — a GUI só COMPARA esta string com
+ * `assinatura_atual`, nunca recalcula (REQ-NF-005). */
+export interface UltimaAnaliseOut {
+  secao: SecaoIaOut
+  assinatura: string
+  carimbo: string
+  modelo: string
+}
+
+/** Resposta de `POST /analise/ultima`: a análise salva (se houver) + a
+ * assinatura calculada dos dados VIVOS enviados no corpo. */
+export interface AnaliseUltimaOut {
+  analise_salva: UltimaAnaliseOut | null
+  assinatura_atual: string
+}
+
 export interface ExportadoOut {
   caminho: string
 }

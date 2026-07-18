@@ -8,9 +8,10 @@ import type {
   OportunidadeOut,
   PerfilIn,
   SecaoIaOut,
+  UltimaAnaliseOut,
 } from '../hf/contract'
 import type { Analise as AnaliseApp } from '../hf/useAnalise'
-import { brl, corSaude, faixaTaxa, iniciais, pct0, taxaAm } from '../lib/format'
+import { brl, carimboBR, corSaude, faixaTaxa, iniciais, pct0, taxaAm } from '../lib/format'
 
 type EstadoIa =
   | { fase: 'ocioso' }
@@ -44,8 +45,49 @@ export default function Analise({
   // devolve `aviso_runtime` — a análise que rodou caiu para CPU no boot que a
   // serviu. Informativo: não bloqueia nem esconde o resultado.
   const [avisoRuntime, setAvisoRuntime] = useState<string | null>(null)
+  // Persistência visível da última análise (T-2602, ADR-0023): `analiseSalva`
+  // é o que o sidecar tem gravado; `assinaturaAtual` é a assinatura dos dados
+  // VIVOS (calculada no backend — a GUI só COMPARA strings, REQ-NF-005).
+  const [analiseSalva, setAnaliseSalva] = useState<UltimaAnaliseOut | null>(null)
+  const [assinaturaAtual, setAssinaturaAtual] = useState('')
 
   const d = analise.diagnostico
+
+  // Hidrata a última análise salva ao montar e sempre que perfil/extra mudarem
+  // (mesmo padrão de debounce do `pacote` acima) — nunca enquanto uma geração
+  // está rodando. Quando a assinatura salva bate com a atual, a seção salva
+  // vira a seção exibida (e entra no .docx de graça); dados diferentes só
+  // atualizam `analiseSalva`/`assinaturaAtual`, para o selo "dados mudaram".
+  // Como `ia.fase` está nas deps, terminar uma geração (`gerarIa`) também
+  // rechama isto — atualiza carimbo/assinatura sem código extra.
+  useEffect(() => {
+    if (ia.fase === 'rodando') return
+    let vivo = true
+    const timer = setTimeout(() => {
+      hf.analiseUltima(perfil, extra)
+        .then((r) => {
+          if (!vivo) return
+          setAnaliseSalva(r.analise_salva)
+          setAssinaturaAtual(r.assinatura_atual)
+          if (r.analise_salva && r.analise_salva.assinatura === r.assinatura_atual) {
+            setSecaoIa(r.analise_salva.secao)
+          } else if (r.analise_salva) {
+            // A seção exibida (se houver) referia-se aos dados ANTERIORES —
+            // some daqui para o bloco esmaecido assumir (`analiseSalva` com
+            // assinatura divergente), em vez de continuar exibida como se
+            // ainda valesse para os dados vivos atuais.
+            setSecaoIa(null)
+          }
+        })
+        .catch(() => {
+          // best-effort: sem hidratação, a tela segue como hoje
+        })
+    }, 160)
+    return () => {
+      vivo = false
+      clearTimeout(timer)
+    }
+  }, [perfil, extra, ia.fase, setSecaoIa])
 
   // Recalcula o pacote determinístico a cada mudança (debounce como no useAnalise).
   useEffect(() => {
@@ -118,6 +160,10 @@ export default function Analise({
 
   const cor = corSaude(d.classificacao)
   const est = pacote?.estrategias
+  // T-2602: a salva bate com os dados vivos (mesma assinatura) — a GUI só
+  // COMPARA as duas strings que já vieram prontas do backend (REQ-NF-005).
+  const salvaAtualizada =
+    analiseSalva !== null && analiseSalva.assinatura === assinaturaAtual
 
   return (
     <>
@@ -289,7 +335,11 @@ export default function Analise({
             onClick={() => void gerarIa()}
             disabled={ia.fase === 'rodando'}
           >
-            {ia.fase === 'rodando' ? 'Gerando…' : 'Gerar análise sênior'}
+            {ia.fase === 'rodando'
+              ? 'Gerando…'
+              : salvaAtualizada
+                ? 'Gerar novamente'
+                : 'Gerar análise sênior'}
           </button>
         </div>
 
@@ -304,11 +354,24 @@ export default function Analise({
           <div className="aviso-erro">Erro ao gerar a análise: {ia.msg}</div>
         )}
         {avisoRuntime && <div className="aviso-runtime">⚠ {avisoRuntime}</div>}
-        {ia.fase === 'ocioso' && !secaoIa && (
+        {ia.fase === 'ocioso' && !secaoIa && !analiseSalva && (
           <p className="sub ia-vazia">
             A IA interpreta os números do diagnóstico e sugere prioridades e um
             roteiro de negociação. Nada substitui os cálculos acima.
           </p>
+        )}
+
+        {/* T-2602: seção salva desatualizada — esmaecida, com selo âmbar, até
+         * o usuário gerar de novo (o clique substitui tudo). */}
+        {ia.fase !== 'rodando' && analiseSalva && !salvaAtualizada && !secaoIa && (
+          <>
+            <div className="ia-selo-desatualizada">
+              ⚠ Os dados mudaram desde esta análise.
+            </div>
+            <div className="ia-secao-desatualizada">
+              <SecaoIa secao={analiseSalva.secao} />
+            </div>
+          </>
         )}
 
         {secaoIa && secaoIa.modo !== 'completo' && (
@@ -318,7 +381,16 @@ export default function Analise({
             {secaoIa.motivos.length > 0 && <> Motivos: {secaoIa.motivos.join(', ')}.</>}
           </div>
         )}
-        {secaoIa && secaoIa.modo === 'completo' && <SecaoIa secao={secaoIa} />}
+        {secaoIa && secaoIa.modo === 'completo' && (
+          <>
+            {salvaAtualizada && analiseSalva && (
+              <p className="ia-carimbo">
+                Análise de {carimboBR(analiseSalva.carimbo)} — dados inalterados
+              </p>
+            )}
+            <SecaoIa secao={secaoIa} />
+          </>
+        )}
       </section>
 
       <div className="export-linha">

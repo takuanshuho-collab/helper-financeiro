@@ -60,6 +60,15 @@ _BUSY_TIMEOUT_MS = 5000
 # Seções do orçamento que aceitam rubricas (ADR-0012: saldos ficam de fora).
 CATEGORIAS_RUBRICA = ("renda", "fixas", "variaveis")
 
+# Chave da última análise sênior persistida (T-2602, ADR-0023) na tabela
+# key-value `estado` — mesmo mecanismo do `perfil:AAAA-MM` do histórico
+# mensal. DESVIO DELIBERADO da letra da ADR-0023 ("tabela nova"): o
+# mecanismo key-value já entrega upsert + JSON por 1 linha (só a ÚLTIMA
+# análise, YAGNI — sem histórico por competência) SEM nenhuma migração de
+# schema, e a ADR-0017 §E proíbe migração de schema num ciclo sem
+# necessidade concreta. `VERSAO_ESQUEMA` continua 1.
+_CHAVE_ULTIMA_ANALISE = "analise_ultima"
+
 # Header mágico do SQLite em claro (16 bytes). O contêiner SQLCipher começa com
 # bytes aleatórios (o sal), então a presença deste header detecta "ainda em claro".
 _HEADER_SQLITE_CLARO = b"SQLite format 3\x00"
@@ -373,6 +382,21 @@ class Repositorio:
         if not isinstance(dados, dict):
             return None  # conteúdo inesperado: melhor "sem estado" que quebrar
         return dados
+
+    # ------------------------------------------------- análise sênior (T-2602)
+    def salvar_ultima_analise(self, dados: dict) -> None:
+        """Upsert da última análise sênior aprovada (chave dedicada da tabela
+        `estado`, mesmo padrão de `salvar_estado`/`arquivar_mes`). O chamador
+        (job da análise, `sidecar/app.py`) monta `dados` como
+        `{"secao": SecaoIA.model_dump(), "assinatura": str, "carimbo": str,
+        "modelo": str}` — a `secao` JÁ desanonimizada (REQ-SEC-003), pronta
+        para a GUI exibir direto na hidratação."""
+        self.salvar_estado(_CHAVE_ULTIMA_ANALISE, dados)
+
+    def ultima_analise(self) -> dict | None:
+        """A última análise sênior salva, ou `None` se nenhuma foi persistida
+        ainda (primeira execução, ou banco novo)."""
+        return self.carregar_estado(_CHAVE_ULTIMA_ANALISE)
 
     # ------------------------------------------------------------ rubricas
     # CRUD dos lançamentos do orçamento (T-1103, REQ-F-017). `mes` fica NULL

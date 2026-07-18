@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from contracts import SecaoIA
+
 
 class DividaIn(BaseModel):
     credor: str
@@ -159,6 +161,28 @@ class AnaliseIaIn(BaseModel):
 
     perfil: PerfilIn
     extra: float = Field(default=0.0, ge=0)
+
+
+class UltimaAnaliseOut(BaseModel):
+    """Última análise sênior salva no cofre (T-2602, ADR-0023).
+
+    `secao` já vem desanonimizada (REQ-SEC-003); `assinatura` é o mesmo
+    thread_id determinístico do T-2601 (`agent.grafo.thread_id_analise`) — a
+    GUI só COMPARA esta string com `assinatura_atual`, nunca recalcula
+    (REQ-NF-005)."""
+
+    secao: SecaoIA
+    assinatura: str
+    carimbo: str
+    modelo: str
+
+
+class AnaliseUltimaOut(BaseModel):
+    """Resposta de `POST /analise/ultima`: a análise salva (se houver) mais a
+    assinatura calculada dos dados VIVOS enviados no corpo."""
+
+    analise_salva: UltimaAnaliseOut | None = None
+    assinatura_atual: str
 
 
 class ExportarPlanilhaIn(BaseModel):

@@ -53,3 +53,19 @@ export function iniciais(tipo: string): string {
   const letras = palavras.slice(0, 2).map((p) => p[0] ?? '')
   return letras.join('').toUpperCase() || '?'
 }
+
+/** Carimbo da última análise sênior (T-2602) em pt-BR ("17/07/2026 21:34") a
+ * partir do ISO-8601 que o sidecar já grava em horário LOCAL — a GUI só
+ * FORMATA, nunca recalcula a assinatura nem interpreta o carimbo (REQ-NF-005).
+ * ISO inválido devolve o texto cru (degradação segura: mostra algo, não quebra). */
+export function carimboBR(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
