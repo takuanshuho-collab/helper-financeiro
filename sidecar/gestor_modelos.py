@@ -307,6 +307,23 @@ def gpu_offload_configurado(
     return None
 
 
+def retomar_analises_configurado(ambiente: Mapping[str, str] | None = None) -> bool:
+    """Toggle "retomar análises interrompidas" (`retomar_analises`) do `llm.json`.
+
+    Preferência (não segredo — mesmo lugar de `ctx_size`/`gpu_offload`), com
+    **default LIGADO** (ADR-0023, Decisão #3: honra a condição opt-in da
+    ADR-0006 sem exigir configuração inicial). Leitura TOLERANTE como o resto do
+    `llm.json` (nunca levanta): ausente, tipo errado ou lixo ⇒ `True`. Só o
+    booleano explícito `false` desliga. `int`/`str` não são coagidos a bool de
+    propósito — um `retomar_analises: 0` editado à mão é um engano, não um
+    "desligado" legítimo; na dúvida, o default seguro é ligado.
+    """
+    bruto = ler_llm_config(ambiente).get("retomar_analises")
+    if isinstance(bruto, bool):
+        return bruto
+    return True
+
+
 def definir_modelo_ativo(caminho: str | os.PathLike[str],
                          ambiente: Mapping[str, str] | None = None) -> Path:
     """Valida o `.gguf` e persiste como modelo ativo em `llm.json`.

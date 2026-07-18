@@ -53,6 +53,10 @@ from .arquivos import endurecer_arquivo, endurecer_pasta
 
 VERSAO_ESQUEMA = 1
 
+# Espera (ms) por lock de escrita antes de estourar `database is locked` — sob
+# WAL, ligado pelo checkpoint durável no MESMO dados.db (ADR-0023/spike, T-2601).
+_BUSY_TIMEOUT_MS = 5000
+
 # Seções do orçamento que aceitam rubricas (ADR-0012: saldos ficam de fora).
 CATEGORIAS_RUBRICA = ("renda", "fixas", "variaveis")
 
@@ -130,9 +134,16 @@ def _conectar(caminho: Path, dek: bytes | None) -> sqlite3.Connection:
     if dek is None:
         con = sqlite3.connect(str(caminho), check_same_thread=False)
         con.row_factory = sqlite3.Row
+        # ADR-0023/spike: sob WAL (ligado pelo saver durável no MESMO dados.db),
+        # uma escrita concorrente ESPERA em vez de estourar `database is locked`.
+        con.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
         return con
     cifrada = sqlcipher3.connect(str(caminho), check_same_thread=False)
     cifrada.row_factory = sqlcipher3.Row
+    # ADR-0023/spike: busy_timeout nas DUAS conexões (repo + saver do checkpoint)
+    # — sob WAL, a escrita concorrente espera a liberação do lock (não é sensível,
+    # não embute a chave; seguro fora do bloco anti-vazamento abaixo).
+    cifrada.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
     # O `PRAGMA key` (que embute o hex da DEK) e a leitura de sanidade compartilham
     # o MESMO tratamento: chave errada só falha na PRIMEIRA leitura, mas um erro no
     # próprio `PRAGMA key` — ou um traceback que ecoe a statement — carregaria o hex.

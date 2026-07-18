@@ -92,13 +92,18 @@ def _verificar_pii_pre_envio(fatos: FatosFinanceiros,
 
 def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
              cfg: ConfigAgente | None = None,
-             provider: LLMProvider | None = None) -> ResultadoAnalise:
+             provider: LLMProvider | None = None,
+             retomar: bool = False) -> ResultadoAnalise:
     """Ponto de entrada da análise assistida por IA, com guardrails e degradação.
 
     Desde o ADR-0006 a orquestração (cache → LLM com 1 retry → guardrails →
     aprovar/degradar) vive no StateGraph de `agent/grafo.py`; esta função
     prepara os fatos e materializa o resultado — a assinatura e o
     comportamento observável são os mesmos de antes.
+
+    `retomar=True` (opt-in do job da análise sênior, ADR-0023): liga o thread_id
+    determinístico + retomada de checkpoint inacabado + higiene. Os demais
+    chamadores omitem o parâmetro ⇒ comportamento antigo intacto.
     """
     cfg = cfg or carregar_config()
     fatos, mapa = montar_fatos(perfil, extra_mensal)
@@ -107,4 +112,4 @@ def analisar(perfil: PerfilFinanceiro, extra_mensal: float = 0.0,
     if cfg.modo_degradado:
         return _degradado(fatos, ["MODO_DEGRADADO"])
 
-    return executar_analise(fatos, mapa, cfg, provider)
+    return executar_analise(fatos, mapa, cfg, provider, retomar=retomar)

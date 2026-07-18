@@ -21,6 +21,7 @@ dependencies = [
     "pyotp>=2.10.0",  # TOTP offline (2º fator, REQ-SEC-005; QR renderizado só na GUI, T-1604)
     "sqlcipher3-wheels>=0.5.7",  # banco cifrado SQLCipher (AES-256) via import sqlcipher3 (ADR-0016 §B, REQ-SEC-006); wheel com binário nativo p/ Windows/Py3.12 — empacotar no PyInstaller é o T-1703
     "qrcode[png]>=8.2",
+    "langgraph-checkpoint-sqlite>=3.1.0",
 ]
 
 [dependency-groups]

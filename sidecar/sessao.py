@@ -39,14 +39,25 @@ nunca deixar duas requisições mexerem no `auth.json`/DEK ao mesmo tempo.
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from agent.grafo import armar_checkpointer_duravel, desarmar_checkpointer_duravel
 
 from .auth import Cofre, ResultadoCadastro
+from .checkpoint_cofre import abrir_saver_cofre, fechar_saver_cofre
+from .gestor_modelos import retomar_analises_configurado
 from .persistencia import ChaveInvalida, Repositorio, caminho_banco, migrar_para_cofre
+
+if TYPE_CHECKING:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+log = logging.getLogger("helper_financeiro.sessao")
 
 VAR_AUTO_LOCK_MIN = "HF_AUTO_LOCK_MIN"
 _AUTO_LOCK_MIN_PADRAO = 15.0
@@ -86,6 +97,7 @@ class SessaoCofre:
         agora: Callable[[], float] = time.monotonic,
         auto_lock_min: float | None = None,
         ao_bloquear: Callable[[], None] | None = None,
+        retomar_analises: Callable[[], bool] | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._cofre = cofre if cofre is not None else Cofre()
@@ -96,6 +108,15 @@ class SessaoCofre:
         )
         self._dek: bytes | None = None
         self._repo: Repositorio | None = None
+        # Checkpoint durável do grafo (ADR-0023, T-2601): a 2ª conexão SQLCipher
+        # do saver vive enquanto a sessão está aberta. `retomar_analises` é o
+        # toggle (default = `retomar_analises_configurado`, do `llm.json`),
+        # injetável para os testes fixarem liga/desliga sem tocar o `llm.json`.
+        self._saver_cofre: SqliteSaver | None = None
+        self._retomar_analises = (
+            retomar_analises if retomar_analises is not None
+            else retomar_analises_configurado
+        )
         self._ultimo_uso: float = agora()
         # Gancho disparado quando a sessão SAI do estado desbloqueado (bloqueio
         # manual OU auto-lock). O `app.py` o usa para descartar `_JOBS_IA`: a
@@ -191,9 +212,41 @@ class SessaoCofre:
             # a chave).
             raise
         self._fechar_repo_sem_lock()
+        self._desarmar_checkpoint_duravel_sem_lock()
         self._dek = dek
         self._repo = repo
         self._ultimo_uso = self._agora()
+        # Durabilidade do grafo (ADR-0023): tenta ligar o checkpoint no cofre
+        # recém-aberto. Plano C está DENTRO do helper — qualquer falha degrada
+        # para memória sem impedir a abertura da sessão.
+        self._armar_checkpoint_duravel_sem_lock(caminho, dek)
+
+    # --------------------------------------------------- checkpoint durável
+    def _armar_checkpoint_duravel_sem_lock(self, caminho: Path, dek: bytes) -> None:
+        """Plano C (degradação segura, ADR-0023): com o toggle ligado, abre a 2ª
+        conexão SQLCipher e arma o checkpointer durável do grafo; QUALQUER falha
+        (toggle à parte) cai para checkpoint em memória com `log.warning` — a
+        sessão NUNCA falha por causa disto, e a análise nunca fica pior que hoje.
+        """
+        if not self._retomar_analises():
+            return
+        try:
+            saver = abrir_saver_cofre(caminho, dek)
+            armar_checkpointer_duravel(saver)
+            self._saver_cofre = saver
+        except Exception:  # noqa: BLE001 — checkpoint durável é opcional (P8); sessão segue
+            log.warning("Checkpoint durável indisponível nesta sessão; seguindo "
+                        "com checkpoint só em memória (ADR-0023, plano C).")
+
+    def _desarmar_checkpoint_duravel_sem_lock(self) -> None:
+        """Desarma o checkpointer durável e consolida/fecha a 2ª conexão — rodado
+        ANTES de zerar a DEK no bloqueio/fechamento. Best-effort e idempotente
+        (sem saver armado ⇒ no-op)."""
+        if self._saver_cofre is None:
+            return
+        desarmar_checkpointer_duravel()
+        fechar_saver_cofre(self._saver_cofre)
+        self._saver_cofre = None
 
     # -------------------------------------------------------------- bloqueio
     def bloquear(self) -> None:
@@ -215,6 +268,9 @@ class SessaoCofre:
         guard `estava_desbloqueada` mantém o bloqueio idempotente (bloquear já
         bloqueado não redispara o gancho)."""
         estava_desbloqueada = self._dek is not None
+        # Desarma o checkpoint durável ANTES de zerar a DEK (ADR-0023): consolida
+        # o WAL e fecha a 2ª conexão enquanto a chave ainda vale.
+        self._desarmar_checkpoint_duravel_sem_lock()
         self._fechar_repo_sem_lock()
         self._dek = None
         if estava_desbloqueada and self.ao_bloquear is not None:
@@ -260,6 +316,7 @@ class SessaoCofre:
     def fechar(self) -> None:
         """Fecha o repositório ativo — shutdown do sidecar / teardown de teste."""
         with self._lock:
+            self._desarmar_checkpoint_duravel_sem_lock()
             self._fechar_repo_sem_lock()
 
 

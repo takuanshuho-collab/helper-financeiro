@@ -836,7 +836,12 @@ def _descartar_jobs_ia() -> None:
 def _rodar_job_ia(job_id: str, perfil: PerfilFinanceiro, extra: float,
                   cfg: ConfigAgente | None, provider: LLMProvider | None) -> None:
     try:
-        resultado = analisar(perfil, extra_mensal=extra, cfg=cfg, provider=provider)
+        # `retomar=True` (ADR-0023, T-2601): thread_id determinístico (assinatura
+        # dos fatos) + retomada de checkpoint inacabado + higiene no fim. Com o
+        # cofre aberto e o toggle ligado, o checkpoint é durável (SqliteSaver no
+        # cofre); senão cai em memória e `retomar` simplesmente não acha nada.
+        resultado = analisar(perfil, extra_mensal=extra, cfg=cfg,
+                             provider=provider, retomar=True)
         # O mapa é reconstruível: os tokens CREDOR_n seguem a ordem das dívidas.
         # A desanonimização acontece SÓ aqui, na fronteira da exibição local
         # (REQ-SEC-003) — o que foi ao LLM só tinha tokens.

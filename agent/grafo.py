@@ -23,10 +23,13 @@ no `Runtime.context`, que o LangGraph não serializa.
 from __future__ import annotations
 
 import logging
+import threading
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired, TypedDict
 from uuid import uuid4
 
+from langgraph.checkpoint.base import BaseCheckpointSaver, RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
@@ -62,11 +65,170 @@ _TIPOS_PERMITIDOS_CHECKPOINT = [
     )
 ]
 
+# Prefixo do thread_id determinístico da análise sênior (ADR-0023): thread_id =
+# "analise:" + assinatura SHA-256 dos fatos (a MESMA chave do cache T-205). A
+# poda de higiene identifica os threads da análise por este prefixo.
+PREFIXO_THREAD_ANALISE = "analise:"
 
-def criar_checkpointer() -> InMemorySaver:
-    """InMemorySaver com serializador de allowlist explícita (só memória)."""
-    return InMemorySaver(serde=JsonPlusSerializer(
-        allowed_msgpack_modules=_TIPOS_PERMITIDOS_CHECKPOINT))
+
+def serde_checkpoint() -> JsonPlusSerializer:
+    """Serializador com allowlist explícita — o MESMO nos dois modos (memória e
+    cofre durável). Exposto para o `sidecar/checkpoint_cofre` passar a serde
+    idêntica ao `SqliteSaver`, de modo que a fronteira de tipos permitidos seja
+    única (ADR-0023 §T-2601)."""
+    return JsonPlusSerializer(allowed_msgpack_modules=_TIPOS_PERMITIDOS_CHECKPOINT)
+
+
+class CheckpointerChaveavel(BaseCheckpointSaver[Any]):
+    """Proxy que delega a um checkpointer interno TROCÁVEL em runtime (ADR-0023).
+
+    O grafo é singleton, compilado UMA vez com este proxy. Trocar o *delegate*
+    (memória ↔ cofre durável) sem recompilar o grafo é o que permite ligar a
+    durabilidade quando o cofre abre e voltar à memória quando ele bloqueia.
+    O delegate default é um `InMemorySaver` com a allowlist atual — comportamento
+    idêntico ao de antes desta task.
+
+    Duas invariantes de resiliência (P8, revisão G2):
+    - **Escrita não-fatal:** falha do delegate durável em `put`/`put_writes` vira
+      `log.warning` + no-op naquele passo — a análise NUNCA aborta por causa do
+      checkpoint. A mensagem é conservadora (só o nome da operação): mesmo que o
+      SQL do saver não carregue a DEK, não ecoamos exceção nenhuma.
+    - **Leitura não-fatal:** falha em `get_tuple`/`list` é tratada como "sem
+      checkpoint" (None/vazio), então a retomada simplesmente roda do zero.
+
+    A troca do delegate acontece sob um lock CURTO; as leituras do delegate
+    tiram um retrato atômico da referência (garantido pelo GIL) e chamam fora do
+    lock, para não segurar o lock durante I/O de disco.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(serde=serde_checkpoint())
+        self._delegate: BaseCheckpointSaver[Any] = InMemorySaver(serde=serde_checkpoint())
+        self._troca_lock = threading.Lock()
+
+    def _atual(self) -> BaseCheckpointSaver[Any]:
+        # Leitura atômica da referência (GIL) — retrato do delegate corrente.
+        return self._delegate
+
+    def armar(self, saver: BaseCheckpointSaver[Any]) -> None:
+        with self._troca_lock:
+            self._delegate = saver
+
+    def desarmar(self) -> None:
+        # Volta para um InMemorySaver NOVO: o estado de memória de uma sessão
+        # bloqueada não pode vazar para a próxima (ADR-0023).
+        with self._troca_lock:
+            self._delegate = InMemorySaver(serde=serde_checkpoint())
+
+    def _aviso_nao_fatal(self, operacao: str) -> None:
+        log.warning(
+            "Checkpoint durável falhou em '%s'; seguindo sem checkpoint neste "
+            "passo (degradação segura, ADR-0023/P8).", operacao)
+
+    # ---- escrita (não-fatal) ----
+    def put(self, config: Any, checkpoint: Any, metadata: Any,
+            new_versions: Any) -> Any:
+        try:
+            return self._atual().put(config, checkpoint, metadata, new_versions)
+        except Exception:  # noqa: BLE001 — a análise nunca aborta pelo checkpoint (G2)
+            self._aviso_nao_fatal("put")
+            return config
+
+    def put_writes(self, config: Any, writes: Any, task_id: str,
+                   task_path: str = "") -> None:
+        try:
+            self._atual().put_writes(config, writes, task_id, task_path)
+        except Exception:  # noqa: BLE001
+            self._aviso_nao_fatal("put_writes")
+
+    async def aput(self, config: Any, checkpoint: Any, metadata: Any,
+                   new_versions: Any) -> Any:
+        try:
+            return await self._atual().aput(config, checkpoint, metadata, new_versions)
+        except Exception:  # noqa: BLE001
+            self._aviso_nao_fatal("aput")
+            return config
+
+    async def aput_writes(self, config: Any, writes: Any, task_id: str,
+                          task_path: str = "") -> None:
+        try:
+            await self._atual().aput_writes(config, writes, task_id, task_path)
+        except Exception:  # noqa: BLE001
+            self._aviso_nao_fatal("aput_writes")
+
+    # ---- leitura (não-fatal ⇒ "sem checkpoint") ----
+    def get_tuple(self, config: Any) -> Any:
+        try:
+            return self._atual().get_tuple(config)
+        except Exception:  # noqa: BLE001
+            self._aviso_nao_fatal("get_tuple")
+            return None
+
+    def list(self, config: Any, *, filter: Any = None,  # noqa: A002 — nome da assinatura da base
+             before: Any = None, limit: Any = None) -> Iterator[Any]:
+        try:
+            yield from self._atual().list(
+                config, filter=filter, before=before, limit=limit)
+        except Exception:  # noqa: BLE001
+            self._aviso_nao_fatal("list")
+
+    async def aget_tuple(self, config: Any) -> Any:
+        try:
+            return await self._atual().aget_tuple(config)
+        except Exception:  # noqa: BLE001
+            self._aviso_nao_fatal("aget_tuple")
+            return None
+
+    async def alist(self, config: Any, *, filter: Any = None,  # noqa: A002
+                    before: Any = None, limit: Any = None) -> Any:
+        try:
+            async for item in self._atual().alist(
+                    config, filter=filter, before=before, limit=limit):
+                yield item
+        except Exception:  # noqa: BLE001
+            self._aviso_nao_fatal("alist")
+
+    # ---- utilitários delegados (não gravam estado) ----
+    def get_next_version(self, current: Any, channel: Any = None) -> Any:
+        return self._atual().get_next_version(current, channel)
+
+    def delete_thread(self, thread_id: str) -> None:
+        # Delegado direto: a higiene/poda que chama isto já é best-effort no
+        # chamador (envolvido em try/except), então aqui não mascaramos o erro.
+        self._atual().delete_thread(thread_id)
+
+    def with_allowlist(self, extra_allowlist: Any) -> BaseCheckpointSaver[Any]:
+        # Preserva a IDENTIDADE do proxy (o grafo compilado guarda esta
+        # instância; um clone quebraria a troca de delegate). A allowlist do
+        # msgpack já viaja na nossa serde; sob a config atual do LangGraph o
+        # reforço estrito está desligado, então devolver `self` mantém o
+        # comportamento idêntico ao de hoje (ADR-0023).
+        return self
+
+
+# Proxy singleton compartilhado pelos DOIS grafos (análise e extração): ambos
+# compilam com esta mesma instância, então armar/desarmar cobre os dois de uma
+# vez (a extração ganha durabilidade de graça — ADR-0023, premissa 2).
+_checkpointer: CheckpointerChaveavel | None = None
+
+
+def criar_checkpointer() -> CheckpointerChaveavel:
+    """Proxy chaveável singleton (allowlist explícita; memória por default)."""
+    global _checkpointer  # noqa: PLW0603 — singleton lazy
+    if _checkpointer is None:
+        _checkpointer = CheckpointerChaveavel()
+    return _checkpointer
+
+
+def armar_checkpointer_duravel(saver: BaseCheckpointSaver[Any]) -> None:
+    """Liga a durabilidade: o proxy passa a delegar ao `saver` (cofre cifrado)."""
+    criar_checkpointer().armar(saver)
+
+
+def desarmar_checkpointer_duravel() -> None:
+    """Desliga a durabilidade: volta ao `InMemorySaver` NOVO (nada vaza entre
+    sessões). Chamado no bloqueio/fechamento do cofre, ANTES de zerar a DEK."""
+    criar_checkpointer().desarmar()
 
 
 class EstadoAnalise(TypedDict):
@@ -306,15 +468,94 @@ def grafo_analise() -> GrafoAnalise:
     return _grafo
 
 
+def thread_id_analise(cfg: ConfigAgente, fatos: FatosFinanceiros) -> str:
+    """thread_id determinístico = `analise:` + assinatura SHA-256 dos fatos.
+
+    Fonte ÚNICA da chave: reusa `cache_global.chave` (a mesma do cache T-205), de
+    modo que checkpoint e cache concordem na identidade dos dados — retomar só faz
+    sentido para os MESMOS fatos/modelo; dados diferentes ⇒ thread diferente
+    (ADR-0023). Calculada sobre `fatos` JÁ anonimizados (mesmo ponto do nó
+    `consultar_cache`)."""
+    return PREFIXO_THREAD_ANALISE + cache_global.chave(cfg.provider, cfg.model, fatos)
+
+
+def apagar_thread_analise(thread_id: str) -> None:
+    """Apaga o checkpoint de um thread de análise (higiene do sucesso, best-effort).
+
+    Ponto de deleção isolado de propósito: o T-2602 vai chamá-lo DEPOIS de
+    persistir a `SecaoIA` (ordem "persistir-antes-de-apagar"); se a deleção
+    falhar, o thread completo vira órfão inócuo, podado no próximo início."""
+    try:
+        criar_checkpointer().delete_thread(thread_id)
+    except Exception:  # noqa: BLE001 — deleção é best-effort; órfão é podado depois
+        log.warning("Falha ao apagar o checkpoint da análise concluída; "
+                    "será podado no próximo início (ADR-0023).")
+
+
+def podar_threads_analise(thread_id_atual: str) -> None:
+    """Máx. 1 thread de análise por vez: ao iniciar um thread novo, apaga todo
+    thread de análise de assinatura DIFERENTE (inacabado órfão ou completo que
+    escapou da deleção). Consequência documentada (revisão S2): começar a análise
+    de dados diferentes ANTES de repetir a interrompida descarta esta última.
+    Best-effort — falha de checkpoint nunca atrapalha a análise (P8)."""
+    cp = criar_checkpointer()
+    try:
+        alvos = {
+            tid for tup in cp.list(None)
+            if (tid := tup.config.get("configurable", {}).get("thread_id"))
+            and tid.startswith(PREFIXO_THREAD_ANALISE) and tid != thread_id_atual
+        }
+        for tid in alvos:
+            cp.delete_thread(tid)
+    except Exception:  # noqa: BLE001
+        log.warning("Poda de threads de análise falhou; seguindo (ADR-0023).")
+
+
+def _entrada_da_retomada(grafo: GrafoAnalise, config: RunnableConfig, tid: str,
+                         entrada_fresca: EstadoAnalise) -> EstadoAnalise | None:
+    """Decide, para um thread com retomada ligada, se INVOCA do zero ou RETOMA.
+
+    Regra da revisão S5 — retomada só de thread INACABADO: estado existe e
+    `.next` não-vazio ⇒ retoma (input `None`, o LangGraph continua do nó
+    pendente); estado existe mas completo (`.next` vazio) ⇒ apaga (nunca serve
+    resultado velho) e roda do zero; sem estado ⇒ roda do zero."""
+    podar_threads_analise(tid)
+    try:
+        snap = grafo.get_state(config)
+    except Exception:  # noqa: BLE001 — leitura de checkpoint é não-fatal
+        return entrada_fresca
+    if snap.created_at is None:
+        return entrada_fresca  # nenhum checkpoint para este thread
+    if snap.next:
+        return None  # inacabado: retoma do nó pendente
+    apagar_thread_analise(tid)  # completo órfão: apaga e roda do zero
+    return entrada_fresca
+
+
 def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
                      cfg: ConfigAgente, provider: LLMProvider | None = None,
-                     thread_id: str | None = None) -> ResultadoAnalise:
-    """Invoca o grafo e materializa o `ResultadoAnalise` da aplicação."""
-    estado = grafo_analise().invoke(
-        {"fatos": fatos.model_dump()},
-        config={"configurable": {"thread_id": thread_id or str(uuid4())}},
+                     thread_id: str | None = None,
+                     retomar: bool = False) -> ResultadoAnalise:
+    """Invoca o grafo e materializa o `ResultadoAnalise` da aplicação.
+
+    `retomar=True` (opt-in do job da análise): usa o thread_id determinístico
+    (assinatura dos fatos), retoma um thread inacabado do checkpoint durável e,
+    ao terminar (aprovado OU degradado — ambos são fim legítimo), apaga o thread
+    (higiene). Os chamadores existentes não passam `retomar` ⇒ semântica antiga
+    intacta (thread efêmero por `uuid4`, sem poda/retomada)."""
+    grafo = grafo_analise()
+    tid = thread_id or (thread_id_analise(cfg, fatos) if retomar else str(uuid4()))
+    config: RunnableConfig = {"configurable": {"thread_id": tid}}
+    entrada_fresca: EstadoAnalise = {"fatos": fatos.model_dump()}
+    entrada: EstadoAnalise | None = entrada_fresca
+    if retomar:
+        entrada = _entrada_da_retomada(grafo, config, tid, entrada_fresca)
+    estado = grafo.invoke(
+        entrada, config=config,
         context=ContextoAnalise(cfg=cfg, mapa=mapa, provider=provider),
     )
+    if retomar:
+        apagar_thread_analise(tid)  # fim legítimo ⇒ higiene (T-2602 reordena)
     modo = estado.get("modo", "degradado")
     analise_dump = estado.get("analise")
     return ResultadoAnalise(
