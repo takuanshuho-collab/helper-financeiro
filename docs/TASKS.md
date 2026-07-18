@@ -438,7 +438,7 @@ Legenda de status: ⬜ pendente · 🟨 em andamento · ✅ feito (neste scaffol
 | T-2603 | SSE núcleo: provider `stream=true` + contador com **throttle (≥200 ms/≥16 tokens)** via `on_progress` opcional (**spike dia 1** — 3 degraus do T-2505 sobrevivem ao stream; ordem 400-antes-token no build embarcado; degrada p/ POST único); nó `gerar` passa `StreamWriter`; job troca `ainvoke` por `astream(stream_mode=["updates","custom"])` (**expurgo T-1904 preservado — teste OBRIGATÓRIO**); `GET /analise/ia/{job_id}/eventos` (fase/progresso/terminal/erro; rótulos human-friendly SEM expor retry como falha — "refinando a resposta"; heartbeat 15 s; token no header; **fecha no auto-lock**; polling continua fallback) (Opus) | REQ-NF-005 / T-2505 / T-1904 | T-2601 | ✅ |
 | T-2604 | GUI linha do tempo: consumo SSE via fetch streaming; fases (pulsando/✓) + "escrevendo… N tokens"; **retomada explicada** em linguagem clara; **queda→polling gracioso sem erro na tela**; integra T-2602 na mesma aba (abrir→`/analise/ultima`; Gerar→`/analise/ia`+SSE); E2E stream mockado (fases/contador/retomada/queda→polling/aviso) (Sonnet) | REQ-F (GUI) | T-2603 | ✅ |
 | T-2606 | **Achado da aceitação de campo (d):** o "Diagnóstico da Saúde Financeira" ignorava o fluxo de caixa — déficit mensal de R$ 2.159,47 saía "Saudável" porque a classificação só olhava parcelas÷renda. Regra nova (decisão do mantenedor): **pior entre 2 eixos** — parcelas (clássico ≤30%/≤50%) × fluxo (superávit Saudável; déficit ≤10% da renda Atenção; >10% ou renda zero Crítico); explicação cita o eixo que puxou (empate ruim ⇒ combina). Teste que FALHAVA antes (provado via stash) + golden `relatorio_critico_deficit` regenerado deliberadamente (explicação combinada) (orquestrador) | Aceitação de campo | T-2605 | ✅ |
-| T-2605 | Fechamento: gates + CI remoto verde + auditoria de deps (§5; `langgraph-checkpoint-sqlite` casa com `langgraph 1.2.9` sem upgrade forçado, goldens sentinela) + rebuild oficial 2.15.0 + smokes (§E.4, incl. órfão) + **aceitação de campo quádrupla** (retoma entre nós; reabrir hidrata; linha do tempo — mantenedor julga contador vs pulso, fases-puras é recuo; T-2505 em streaming 4/4) + ata `FREEZE.md` v2.15.0 (orquestrador) | Processo | todas | ⬜ |
+| T-2605 | Fechamento: gates + CI remoto verde + auditoria de deps (§5; `langgraph-checkpoint-sqlite` casa com `langgraph 1.2.9` sem upgrade forçado, goldens sentinela) + rebuild oficial 2.15.0 + smokes (§E.4, incl. órfão) + **aceitação de campo quádrupla** (retoma entre nós; reabrir hidrata; linha do tempo — mantenedor julga contador vs pulso, fases-puras é recuo; T-2505 em streaming 4/4) + ata `FREEZE.md` v2.15.0 (orquestrador) | Processo | todas | ✅ |
 
 ## Definição de Pronto (DoD)
 Uma task só é ✅ quando: (1) o código adere ao SPEC/PLAN; (2) há teste no
@@ -585,6 +585,20 @@ streaming×fallbacks do T-2505), cada um com degradação segura definida (plano
 C / POST único) — no pior caso o entregável encolhe, o produto nunca piora.
 **Os dois candidatos anteriores (backends plugáveis do llama.cpp, ONNX Runtime
 GenAI) seguem registrados para ciclos futuros** — v2.15 tomou outro rumo.
+
+**Ciclo v2.15 FECHADO (2026-07-18, ADR-0023, M26, ata `FREEZE.md` v2.15.0):**
+as 3 frentes entregues (checkpoint durável no cofre + persistência visível +
+SSE com linha do tempo) mais **T-2606** (achado da aceitação de campo: saúde
+financeira em 2 eixos — déficit mensal nunca mais sai "Saudável"). Aceitação
+de campo quádrupla confirmada pelo mantenedor (retomada com frase na linha do
+tempo; carimbo; **contador de tokens mantido** — U2 encerrada; T-2606
+revalidado com a régua nova). Build 2.15.0 **assinado** (cert de teste
+regenerado — o PFX anterior havia sido apagado); smokes do pacote e do órfão
+verdes no artefato final. Candidatos para o próximo ciclo (nova ADR
+obrigatória): backends plugáveis do llama.cpp (fase 0 `llama-bench`), ONNX
+Runtime GenAI (plano B estrutural), blueprint SaaS
+(`docs/PROJETO-SAAS-SERVER-EDITION.md`, critérios §6 para sair da gaveta),
+pendência antiga: remover a confiança do cert de teste quando caducar.
 
 ### Histórico do ciclo v2.8 (fechado)
 

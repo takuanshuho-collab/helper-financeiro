@@ -1,65 +1,86 @@
-# FREEZE — Ata de Congelamento v2.14.0
+# FREEZE — Ata de Congelamento v2.15.0
 
-- **Data:** 2026-07-17
+- **Data:** 2026-07-18
 - **Versão da Constituição:** 2.0.0
-- **Escopo congelado:** ciclo **v2.14** (ADR-0022): milestone **M25** —
-  **runtime LLM resiliente e configurável**, aberto pelo **primeiro bug de
-  produto pego em campo** (2026-07-15): o default `-ngl 99` crashava o
-  `llama-server` b9966 Vulkan com `ErrorOutOfDeviceMemory` na GPU-alvo
-  (GTX 1650 4 GB) — o auto-fit do llama.cpp ABORTA quando `-ngl` é
-  explícito. **T-2501**: default novo = auto-fit (sem `-ngl`) + contexto
-  4096; resolução `env HF_LLAMA_FLAGS > llm.json (ctx_size/gpu_offload) >
-  default`; captura de stderr em ring buffer (400 linhas, SÓ memória —
-  REQ-SEC-001) com classificador de motivos (`GPU_SEM_MEMORIA` >
-  `GPU_FIT_ABORTADO` > `GENERICO`, fixtures REAIS de campo) e métricas do
-  boot (`-lv 4` no argv; VRAM ancorada em `Vulkan\d+`, última ocorrência;
-  dispositivo via `--list-devices` cacheado); **retentativa única em CPU
-  puro** com `boot_info` consultável. **T-2502**: `GET/PUT /llm/config`
-  (valores efetivos + origem `padrao|tela|env`; PUT valida no contrato,
-  persiste atômico e encerra o runtime; 422 sem tocar o disco), regra
-  ÚNICA da dica de contexto no backend (escada 8192→4096→2048; não
-  disparada para quem ESCOLHEU CPU puro — achado da revisão) e
-  `aviso_runtime` aditivo na análise servida por boot `cpu_fallback`.
-  **T-2503**: GUI — "Ajustes avançados" (contexto 3 degraus + GPU
-  Auto/CPU/camadas; desabilitados com aviso quando a origem é `env`),
-  painel "Último boot da IA" (badge, dispositivo, camadas, VRAM, contexto;
-  em `nunca_subiu` o texto fala em *falha classificada*, nunca "a GPU
-  falhou" — achado do mock E2E), callout da dica com "Aplicar sugestão"
-  (só pré-seleciona) e banner âmbar do `aviso_runtime`; ponte Electron com
-  verbo HTTP explícito (PUT); 4 cenários E2E novos, incluindo boot REAL
-  com fallback via llama-server fake. **T-2505 (adicionada no fechamento,
-  aval do mantenedor)**: a aceitação de campo revelou um SEGUNDO bug,
-  mascarado pelo primeiro — o llama.cpp (b9966 E b10043; com e sem
-  `--jinja`) recusa com HTTP 400 a gramática do `json_schema` estrito para
-  o tokenizer do phi-3.5 ("Unexpected empty grammar stack after accepting
-  piece: | (29989)"; issues #12597/#21017/#23677). Correção em três
-  degraus no `OpenAICompatProvider`, todos MEDIDOS no host real:
-  (1) fallback único `json_object` + schema injetado no prompt (memoizado
-  por instância); (2) temperatura 0 só nesse caminho (0.2 ⇒ 1/3 das
-  análises validava; 0.0 ⇒ 4/4); (3) conserto dirigido — JSON inválido
-  volta ao modelo UMA vez com os erros nomeados do Pydantic. A imposição
-  do contrato segue 100% Pydantic + retry-correção + P8 (REQ-LLM-002).
-  Validação final: **4/4 perfis variados em modo completo** pelo grafo
-  inteiro no hardware real, e **aceitação de campo dupla** (dados
-  alterados entre as análises) confirmada pelo mantenedor em 2026-07-17.
+- **Escopo congelado:** ciclo **v2.15** (ADR-0023): milestone **M26** —
+  **checkpoint durável, persistência visível e progresso em tempo real**,
+  desenhado via brainstorming + revisão multi-agente (disposição REVISE,
+  15/17 objeções aplicadas ANTES do lançamento) a partir da síntese do
+  documento externo "Melhorias de App com LLM". **T-2601**: checkpoint do
+  grafo durável DENTRO do cofre cifrado — `SqliteSaver` numa 2ª conexão
+  SQLCipher (Plano A descartado no spike: o saver tem lock interno próprio;
+  o `setup()` força **WAL** no `dados.db` inteiro, conversão aprovada pelo
+  mantenedor; `busy_timeout=5000` nas duas conexões ⇒ 0 `database is
+  locked` sob concorrência com o auto-save), proxy chaveável singleton nos
+  dois grafos com escrita/leitura **não-fatais** (a análise nunca aborta
+  por checkpoint; plano C degrada para memória), `thread_id` = assinatura
+  SHA-256 dos fatos (a chave do cache T-205), retomada SÓ de thread
+  inacabado, poda (máx. 1 inacabado por grafo), toggle "retomar análises
+  interrompidas" default ligado (opt-in da ADR-0006 honrado), teste
+  anti-PII varrendo o checkpoint INTEIRO por super-step (incl. o estado
+  pós-`gerar` pré-`sanear`). **T-2602**: última análise persistida no
+  cofre (chave key-value `analise_ultima` — zero migração de schema;
+  `SecaoIA` JÁ desanonimizada + assinatura + carimbo + modelo), `POST
+  /analise/ultima` devolve a salva + a `assinatura_atual` dos dados vivos
+  (a GUI só compara strings — REQ-NF-005); ordem **persistir-antes-de-
+  apagar** o checkpoint; GUI com carimbo "dados inalterados"/"Gerar
+  novamente" e selo âmbar "os dados mudaram" (seção antiga esmaecida).
+  **T-2603**: os 3 degraus do T-2505 agora **streamam** — o spike no build
+  embarcado real (b9966 + phi-3.5) provou que o 400 de gramática chega
+  ANTES de qualquer token; provider com contador de tokens sob throttle
+  (≥16 tokens/≥200 ms), "tokens e então erro" descarta o parcial; o job
+  consome `grafo.stream()` síncrono (último `values` == `.invoke()`,
+  provado por teste); `GET /analise/ia/{job_id}/eventos` (SSE: fases com
+  rótulos pt-BR montados no backend, progresso, terminal com
+  `aviso_runtime`, heartbeat; fecha no auto-lock — nada de PII ressuscita,
+  G4 coberto). Correção do revisor: `tentativa` é SEMÂNTICA — o fallback
+  de gramática do phi-3.5 é transparente ("o modelo está escrevendo");
+  só o retry do guardrail e o conserto dirigido rotulam "refinando a
+  resposta" (U3). **T-2604**: linha do tempo na GUI — a ponte SSE vive no
+  MAIN do Electron (token nunca sai de lá, REQ-SEC-004; frames por IPC
+  push), fases ✓ + item ativo pulsando + "escrevendo… N tokens", retomada
+  explicada ("retomando a análise interrompida"), queda→polling graciosa
+  SEM erro na tela (polling nunca roda em paralelo com o stream). O
+  conteúdo do LLM NUNCA aparece antes dos guardrails/desanonimização.
+  **T-2606 (adicionada no fechamento, aval do mantenedor — padrão
+  T-2505)**: a bateria de perfis da aceitação achou um gap do ADR-0001 —
+  o "Diagnóstico da Saúde Financeira" ignorava o fluxo de caixa (déficit
+  de R$ 2.159,47/mês saía "Saudável"). Regra nova: **pior entre 2 eixos**
+  (parcelas ≤30%/≤50% × fluxo: superávit Saudável; déficit ≤10% da renda
+  Atenção; >10% ou renda zero Crítico), explicação cita o eixo que puxou;
+  teste que FALHAVA antes (provado via stash); golden
+  `relatorio_critico_deficit` regenerado deliberadamente (única mudança:
+  explicação combinada).
 - **Auditoria de dependências deste fechamento (regra ADR-0018 §5):**
-  `npm audit` = **0**; `pip-audit` = **0** (runtime E grupos dev/build);
-  Electron **43.1.1** (mesma janela dos fechamentos v2.12/v2.13). Nenhum
-  risco aceito pendente. **CI remoto (regra ADR-0020 hotfix):** verde em
-  todos os commits do ciclo (conferido a cada push).
-- **Aceitação de campo e higiene do host:** a env de usuário
-  `HF_LLAMA_FLAGS='-c 4096'` (workaround aplicado em 2026-07-15) foi
-  REMOVIDA antes da aceitação; o app 2.14.0 foi instalado na máquina do
-  mantenedor e as análises saíram completas com a config padrão (Auto +
-  4096). Um processo remanescente do "app sob teste" do smoke de
-  auto-update confundiu a primeira rodada de aceitação (renderer antigo) —
-  encerrado pelos PIDs; lição registrada: o `afterAll` do smoke pode
-  vazar o app de teste quando o teardown estoura (flake conhecido).
-- **Fora do escopo versionado:** `docs/RELATORIO-MOCK-E2E-LLM.md` (mock
-  E2E do caminho do usuário, 21/21), `docs/PESQUISA-ONNX-RUNTIME-GENAI.md`
-  (plano B estrutural ao llama.cpp) e
-  `docs/RELATORIO-PERSISTENCIA-ANALISE.md` (proposta de persistir a última
-  análise no cofre) — untracked de propósito, como os do PaddleOCR-VL.
+  `npm audit` = **0**; `pip-audit` = **0**; Electron **43.1.1** (mesma
+  janela dos fechamentos v2.12..v2.14). Deps novas do ciclo:
+  `langgraph-checkpoint-sqlite==3.1.0` (+ transitivas `aiosqlite 0.22.1`,
+  `sqlite-vec 0.1.9`; MIT/Apache) — SEM upgrade forçado do
+  `langgraph 1.2.9` (goldens-sentinela intactos). Nenhum risco aceito
+  novo. **CI remoto (regra ADR-0020 hotfix):** verde em todos os commits
+  do ciclo.
+- **Build assinado (ADR-0021):** o PFX do cert de teste havia sido
+  apagado do host — cert **regenerado** via `preparar_cert_teste.ps1`
+  (thumbprint `DD6CFC3C5DDB35DD8E9C3409C658A8C3B92DB646`, validade 30
+  dias; instruções de remoção impressas pelo script). Instalador E
+  sidecar assinados (`CN=Helper Financeiro (Teste)`; o sidecar é assinado
+  ANTES do empacotamento — extraResource). Lições: `npm run dist` puro
+  NÃO assina (sem as envs `HF_CSC_*` a config é inerte); o prompt `!` do
+  harness roda **bash**, não PowerShell — sintaxe `$env:` não seta env.
+- **Aceitação de campo quádrupla (máquina do mantenedor, GTX 1650):**
+  (a) app morto no meio da análise ⇒ retomada confirmada com "retomando a
+  análise interrompida" na linha do tempo; (b) reabertura ⇒ última análise
+  hidratada com carimbo; (c) linha do tempo acompanhada — **contador de
+  tokens MANTIDO** por decisão do mantenedor (U2 encerrada; fases-puras
+  segue documentado como recuo); (d) perfis variados completos em
+  streaming — a bateria achou o T-2606, corrigido no ciclo e **revalidado
+  pelo mantenedor com a régua nova** ("confirmo o fix", 2026-07-18).
+- **Fora do escopo versionado (untracked de propósito):**
+  `docs/RELATORIO-NOVA-VERSAO-STACK-WEB.md` (síntese do documento externo
+  que originou o ciclo), `docs/PROJETO-SAAS-SERVER-EDITION.md` (blueprint
+  SaaS futuro, critérios §6 para sair da gaveta),
+  `docs/RELATORIO-PERSISTENCIA-ANALISE.md` (origem do T-2602, absorvido),
+  `docs/PESQUISA-ONNX-RUNTIME-GENAI.md` e relatórios PaddleOCR-VL.
 
 Qualquer mudança nos artefatos congelados abaixo exige **nova ADR +
 incremento de versão + nova ata**.
@@ -74,12 +95,12 @@ incremento de versão + nova ata**.
 | `docs/PRD.md` | `7a0d731b4bf65918084da884ed70655afe0fc3d4595d268aa5c5f7c0840d7ff3` |
 | `docs/SPEC.md` | `800dd0b1801494f9a4120735ee0c5214ca913e4cc961ca347873b13f35e3a831` |
 | `docs/PLAN.md` | `e61a988b03683dbd66076924d59384917d59420c5e743d7d9b0f253e0590156f` |
-| `docs/TASKS.md` | `69179d047b60388f1ec0853945b331724af626b1de6f6456e4f6fc8e162dddcb` |
-| `docs/HARNESS.md` | `87af9a1986b1531f609a3933c67475a1df3b9a7e8dc67601ad218a80622e0d80` |
+| `docs/TASKS.md` | `62980c0b5f6404b3187db8c9dd83a102ad3a3a96659b8abced99f39ce112ee34` |
+| `docs/HARNESS.md` | `76b5ab35b4583f4c38771009452f21a2282aef826305ba5f1a75005f85cf2967` |
 | `docs/AGENT.md` | `742de4d9d5bd1a16768f64bbf4dbcb74a39a5b01fa7d9d1e6995ea6952c0e842` |
 | `docs/REVISAO-SEGURANCA.md` | `ec6923ac3abbe8e4235db73c8b1472558be1336d6d4d6b621b3cb91512ed4a2b` |
 | `docs/SEGURANCA-SHELL.md` | `e59baca3c3023bb318dd231bce712fd6612524794fa9c5054f592ce772c19fd6` |
-| `docs/PARIDADE.md` | `5d1672dea293d7ca321fa1a8261ad53d3540ac768459823bd559fde4ad5b60be` |
+| `docs/PARIDADE.md` | `0b715d9664cdc8eb4b94703f9aed5667ac45e08be7837beb2af4b284ba1c4cc0` |
 | `docs/RELATORIO-AUDITORIA.md` | `b81674da539bf81129c482bc19a564a0dc3847025288e3023f47b7518d7838ad` |
 | `AGENTS.md` | `678a2473998cab86146a1b4b4fd8d6dda40bbc38d4a6d56a3c85d49c52e7e1f0` |
 
@@ -109,13 +130,14 @@ incremento de versão + nova ata**.
 | `docs/adr/ADR-0020-ciclo-build-release.md` | `67fa63282e74500c3f598847ba73d30a3e1e6d0eddccb8542ddcb6bcc4046455` |
 | `docs/adr/ADR-0021-ciclo-code-signing.md` | `ca9c643f1aa5b60df5ea69955a7187debd8d1c802c9db1abde4952a191e297d9` |
 | `docs/adr/ADR-0022-ciclo-runtime-llm-configuravel.md` | `ebd5cf7e4f5ae887caac62342d01d5f70f2034e5569028206c82231b7ad6a6de` |
+| `docs/adr/ADR-0023-checkpointers-duraveis-e-streaming-sse.md` | `1ed5c1accbb869bb797f3f41c09e27984e86bd42ec7a14a0626b8e0a53bedb80` |
 
 ### Contratos de dados
 
 | Artefato | SHA-256 |
 |---|---|
 | `contracts/__init__.py` | `45bb5509b0070df695e5fba97b45e7beeaf80ad0f26d968fb2778898924d892c` |
-| `contracts/schemas.py` | `4bce084a717d6f7507453ea1d0eb7c3ecabb7815bbc2dc8fc2ae6d165f86f915` |
+| `contracts/schemas.py` | `751fd5d246334dea399ddb31d95f4952ff526df28bb1c3936b58a83718183bd2` |
 
 ### Núcleo determinístico (core)
 
@@ -123,7 +145,7 @@ incremento de versão + nova ata**.
 |---|---|
 | `core/__init__.py` | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | `core/calculos.py` | `0c1d697451e4b7908c29178a4d5ab3ee43c282ead61a8cd19ccf02d6f4b57191` |
-| `core/diagnostico.py` | `eca93d0b5cce853a6d9cd41af281427272376b2a96a21d5a9020a557c53fb7fb` |
+| `core/diagnostico.py` | `e9f1cba99922ff6e687947db33f970694f381caf0258521bb8aa85b35d1f52f4` |
 | `core/documento.py` | `cc25fd326d1bc1dbf9c686fcc430eeb81bfca3ffb7edf5880feb85c94ed9b27d` |
 | `core/estrategias.py` | `e46a4c078af1b37cabe79770481aee7f51f2384674afd5e17b27a13cbc8b04be` |
 | `core/extrato.py` | `1b41612f65b86809d61ed63690cc7feb9e01d826947611bb2f52519ef9dc871f` |
@@ -137,17 +159,17 @@ incremento de versão + nova ata**.
 | Artefato | SHA-256 |
 |---|---|
 | `agent/__init__.py` | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `agent/agente.py` | `ee04dc65cb3647534be69a1efa5335f14b1a27100ce9f02e8d2c35810585f1ab` |
+| `agent/agente.py` | `d8074262d0edb3242fb63a43010671b2a04148150f94b7839b6338cf72105939` |
 | `agent/cache.py` | `badee5b1b2cd7d02129dcc1693bd1622b06398f2e041cb75a00b1d0f31e63748` |
 | `agent/classificacao.py` | `1e811e51ea848474d75092ed08e4a2cf79cebb93afe5088bde1192f3c07d05db` |
 | `agent/config.py` | `de94789fd2c79c4f67a5e27a483bf682d409c8ad7a98b0538000ab8fbdaa3140` |
 | `agent/exibicao.py` | `d9db63887e3818ba580943370458ec271675c2c6bfc5928afa1255fb5974439d` |
 | `agent/extracao.py` | `87ecef070ba4b179cba41bb6d0ee599097e5613a510cefec6e07b23c81484164` |
-| `agent/grafo.py` | `8e4a158c543178eb9b381fa88a7d1d1df487cf1958f0acab4161249f50e08147` |
+| `agent/grafo.py` | `e2b3ea29f53ccbe3de2b3bb25567a4aca7f27d6c621b454ba4ef19d799d55ddd` |
 | `agent/ingestao.py` | `5a80bf93dd28b792d39622b8dfb3ba02582b424cb804086a02b19f46430fe3fd` |
 | `agent/ocr.py` | `96c5bf1ded98eb637094ac0faa1225144d2bf41728e287807729baa12311e287` |
 | `agent/prompts.py` | `b3110d726d3abbca1ec97eb984ea7c401119a5861440e2c712d672a2fef49cd3` |
-| `agent/provider.py` | `508e15ad047fee2299f8b204f66fb0fae16ad790f540cfac628c99f3b987c9c6` |
+| `agent/provider.py` | `6df326ad96f5bc3a5435c0de6ddfed22ae1a7d70abe66a2dfe5a647f0c1b8e9d` |
 | `agent/telemetria.py` | `508639cfed573988d84f3af75b88b54c37d22e0c5e2bbad5ecece7d464ff5753` |
 
 ### Guardrails
@@ -174,16 +196,17 @@ incremento de versão + nova ata**.
 |---|---|
 | `sidecar/__init__.py` | `0f55c31161b81aad9355fe5ad58fae8064defe1a7a7cfd238ed17e59073e5aad` |
 | `sidecar/__main__.py` | `7e57e7ff71a25020a25ec5c715fd58f6dafcff633121f6db49d83f14cff7b7c0` |
-| `sidecar/app.py` | `b739f23ccc61620fcaac73b10e1e191421f91e22d12e146a635749912921bfee` |
+| `sidecar/app.py` | `34b9f3ca04041a670046a29c7f4868aa7a3d182b01b301e56ccc21e77c59a7bb` |
 | `sidecar/arquivos.py` | `e15cc431874ae3cb0a076a9b0d1809e281f0b796ebff771bf6409173ef73fe82` |
 | `sidecar/auth.py` | `26431b0a512199853cda420de97e67573b11fdfb9a55ca608fe52e404462a3e0` |
-| `sidecar/gestor_modelos.py` | `fa7c05fad1909a254d11671197578d1679579cb84f84a54194bde9fbd8933d93` |
+| `sidecar/gestor_modelos.py` | `ab559c5e9cb998777be4407dfe172e93a0010e8f6ce82e21fd7e6ddd8a46142e` |
 | `sidecar/job_windows.py` | `5dc3f805f35cfcbc1b81357f4f0e1ca2830021c168f74fa31d55d56ef8436f95` |
-| `sidecar/persistencia.py` | `e68353677a06c7105e68137920da527df95548d2d5f3f366114adfeea7ca871a` |
+| `sidecar/persistencia.py` | `f96a0903851d4fd8fc00a7b5919438f2174f00add81bca3f4389d6d54ca5f6da` |
 | `sidecar/runtime_llm.py` | `685b7824709472f1dc0f9a9625b197243b1b9d20d03efc67fb30bfe89f81fbe3` |
-| `sidecar/schemas.py` | `27bad92e479fa80877ddd9364dd1d9496cc6c568916a661b7a10d6231e79464b` |
+| `sidecar/schemas.py` | `641936ba020934052dc858a069fa76890c57e51097f9725225649d9ab9aa85f8` |
 | `sidecar/security.py` | `1a6396f0e09140f6e0a599613071cb80ffe0508fc0c223241d1046993d68081b` |
-| `sidecar/sessao.py` | `994c8a0c7f56bbbf06c7924aac566189ec88865d4cb53b5d7739861644dd90e2` |
+| `sidecar/sessao.py` | `88e5b5ac70e8e1785cc1dfcb2c803a7ef76e3e4868d6481ec9acf0bf6e33c1de` |
+| `sidecar/checkpoint_cofre.py` | `a0a743f69c21778aedfb82dcc6e4263da7021ae5f77d48061427b9162e597ae7` |
 
 ### GUI clássica (gui — fallback)
 
@@ -207,25 +230,25 @@ incremento de versão + nova ata**.
 | `gui_web/e2e/fixtures/comprovante-escaneado.png` | `e40b7dfe7b9b5523b1cf05a65b9743dd200b9bad6a207b4fbdd74df9eab41a8e` |
 | `gui_web/e2e/fixtures/contrato-escaneado.png` | `abca12f61ce1fef2323c5f818d9c076ed23c0b4506e3de1cb9b5965002d36747` |
 | `gui_web/e2e/fixtures/fake-llama-server.py` | `54ae2469b5e0cadede36ddbc6400ae4a3fe06328b6f6fea667c424f4355de441` |
-| `gui_web/electron/main.ts` | `0a510defcae6e9e08ae71c5cca67888b98980f1b4de53abc4f5241eee30d6587` |
-| `gui_web/electron/preload.ts` | `91f1607aeac901866cb400f49ca78d4655d8e50fd1d53f59595e260546f12f95` |
+| `gui_web/electron/main.ts` | `f9e57f7c4cf0752ac5ee834149852fccf96bb0fee0a0c65dcae0243646b3467c` |
+| `gui_web/electron/preload.ts` | `d37fc0b9414b218897c8473701f196609808b166f0d4ba7686c790316cf0ddc8` |
 | `gui_web/eslint.config.mjs` | `5f6f18f557d1fb301b6f3437d02a47ff372d9ced55d23582ff63c3003213c155` |
 | `gui_web/index.html` | `65d438e190c6a2eb076894d03bc2690dc7bc842d8ee58691c81690fb64555d8d` |
-| `gui_web/package.json` | `64a7c6ebc22b242dc2061de899008e03419105d0c1bdc6ff274b881177aa01f7` |
+| `gui_web/package.json` | `1feca5503649cc4ed95af49b8d610df8487fb2b699b47c01480edbf21e759556` |
 | `gui_web/playwright.config.ts` | `1fc12157bfc5c21d51f9f2ab7f237108a550501b387bcd7c3033081bb741ea29` |
 | `gui_web/src/App.tsx` | `1b9a7de77f16bd75a6eb76d1cd5e36d5b9e0d3bb6ff30cda033888e03920ecff` |
 | `gui_web/src/components/CampoMoeda.tsx` | `564687d9facbc452b9d15d8c5d919121a98d1d323a3a1b9111a459526286cc4a` |
 | `gui_web/src/components/CampoPercent.tsx` | `08a26bc4de92e4c6b6c7eba76c1a2f3e8bc3e62aef591c57ac0a7ef2c0bb83c3` |
 | `gui_web/src/components/Icones.tsx` | `3312534d790dd48a45b084441b7edd7813a2d61dee18567577b829051206c677` |
-| `gui_web/src/hf/client.ts` | `0d38e5d7100e43efde5be63627b228a8cef3fa6d91546d4b5693479fc76992c8` |
-| `gui_web/src/hf/contract.ts` | `41bd410a1981470a1d57c3b559bbeedc3d40d5336eacfed363d332f6e4d3e7a6` |
+| `gui_web/src/hf/client.ts` | `59f5e3eb1dbad92efa672a258a7accb06df2e3f9a6cbc1d8d75a5d8dda668538` |
+| `gui_web/src/hf/contract.ts` | `0892ff4fe452db547c5534e8e086fdd4986de08b5032fd822c603d35afad06fc` |
 | `gui_web/src/hf/useAnalise.ts` | `96cceff3430ea2f151383a6820902c9b3cf7bf66a50a2c0c977fb9fec608782e` |
 | `gui_web/src/hf/useContadorEspera.ts` | `d5b212be39fbbbd3d681d92c6c8d368a10d464759f8ef4acc40ee68ad5693485` |
 | `gui_web/src/lib/arquivo.ts` | `b62cdb2e2d5b0bd70b1b9bd76b89d71fa02bd0d7490ea1a55d578d85dec7076c` |
-| `gui_web/src/lib/format.ts` | `ea47dd440e7437ab296b0dc772d347c5dd7a689de4bf8ea1a8a49363116e9b2e` |
+| `gui_web/src/lib/format.ts` | `5b5a0ee0fb9c8c7daf597991def853b4a133531471b40dbab85622a95184c729` |
 | `gui_web/src/lib/orcamento.ts` | `d5d082919ec4c408e7670250fe45ec638246d24883e23ef2df1b27b44b5988ba` |
 | `gui_web/src/main.tsx` | `908e625518862c14c075ebc584fd1e40a6390b908206f685f3d7d865361c887c` |
-| `gui_web/src/screens/Analise.tsx` | `59c855d75e0567651f69ee175c994c189b0f5a4f5eb95a94b66310daad04109a` |
+| `gui_web/src/screens/Analise.tsx` | `49c30d61b4203594af8e13f6ff8ac73c83ef9fe2fc99fc7c3288d802bde885d6` |
 | `gui_web/src/screens/Carta.tsx` | `dfe11757da61e7fdf8a3c8c2274d8d0acf2c64f467a4cf7882eeb710725d42c9` |
 | `gui_web/src/screens/ConfiguracaoIa.tsx` | `0a253497e6a5c896da00116ffd9b14a1010b928ccb88cf127e3c2bb075128143` |
 | `gui_web/src/screens/Contrato.tsx` | `cf23c4e472a948158aa08ccbf91b7ccd6c309cac78ddda3e2328234838158583` |
@@ -236,16 +259,18 @@ incremento de versão + nova ata**.
 | `gui_web/src/screens/Perfil.tsx` | `84a95595c2f30f84a0a6240ed77a17e9f53b6d3ae8e3dc1f3885670760e99834` |
 | `gui_web/src/screens/Planilha.tsx` | `965d08b87e801b2901b1a7adf3587a86bce465fc8629ff1b6fa5f7b29591b4e3` |
 | `gui_web/src/screens/VisaoGeral.tsx` | `cabe2c56e24693bddf2c9b53c20d6644ffa7c8c083d29b509257a30fa7dc3140` |
-| `gui_web/src/styles.css` | `630636a5933b2b9bd87583cd69612a033fe5f3f6d28d974c1f8b0ad2838f97f1` |
-| `gui_web/src/vite-env.d.ts` | `79731267745438c04c18f549ee2830d84f0282e7750b5972b81182754718bd1c` |
+| `gui_web/src/styles.css` | `f4d891a18a54d7c8117a41785099e5e7ab3a97b2a22255577d01819b3223e8eb` |
+| `gui_web/src/vite-env.d.ts` | `a49ff9d71ddfefc9d21b83877de10043399c72e1c883e909f14a81c6431423be` |
 | `gui_web/vite.config.ts` | `babedaf0e48959bea2faf692583ca7d63bd97739572284ca11c982c02c3816e3` |
+| `gui_web/e2e/analise-persistencia.spec.ts` | `bdcd0ddc2c93607a66df9fd5c21043fab6c0ad4be4a86ac73478d106e7c4bd97` |
+| `gui_web/e2e/analise-linha-do-tempo.spec.ts` | `03662f7e9b169f6cbff9664f6fc54a1d173472548ab566518c2aac20c6786d4c` |
 
 ### Entrypoint, build e empacotamento
 
 | Artefato | SHA-256 |
 |---|---|
 | `main.py` | `a979656c100f6d12b02e0d625f6197a6b792769aab885f328631faedc019a448` |
-| `pyproject.toml` | `4affdaecbd58bef8c204b49938e3f33b92f9947cc86b53bb3bb8e8576d94a259` |
+| `pyproject.toml` | `5cf8f357a5f44269690b17761591a0da45202249e463f1f7c40e65277713c82f` |
 | `SidecarHF.spec` | `cc3471a70cb6ebf50da89c6eb8820fde375645fedcbe40785ff8b187561c3cfa` |
 | `scripts/sidecar_entry.py` | `c63c53e315cd42423f06832d120ab66c4ff66965bf038bfcf3012d638acae3d9` |
 | `scripts/preparar_ocr.py` | `fb305d8a58947eed84070e898cce647e2abebd7d7aec409a2ad0899cbb96b0a5` |
@@ -268,7 +293,7 @@ incremento de versão + nova ata**.
 | `tests/golden/planilha_saudavel_sem_dividas.json` | `e8f9f3fe44288b995a6539cb085004884e7ea244610615be8084a863ce277ed0` |
 | `tests/golden/relatorio_atencao.json` | `7761ff6c5073e6b55fa9464033f1ceb359ed90fbf2e7d2247e42fe1142370f03` |
 | `tests/golden/relatorio_atencao_com_ia.json` | `dbe546d23a0525f631381c50c90a31994bad509eb3c8ae88af11db0964fb53bd` |
-| `tests/golden/relatorio_critico_deficit.json` | `b510e7873a1992277d61156fe2ab625f057e3caa32e391803611559be52c28a3` |
+| `tests/golden/relatorio_critico_deficit.json` | `0be4dafeefd272eef8ddaf2613fa507647be5577b4a6811649764b95a8916098` |
 | `tests/golden/relatorio_saudavel_sem_dividas.json` | `cfc0fac9751c8f0e3701ca6082bbf5cd2280a94e60ee94c67dd085265cfa2868` |
 | `tests/golden/relatorio_saudavel_sem_portabilidade.json` | `26e1c26cb653ba50ebd798f289a71e619c6aa9c2f9b63c9ed95e918b8a0920a3` |
 | `tests/test_auth.py` | `4032712de76e12dae65fbc68aef342cea5f149c295f33af097da5802b36ea7ce` |
@@ -276,7 +301,7 @@ incremento de versão + nova ata**.
 | `tests/test_classificacao.py` | `c520363fef4c48476a866df0c1be34c9fa82915d15b509894b985772bd9abc28` |
 | `tests/test_config.py` | `b2b932b36ab59afb057769bc2ba97efb6f2b5804e0ef740604899a57ed79a5b6` |
 | `tests/test_conteudo.py` | `73984521960a262548bf5386b41124ce557c032a9340ffa2d13bf96d7f7fd39d` |
-| `tests/test_core.py` | `8c63e0aa5e7f2145ad4e42f36db9bb5f56b5dde237346a92fdb0b57c2785bc23` |
+| `tests/test_core.py` | `1a9c0dc73e201112efee8ddc6368ff56128d4a70314e739f5877cc0093dd3ecc` |
 | `tests/test_degradacao.py` | `921fc14ef77b75527efdd3e048c874a60069de68549ed6d9e331da2010a8eda2` |
 | `tests/test_documento.py` | `c42135d3237092f8a574cd400c133b61fdcb915fa0ffb5db68e87372c55839bd` |
 | `tests/test_endurecimento_permissoes.py` | `6072dd6f720f6f36459ac160b110492fad19bf104a3d39c1aa2109a34bf02c0f` |
@@ -297,49 +322,55 @@ incremento de versão + nova ata**.
 | `tests/test_pii.py` | `9e0b052158b1f1af14f89c80bfcedc4be4c33d0e49bd40cebb29790d235c9dbc` |
 | `tests/test_preparar_llama.py` | `f55fbe488449bcfbac1261a5d886c3e3153571406c9f6f478e2fac6393c691a9` |
 | `tests/test_propriedades.py` | `a3dceb73aa42df79840b9b44925e8c2d3a736faf9df697146e82029035dcb358` |
-| `tests/test_providers.py` | `060b08161e3c3440d82f8b1d3357c836c1317c1784b57f4a7816958c9636132d` |
+| `tests/test_providers.py` | `073853e7704c62c19e0066b60c22f26ca990afbac07470144a15fe57e1692d37` |
 | `tests/test_recuperacao.py` | `94129e9a3fcf8bca1d180bcc61ea23010107ffeedc15659db961565f666d15c9` |
 | `tests/test_rubricas.py` | `74dc0e22bd922ec6d890bf203d6063b7c78176e247bb562a500a31d9d3f4545f` |
 | `tests/test_runtime_llm.py` | `3c4a8fe9f42ecd223776411b747cef27001d14167e449941f2dc84bc8998092c` |
 | `tests/test_sessao.py` | `b3e658562bc6b5a2d2dbb928c9fe714ce203b4439e61034c8bd81824771ba0e5` |
-| `tests/test_sidecar.py` | `75cb6e656c4182e34db96758fcdae12d2888c670f26ac2a2b9a0c30d112e469f` |
+| `tests/test_sidecar.py` | `a4e6feeeccfb09c62e626c3d0492af2d6bd22e0c1acf41ccc9ebc84ec8d8e601` |
 | `tests/test_sidecar_llm.py` | `0de056f6864382d50f990f0f6df52e378a301d64fdc68d45fd501d7ba9804519` |
 | `tests/test_telemetria.py` | `f5750e70fe314e187d25f464ea0c5871c2a807e518821cb1a41a4ec1580bdbe8` |
 | `tests/test_validacao_texto.py` | `4c9482f0ea98fc9af46a3ea89d4f2262eda6a207e54da9d5ed322ecebdfce3e7` |
+| `tests/test_checkpoint_cofre.py` | `155b612eb362e4554ef536a38f32ee68a85af35daeb8f9b1aea134c600dde130` |
+| `tests/test_analise_ultima.py` | `91aeab4b28a37694c7579200271669a63edb2400c935e3aca01742ad3e964eca` |
+| `tests/test_grafo_stream.py` | `996ce6cdc4f56aa5ed719f77e27805cc3a14c09fcad812989c529c6047a2a996` |
 
-## Binários oficiais deste ciclo (build 2.14.0, rebuild ADR-0017 §E)
+## Binários oficiais deste ciclo (build 2.15.0, assinado — ADR-0021)
 
-| Artefato | SHA-256 | Tamanho |
+| Binário | SHA-256 | Tamanho |
 |---|---|---|
-| `gui_web/release/Helper Financeiro Setup 2.14.0.exe` | `b12a7efaa76f02351d6cbb0b1f298ef9614bf39693829d1f9c43d504262ba914` | 347,1 MB |
-| `dist/sidecar-hf/sidecar-hf.exe` (dentro do instalador) | `c53deb4ca45357becc3de2194ac67c57c501679df102b3f68d170f26e6c07d32` | 22,7 MB |
-
-> Build sem assinatura (fase 2 do C-15 segue aguardando o SignPath; as
-> linhas "signing with signtool" do electron-builder 26 sem certificado são
-> log inerte — instalador conferido `NotSigned`, nenhuma env `CSC`/`SIGN`
-> presente). **Nenhum modelo GGUF é embarcado** (REQ-NF-007).
+| `gui_web/release/Helper Financeiro Setup 2.15.0.exe` | `ee145b9610c2140bf2b8a078814db2bd52ac7a6be2f2c252a191ac5b158b8ce1` | 347,1 MB |
+| `dist/sidecar-hf/sidecar-hf.exe (dentro do instalador)` | `e9ee9e32fbce1304a4b67a1a379d48639bbfc01102cbbcc7f76863cce7d67076` | 22,6 MB |
 
 ## Estado do harness no congelamento
 
-```text
-555 passed, 2 skipped — suíte offline (Gate A); cobertura 96,7% (piso 90%)
-Catraca C901: ativa (max-complexity = 13); golden-master: 9/9
-E2E Playwright: 23 passed no app dev (inclui os 4 cenários novos do
-runtime configurável); smokes do pacote: 8 passed + 1 gated
-(HF_E2E_UPDATE_INSTALL) por rodada, repetidos a cada rebuild (3 rebuilds
-neste fechamento — T-2503, temp 0 e conserto dirigido); smoke do órfão OK
-em todos (Job Object no exe congelado).
-Gate Front (CI): ESLint + tsc + build Vite verdes
-CI remoto: verde em todos os commits do ciclo (regra ADR-0020)
-Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 0 (runtime+dev+
-build) · Electron 43.1.1 — nenhum risco aceito pendente
-Validação de campo do fechamento: 4/4 perfis variados em modo completo
-pelo grafo inteiro (llama-server + phi-3.5 reais, GTX 1650); aceitação
-dupla do mantenedor com dados alterados entre análises.
-Observações: (1) flake de teardown no afterAll do empacotado-update
-(fechar o app de teste após download de ~350 MB estourou 60 s; 1 de 4
-rodadas; pode deixar o app-sob-teste VIVO — matar pelos PIDs, nunca por
-nome de imagem); (2) análises com o phi-3.5 no caminho de fallback levam
-2–7 min na GTX 1650 (2 a 3 chamadas ao modelo no pior caso); (3) modelos
-com menos de ~1B seguem degradando por SCHEMA (P8 correto).
+```
+Suíte Python: verde (exit 0; 2 skips opt-in HF_OCR_REAL/HF_LLAMA_REAL) —
+inclui os 13 do checkpoint durável (anti-PII por super-step, retomada,
+poda, WAL), os 8 da persistência visível, o streaming do provider
+(sentinela POST único, throttle, tentativa semântica), o endpoint SSE
+(terminal/erro/heartbeat, fecho no auto-lock, G4 — bloqueio no meio não
+ressuscita PII) e a saúde em 2 eixos (T-2606, provado via stash).
+Golden-master: 9/9 (relatorio_critico_deficit regenerado deliberadamente
+no T-2606 — única mudança: explicação combinada). Catraca C901 intacta.
+ruff + mypy (win32): limpos.
+Gate Front: typecheck (renderer + electron) + ESLint verdes.
+E2E dev: 20/20 na rodada final (app 15 + linha do tempo 3 + persistência 1
++ configuração 1); smoke do pacote real 2/2 (HF_E2E_PACOTE=1); smoke do
+órfão verde no exe congelado ASSINADO (Job Object mata o llama-server
+filho após kill duro — agora pelo caminho de análise streaming).
+CI remoto: verde em todos os commits do ciclo (regra ADR-0020).
+Auditoria de deps (ADR-0018 §5): npm audit 0 · pip-audit 0 ·
+Electron 43.1.1 — nenhum risco aceito novo.
+Aceitação de campo: quádrupla, confirmada pelo mantenedor (2026-07-18),
+incl. revalidação do T-2606 com a régua nova.
+Observações: (1) flake E2E novo registrado — cenário "correção T-2602" de
+analise-linha-do-tempo.spec.ts, 2 falhas em 7+ rodadas SEMPRE sob a
+primeira carga pós-mudança, depois limpo (perfil histórico das atas
+v2.4..v2.11; sem correção às cegas — capturar trace na reincidência);
+(2) HF_MODO_DEGRADADO degrada ANTES do grafo (sem fases no SSE) — os E2E
+do caminho feliz usam conexão recusada (P8 real); (3) o cert de teste
+regenerado NÃO herda a confiança do anterior no host (afeta só smoke de
+auto-update; remoção do cert: instruções na saída do
+preparar_cert_teste.ps1, thumbprint DD6CFC3C…).
 ```

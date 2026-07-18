@@ -374,5 +374,7 @@ nunca piora. **Design apto ao lançamento após estas revisões.**
   FALHAVA antes (provado via stash contra o core antigo); golden
   `relatorio_critico_deficit` regenerado deliberadamente (única mudança: a
   explicação agora combina os dois motivos); rebuild assinado + smokes
-  repetidos no artefato final. Revalidação do item (d) com a régua nova:
-  registrada na ata v2.15.0.
+  repetidos no artefato final. **Revalidação do item (d) confirmada pelo
+  mantenedor (2026-07-18, "confirmo o fix")** — dashboard refletindo o
+  déficit com a régua nova e perfis variados completos. Ciclo fechado com a
+  ata `FREEZE.md` v2.15.0.

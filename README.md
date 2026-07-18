@@ -252,6 +252,15 @@ Se a GPU falhar no boot, o app tenta **uma vez em CPU puro** e avisa o
 motivo na análise — nada de análise perdida. `HF_LLAMA_FLAGS`, quando
 definida, continua vencendo tudo (os controles da tela avisam e desabilitam).
 
+Desde o v2.15 (ADR-0023) a análise sênior mostra o progresso em **tempo
+real** (linha do tempo de fases + contador de tokens — o texto do modelo só
+aparece depois dos guardrails), a **última análise fica salva no cofre**
+(reabrir o app mostra a análise anterior com carimbo; se os dados mudaram,
+um selo âmbar avisa) e uma análise **interrompida no meio retoma de onde
+parou** (checkpoint durável dentro do próprio cofre cifrado; desligável em
+Configuração da IA). O Diagnóstico de Saúde Financeira passou a considerar
+o orçamento inteiro: **déficit mensal nunca sai "Saudável"** (T-2606).
+
 ```bash
 # 1. instalar o Ollama (https://ollama.com) e baixar os modelos
 ollama pull qwen2.5:3b        # padrão: roda 100% numa GPU de 4 GB

@@ -173,7 +173,21 @@ CONSTITUTION → PRD → SPEC (EARS) → PLAN → TASKS → código
   mascarado: o llama.cpp recusa a gramática do `json_schema` estrito com o
   tokenizer do phi-3.5 — fallback `json_object` + temperatura 0 + conserto
   dirigido no provider, validado com 4/4 perfis completos no hardware real.
-- **Mudanças nos artefatos congelados (v2.14.0) exigem nova ADR + incremento
+- **Ciclo v2.15 FECHADO (`FREEZE.md` v2.15.0, ADR-0023, M26):** checkpoint
+  **durável** do grafo dentro do cofre cifrado (`SqliteSaver` numa 2ª conexão
+  SQLCipher; cofre convertido para **WAL**; retomada só de thread inacabado,
+  `thread_id` = assinatura dos fatos; toggle "retomar análises interrompidas"
+  default ligado), **persistência visível da última análise** (`POST
+  /analise/ultima`, carimbo "dados inalterados"/selo âmbar "os dados
+  mudaram") e **progresso em tempo real** da análise sênior (SSE de fases +
+  contador de tokens — conteúdo do LLM nunca aparece antes dos guardrails;
+  linha do tempo na GUI com retomada explicada e queda→polling graciosa).
+  Os 3 degraus do T-2505 agora **streamam** (provado no build real). A
+  aceitação de campo achou (e o **T-2606** corrigiu) um gap do ADR-0001: a
+  saúde financeira ignorava o fluxo de caixa — agora é o **pior entre 2
+  eixos** (parcelas × déficit relativo à renda); déficit mensal nunca mais
+  sai "Saudável".
+- **Mudanças nos artefatos congelados (v2.15.0) exigem nova ADR + incremento
   de versão + nova ata** — o próximo ciclo começa por uma ADR.
 
 ## Rodar

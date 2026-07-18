@@ -1,6 +1,6 @@
 # HARNESS — Avaliação & Portões de Qualidade
 
-- **Versão:** 2.14.0 · **Regido por:** `CONSTITUTION.md` (P6)
+- **Versão:** 2.15.0 · **Regido por:** `CONSTITUTION.md` (P6)
 - **Executor:** `pytest` · **Local:** `tests/` · **CI:** `.github/workflows/ci.yml`
 - **Front (v2.3):** ESLint + `tsc` + Vite no CI (`gate-front`); **E2E
   Playwright** (`gui_web/e2e/`, Electron + sidecar reais) como portão LOCAL
@@ -60,6 +60,24 @@ O harness é a "bancada de testes" que faz os guardrails valerem. Nenhum
 > `aviso_runtime`) e `tests/test_providers.py` (T-2505: fallback de
 > gramática com o corpo REAL do 400 como fixture, temperatura 0 no
 > `json_object` e conserto dirigido com os erros do Pydantic — 9 testes).
+
+> **v2.15 (ADR-0023):** checkpoint durável + persistência visível + SSE.
+> Testes novos em `tests/test_checkpoint_cofre.py` (13: saver durável no
+> cofre SQLCipher, varredura anti-PII do checkpoint inteiro por super-step
+> incl. pós-`gerar` pré-`sanear`, retomada após interrupção, poda, escrita
+> não-fatal, toggle, plano C, WAL consolidado no desarme),
+> `tests/test_analise_ultima.py` (8: upsert, `POST /analise/ultima`,
+> assinaturas, ordem persistir-antes-de-apagar, C-04),
+> `tests/test_grafo_stream.py` (fases+progresso, `values` final ==
+> `.invoke()`, evento `retomada`), `tests/test_providers.py` (streaming =
+> POST único como sentinela, throttle, "tokens e então erro", `tentativa`
+> SEMÂNTICA — o fallback de gramática não rotula refino) e
+> `tests/test_sidecar.py` (endpoint SSE: terminal/erro/heartbeat, fecho no
+> auto-lock, G4 — bloqueio no meio não ressuscita PII; rótulos cobrem os
+> nós reais do grafo). T-2606: `tests/test_core.py` — saúde em 2 eixos
+> (déficit nunca é "Saudável"; provado via stash contra o core antigo);
+> golden `relatorio_critico_deficit` regenerado deliberadamente. E2E novos:
+> `analise-persistencia.spec.ts` e `analise-linha-do-tempo.spec.ts`.
 > E2E novo `configuracao-ia-runtime.spec.ts` (4 cenários,
 > incluindo boot REAL com fallback CPU via llama-server fake em
 > `e2e/fixtures/fake-llama-server.py`). Fora do harness versionado: mock E2E
