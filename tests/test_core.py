@@ -1,4 +1,6 @@
 """Núcleo determinístico (REQ-F-001..003)."""
+import dataclasses
+
 from core.calculos import calcular_cet_anual, parcela_price, taxa_implicita, taxa_mensal_para_anual
 from core.diagnostico import classificar_saude, resumo_diagnostico, taxa_media_ponderada
 from core.estrategias import comparar_estrategias
@@ -24,6 +26,42 @@ def test_classificacao_por_faixa():
     assert classificar_saude(0.25)[0] == "Saudável"
     assert classificar_saude(0.39)[0] == "Atenção"
     assert classificar_saude(0.60)[0] == "Crítico"
+
+
+def test_classificacao_dois_eixos_deficit_nunca_e_saudavel():
+    """T-2606 (achado da aceitação de campo do v2.15): parcelas baixas com
+    DÉFICIT mensal não podem sair "Saudável" — o caso real de campo tinha
+    falta de R$ 2.159,47/mês e o dashboard dizia Saudável. FALHAVA antes."""
+    # Renda 6000, parcelas 900 (15%, eixo-parcelas Saudável), déficit 2159.47
+    # = 36% da renda (> 10%) ⇒ o eixo do fluxo puxa para Crítico.
+    rotulo, explicacao = classificar_saude(0.15, -2159.47, 6000.0)
+    assert rotulo == "Crítico"
+    assert "vermelho" in explicacao
+
+    # Déficit pequeno (≤ 10% da renda) ⇒ Atenção, nunca Saudável.
+    assert classificar_saude(0.15, -300.0, 6000.0)[0] == "Atenção"
+
+    # Superávit ⇒ o eixo das parcelas continua mandando (regra clássica).
+    assert classificar_saude(0.15, 1500.0, 6000.0)[0] == "Saudável"
+    assert classificar_saude(0.60, 1500.0, 6000.0)[0] == "Crítico"
+
+    # Renda zero gastando dinheiro ⇒ Crítico direto (sem denominador).
+    assert classificar_saude(0.0, -100.0, 0.0)[0] == "Crítico"
+
+    # Empate num nível ruim ⇒ explicação combinada (cita os DOIS motivos).
+    rotulo, explicacao = classificar_saude(0.40, -300.0, 6000.0)
+    assert rotulo == "Atenção"
+    assert "parcelas" in explicacao and "vermelho" in explicacao
+
+
+def test_resumo_diagnostico_reflete_o_deficit(perfil_atencao):
+    """O rótulo do resumo (dashboard/relatório/LLM) usa os dois eixos."""
+    perfil_deficit = dataclasses.replace(
+        perfil_atencao,
+        despesas_variaveis=perfil_atencao.despesas_variaveis + 5000)
+    diag = resumo_diagnostico(perfil_deficit)
+    assert diag["tem_deficit"] is True
+    assert diag["classificacao"] != "Saudável"
 
 
 def test_avalanche_paga_menos_juros_que_bola_de_neve(perfil_atencao):

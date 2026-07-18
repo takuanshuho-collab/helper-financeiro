@@ -10,14 +10,58 @@ from .models import Divida, PerfilFinanceiro
 LIMITE_SAUDAVEL = 0.30
 LIMITE_ATENCAO = 0.50
 
+# Eixo do fluxo de caixa (T-2606, achado da aceitação de campo do v2.15): um
+# déficit mensal de até esta fração da renda rebaixa para "Atenção"; acima,
+# "Crítico". Antes o rótulo só olhava as parcelas — um orçamento com déficit de
+# milhares de reais mas parcelas baixas saía "Saudável" no dashboard.
+LIMITE_DEFICIT_ATENCAO = 0.10
 
-def classificar_saude(comprometimento: float) -> tuple[str, str]:
-    """Retorna (rótulo, explicação) para o nível de comprometimento de renda."""
+# Severidade ordinal dos rótulos para o "pior entre os dois eixos".
+_NIVEIS = {"Saudável": 0, "Atenção": 1, "Crítico": 2}
+
+
+def _eixo_parcelas(comprometimento: float) -> tuple[str, str]:
+    """Eixo clássico: comprometimento da renda com parcelas de dívida."""
     if comprometimento <= LIMITE_SAUDAVEL:
         return ("Saudável", "As parcelas cabem no orçamento com folga.")
     if comprometimento <= LIMITE_ATENCAO:
         return ("Atenção", "As parcelas já pesam; margem de manobra pequena.")
     return ("Crítico", "As parcelas consomem grande parte da renda; risco alto.")
+
+
+def _eixo_fluxo(fluxo_caixa: float, renda_liquida: float) -> tuple[str, str]:
+    """Eixo do orçamento inteiro: sobra (ou falta) mensal após TUDO.
+
+    Déficit relativo à renda: até `LIMITE_DEFICIT_ATENCAO` ⇒ "Atenção"; acima ⇒
+    "Crítico". Renda zero (ou negativa) com déficit é "Crítico" direto — não há
+    denominador que relativize um orçamento sem renda gastando dinheiro.
+    """
+    if fluxo_caixa >= 0:
+        return ("Saudável", "O orçamento fecha o mês no azul.")
+    if renda_liquida <= 0 or (-fluxo_caixa / renda_liquida) > LIMITE_DEFICIT_ATENCAO:
+        return ("Crítico", "As despesas superam a renda em valor relevante: "
+                           "o mês fecha no vermelho.")
+    return ("Atenção", "O orçamento fecha o mês no vermelho, ainda que por pouco.")
+
+
+def classificar_saude(comprometimento: float, fluxo_caixa: float = 0.0,
+                      renda_liquida: float = 0.0) -> tuple[str, str]:
+    """Retorna (rótulo, explicação) da saúde financeira — o PIOR entre dois eixos.
+
+    T-2606 (decisão do mantenedor na aceitação de campo do v2.15): o rótulo
+    reflete a situação INTEIRA — (a) o eixo das parcelas (regra clássica) e
+    (b) o eixo do fluxo de caixa (renda − despesas − parcelas). A explicação é
+    a do eixo que puxou para baixo; empatados num nível ruim, as duas frases
+    são combinadas. Os defaults (`fluxo_caixa=0`, sem déficit) preservam o
+    comportamento antigo para chamadas legadas de um argumento só.
+    """
+    rotulo_p, expl_p = _eixo_parcelas(comprometimento)
+    rotulo_f, expl_f = _eixo_fluxo(fluxo_caixa, renda_liquida)
+    if _NIVEIS[rotulo_f] > _NIVEIS[rotulo_p]:
+        return (rotulo_f, expl_f)
+    if _NIVEIS[rotulo_f] == _NIVEIS[rotulo_p] and rotulo_p != "Saudável":
+        return (rotulo_p, f"{expl_p} {expl_f}")
+    return (rotulo_p, expl_p)
 
 
 def ranking_dividas(perfil: PerfilFinanceiro) -> list[Divida]:
@@ -41,7 +85,8 @@ def taxa_media_ponderada(perfil: PerfilFinanceiro) -> float:
 def resumo_diagnostico(perfil: PerfilFinanceiro) -> dict:
     """Consolida todos os números do diagnóstico em um dicionário."""
     comprometimento = perfil.comprometimento_renda
-    rotulo, explicacao = classificar_saude(comprometimento)
+    rotulo, explicacao = classificar_saude(
+        comprometimento, perfil.fluxo_caixa, perfil.renda_liquida)
 
     ranking = ranking_dividas(perfil)
     divida_mais_cara = ranking[0] if ranking else None

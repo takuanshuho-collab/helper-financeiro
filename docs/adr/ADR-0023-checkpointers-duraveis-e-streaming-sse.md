@@ -309,3 +309,70 @@ streaming×T-2505) concentra o risco remanescente e cada um agora tem
 degradação segura definida (plano C / POST único), de modo que nenhum pode
 travar o ciclo — no pior caso o entregável correspondente encolhe, o produto
 nunca piora. **Design apto ao lançamento após estas revisões.**
+
+## Registro da execução (2026-07-18, fechamento)
+
+- **Os dois spikes do dia 1 APROVARAM os desenhos sem acionar os recuos:**
+  - T-2601: `SqliteSaver` × `sqlcipher3` viável via **Plano B** (2ª conexão
+    dedicada; o Plano A caiu por análise de API — o saver tem lock interno
+    próprio, dois locks sobre a mesma conexão = commit de um encerra a
+    transação do outro). O `setup()` do saver **força `journal_mode=WAL` no
+    `dados.db` inteiro** (hardcoded no pacote) — conversão aprovada
+    explicitamente pelo mantenedor; `busy_timeout=5000` nas duas conexões ⇒
+    0 `database is locked` sob concorrência com o auto-save. Plano C
+    (`InMemorySaver`) implementado mas nunca necessário em teste/smoke.
+  - T-2603: no build embarcado real (b9966 + phi-3.5), o 400 de recusa de
+    gramática chega no `urlopen` **antes de qualquer chunk** ⇒ os 3 degraus
+    do T-2505 streamam; nenhum precisou do recuo para POST único. 1º token
+    em ~0,5–1,2 s no `json_object`.
+- **Correção do revisor no T-2603 (relevante):** `tentativa` do contador
+  virou **semântica** (`refinando` declarado pelo chamador), não número de
+  chamada HTTP — sem isso, TODA análise com phi-3.5 (que sempre leva o 400
+  na 1ª chamada; a memoização não atravessa análises) nasceria rotulada
+  "refinando a resposta", violando o espírito da U3. O fallback de gramática
+  é transparente; só o retry do guardrail e o conserto dirigido refinam.
+- **Achados de execução registrados:** (1) `HF_MODO_DEGRADADO=1` degrada
+  ANTES do grafo (em `agente.analisar`) ⇒ não emite fases — o E2E do caminho
+  feliz da linha do tempo usa conexão recusada (P8 real, fases genuínas);
+  (2) o T-2602 persistiu na tabela key-value `estado` (chave
+  `analise_ultima`) em vez de tabela nova — zero migração de schema
+  (ADR-0017 §E), e o endpoint virou `POST /analise/ultima` (a ponte escolhe
+  o verbo pelo payload; o backend calcula `assinatura_atual` dos dados
+  vivos); (3) evento `retomada` (U1) foi adicionado no T-2604 (o T-2603 não
+  o emitia); (4) **flake E2E novo registrado**: cenário "correção T-2602" de
+  `analise-linha-do-tempo.spec.ts`, 2 falhas em 6 rodadas SOB primeira
+  carga pós-mudança, 4 rodadas limpas depois (incl. suíte 20/20) — perfil
+  histórico das atas v2.4..v2.11; sem correção às cegas, trace na
+  reincidência.
+- **Execução:** T-2601/T-2603 executor-opus, T-2602/T-2604 executor-sonnet
+  (3 quedas por session-limit ao longo do ciclo, todas retomadas por
+  mensagem sem perda de progresso). Deps novas:
+  `langgraph-checkpoint-sqlite==3.1.0` (+ transitivas `aiosqlite`,
+  `sqlite-vec`) — sem upgrade forçado do `langgraph 1.2.9`, goldens
+  intactos.
+- **Fechamento (T-2605):** CI remoto verde em todos os pushes do ciclo;
+  auditoria §5: npm audit 0, pip-audit 0, Electron 43.1.1 na janela
+  vigente; build oficial 2.15.0 **assinado** (cert de teste regenerado —
+  o PFX anterior havia sido apagado; sidecar assinado antes do
+  empacotamento, ADR-0021) + smoke do pacote (2/2) + smoke do órfão
+  recriado e verde (Job Object efetivo no exe congelado, agora pelo caminho
+  de análise streaming).
+- **Aceitação de campo (2026-07-18, máquina do mantenedor):** (a) retomada
+  após kill confirmada, com a frase "retomando a análise interrompida" na
+  linha do tempo; (b) hidratação com carimbo confirmada; (c) **contador de
+  tokens MANTIDO** por decisão do mantenedor ("até ter certeza" — U2
+  encerrada; fases-puras permanece documentado como recuo); (d) a bateria
+  de perfis variados **achou o T-2606**: o "Diagnóstico da Saúde
+  Financeira" ignorava o fluxo de caixa — déficit mensal de R$ 2.159,47
+  saía "Saudável" (a regra do ADR-0001 só olhava parcelas÷renda; gap de
+  produto pré-existente, não regressão do ciclo).
+- **T-2606 (adicionada ao M26 com aval do mantenedor, padrão T-2505):**
+  `classificar_saude` vira **pior entre 2 eixos** — parcelas (clássico) ×
+  fluxo de caixa (superávit ⇒ Saudável; déficit ≤10% da renda ⇒ Atenção;
+  >10% ou renda zero ⇒ Crítico); a explicação cita o eixo que puxou para
+  baixo (empate num nível ruim ⇒ frases combinadas). Teste de regressão que
+  FALHAVA antes (provado via stash contra o core antigo); golden
+  `relatorio_critico_deficit` regenerado deliberadamente (única mudança: a
+  explicação agora combina os dois motivos); rebuild assinado + smokes
+  repetidos no artefato final. Revalidação do item (d) com a régua nova:
+  registrada na ata v2.15.0.
