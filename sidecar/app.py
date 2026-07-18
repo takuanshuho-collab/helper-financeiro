@@ -876,6 +876,11 @@ def _rotular_evento(tipo: str, dados: dict) -> tuple[str, dict]:
     """Traduz um evento cru do grafo (`fase`/`progresso`) no par
     (nome_evento_sse, payload com rótulo pt-BR). O CONTEÚDO do LLM nunca entra
     aqui — só o nome do nó e a CONTAGEM de tokens."""
+    if tipo == "retomada":
+        # T-2604 (ADR-0023, revisão U1): thread inacabado retomado do checkpoint
+        # durável — vira uma "fase" informativa ANTES do resto do stream, para a
+        # GUI explicar em linguagem clara, nunca um rótulo cru surpresa.
+        return "fase", {"no": "retomada", "rotulo": "retomando a análise interrompida"}
     if tipo == "fase":
         no = dados.get("no", "")
         return "fase", {"no": no, "rotulo": _ROTULOS_FASE.get(no, _ROTULO_FASE_GENERICO)}

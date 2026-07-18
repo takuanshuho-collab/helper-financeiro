@@ -12,7 +12,7 @@ import pytest
 
 from agent.agente import montar_fatos
 from agent.config import ConfigAgente
-from agent.grafo import desarmar_checkpointer_duravel, executar_analise
+from agent.grafo import desarmar_checkpointer_duravel, executar_analise, thread_id_analise
 from agent.provider import FakeProvider
 from core.models import Divida, PerfilFinanceiro
 
@@ -80,3 +80,52 @@ def test_stream_erro_de_provider_degrada_e_ainda_emite_fases():
     fases = [d["no"] for t, d in eventos if t == "fase"]
     assert "chamar_llm" in fases
     assert "degradar" in fases
+
+
+class _ProviderInterrompeUmaVez:
+    """1ª chamada mata o nó `chamar_llm` com `KeyboardInterrupt` (fora do catch
+    do grafo, que só engole `Exception`); 2ª em diante responde bem — mesmo
+    padrão de `test_checkpoint_cofre.py`."""
+
+    def __init__(self) -> None:
+        self.chamadas = 0
+        self._bom = FakeProvider()
+
+    def analisar(self, fatos):  # noqa: ANN001, ANN202
+        self.chamadas += 1
+        if self.chamadas == 1:
+            raise KeyboardInterrupt("processo morto no meio da geração")
+        return self._bom.analisar(fatos)
+
+
+def test_retomada_real_emite_evento_retomada_antes_do_stream():
+    """T-2604 (ADR-0023, item B): quando `_entrada_da_retomada` decide RETOMAR
+    (thread inacabado, `entrada is None`), `executar_analise` emite
+    `ao_evento("retomada", {})` ANTES de qualquer evento do stream — a GUI
+    precisa saber da retomada antes das fases seguirem. Um início do zero
+    (sem checkpoint prévio) NUNCA emite esse evento."""
+    fatos, mapa = montar_fatos(_perfil())
+    prov = _ProviderInterrompeUmaVez()
+
+    # 1ª chamada: sem checkpoint prévio para este thread ⇒ roda do zero, sem
+    # "retomada", e interrompe no meio (fica inacabado no checkpoint em memória).
+    eventos_zero: list[tuple[str, dict]] = []
+    with pytest.raises(KeyboardInterrupt):
+        executar_analise(
+            fatos, mapa, CFG_FAKE, prov, retomar=True,
+            ao_evento=lambda tipo, dados: eventos_zero.append((tipo, dados)))
+    assert "retomada" not in [t for t, _ in eventos_zero]
+
+    tid = thread_id_analise(CFG_FAKE, fatos)
+    from agent.grafo import grafo_analise
+    assert grafo_analise().get_state({"configurable": {"thread_id": tid}}).next == (
+        "chamar_llm",)
+
+    # 2ª chamada: mesmo thread inacabado ⇒ RETOMA de verdade — "retomada" é o
+    # PRIMEIRO evento emitido, antes de qualquer "fase"/"progresso" do stream.
+    eventos_retomada: list[tuple[str, dict]] = []
+    res = executar_analise(
+        fatos, mapa, CFG_FAKE, prov, retomar=True,
+        ao_evento=lambda tipo, dados: eventos_retomada.append((tipo, dados)))
+    assert res.modo == "completo"
+    assert eventos_retomada[0] == ("retomada", {})

@@ -201,6 +201,101 @@ async function chamarSidecar(
   return dados
 }
 
+// --- SSE da linha do tempo da análise sênior (T-2604, ADR-0023) --------------
+// O renderer NUNCA fala com o sidecar diretamente (REQ-SEC-004): o main abre
+// o `fetch` streaming de `GET /analise/ia/{jobId}/eventos` (mesma infra/token
+// de `chamarSidecar`), parseia os frames SSE incrementalmente e empurra cada
+// um por IPC push (`hf:sse-evento`). No máximo 1 stream ativo por job —
+// iniciar de novo substitui (aborta o anterior antes de abrir outro).
+interface StreamSse {
+  abort: AbortController
+  /** `true` quando `pararSseJob` cancelou de propósito — o `catch`/`finally`
+   * do laço de leitura não deve emitir `queda`/`fim` para um stream que a
+   * própria GUI mandou parar (unmount/troca de job). */
+  cancelado: boolean
+}
+const streamsSse = new Map<string, StreamSse>()
+
+function pararSseJob(jobId: string): void {
+  const s = streamsSse.get(jobId)
+  if (!s) return
+  s.cancelado = true
+  streamsSse.delete(jobId)
+  s.abort.abort()
+}
+
+function pararTodosSse(): void {
+  for (const jobId of [...streamsSse.keys()]) pararSseJob(jobId)
+}
+
+// Monta o par (nome_evento, payload) de um frame SSE bruto
+// (`event: <nome>\ndata: {...}`); frames de heartbeat (`: ping`) não têm
+// `event:` e são ignorados. `null` = frame malformado (nunca deveria
+// acontecer vindo do `_evento_sse` do sidecar; defensivo mesmo assim).
+function parsearFrameSse(frame: string): { evento: string; dados: unknown } | null {
+  let evento = ''
+  let dadosBrutos = ''
+  for (const linha of frame.split('\n')) {
+    if (linha.startsWith('event:')) evento = linha.slice('event:'.length).trim()
+    else if (linha.startsWith('data:')) dadosBrutos += linha.slice('data:'.length).trim()
+  }
+  if (!evento) return null // comentário (heartbeat) ou frame vazio
+  try {
+    return { evento, dados: JSON.parse(dadosBrutos) as unknown }
+  } catch {
+    return null // corpo não-JSON: nunca deixa a exceção de parse escapar
+  }
+}
+
+async function iniciarSseJob(jobId: string, win: BrowserWindow): Promise<void> {
+  pararSseJob(jobId) // no máximo 1 stream ativo por job
+  const s: StreamSse = { abort: new AbortController(), cancelado: false }
+  streamsSse.set(jobId, s)
+  try {
+    // Seam SÓ de teste (T-2604, E2E de fallback U5): simula queda de rede
+    // ANTES de abrir a conexão real — mesmo padrão de `HF_MODO_DEGRADADO`/
+    // `HF_PROVIDER=fake`, uma variável opt-in que não muda nada em produção.
+    if (process.env.HF_TEST_SSE_QUEDA === '1') {
+      throw new Error('queda simulada (HF_TEST_SSE_QUEDA=1)')
+    }
+    const resp = await fetchSidecar(
+      `http://127.0.0.1:${sidecarPort}/analise/ia/${jobId}/eventos`,
+      {
+        headers: { 'X-HF-Token': sidecarToken },
+        dispatcher: dispatcherSidecar,
+        signal: s.abort.signal,
+      },
+    )
+    if (!resp.ok || !resp.body) throw new Error(`SSE indisponível (HTTP ${resp.status})`)
+    const leitor = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    for (;;) {
+      const { done, value } = await leitor.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let fim: number
+      // Frames separados por linha em branco (`\n\n`) — um `while` porque um
+      // único chunk de rede pode carregar mais de um frame completo.
+      while ((fim = buffer.indexOf('\n\n')) !== -1) {
+        const bruto = buffer.slice(0, fim)
+        buffer = buffer.slice(fim + 2)
+        const parsed = parsearFrameSse(bruto)
+        if (parsed) {
+          win.webContents.send('hf:sse-evento', { jobId, evento: parsed.evento, dados: parsed.dados })
+        }
+      }
+    }
+    if (!s.cancelado) win.webContents.send('hf:sse-evento', { jobId, evento: 'fim' })
+  } catch {
+    // Rede caiu OU o `abort()` de `pararSseJob` — só é "queda" de verdade se
+    // NINGUÉM pediu para parar (a GUI decide o fallback polling, U5).
+    if (!s.cancelado) win.webContents.send('hf:sse-evento', { jobId, evento: 'queda' })
+  } finally {
+    streamsSse.delete(jobId)
+  }
+}
+
 function aplicarCsp(): void {
   // Permissões web (câmera/microfone/geolocalização...): negadas por padrão —
   // o app é 100% local e não usa nenhuma (T-1003).
@@ -332,6 +427,7 @@ let sidecarEncerrado = false
  * lança — é chamado no caminho de quit.
  */
 async function encerrarSidecar(): Promise<void> {
+  pararTodosSse() // não deixa nenhum stream SSE pendurado segurando o quit
   const proc = sidecar
   sidecar = null
   if (!proc || proc.killed || proc.exitCode !== null) return
@@ -362,6 +458,15 @@ void app.whenReady().then(async () => {
       metodoHttp?: 'GET' | 'POST' | 'PUT',
     ) => chamarSidecar(metodo, payload, metodoHttp),
   )
+  // Linha do tempo da análise sênior (T-2604, ADR-0023): abre/fecha o stream
+  // SSE no main; o payload trafega por `webContents.send` (IPC push).
+  ipcMain.handle('hf:sse-iniciar', (evento, jobId: string) => {
+    const win = BrowserWindow.fromWebContents(evento.sender)
+    if (win) void iniciarSseJob(jobId, win)
+  })
+  ipcMain.handle('hf:sse-parar', (_evento, jobId: string) => {
+    pararSseJob(jobId)
+  })
   // Exportações (T-902): o renderer pede o diálogo nativo e recebe só o
   // caminho; o arquivo em si é escrito pelo sidecar (núcleo Python).
   ipcMain.handle(

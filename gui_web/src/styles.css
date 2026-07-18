@@ -1443,6 +1443,99 @@ body {
   filter: grayscale(0.3);
 }
 
+/* Linha do tempo da análise sênior (T-2604, ADR-0023): substitui o spinner
+ * mudo por fases concluídas (✓) + um item ativo pulsando. */
+.ia-timeline-wrap {
+  margin-top: 14px;
+}
+
+.ia-timeline-legenda {
+  margin: 0 0 10px;
+}
+
+.ia-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ia-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.ia-timeline-marca {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--nav-on-text);
+  background: var(--nav-on-bg);
+}
+
+/* Evento `retomada` (revisão U1): destaque informativo, não uma fase igual
+ * às demais — o usuário que clicou "Gerar" precisa entender de imediato que
+ * uma análise anterior está continuando. */
+.ia-timeline-retomada {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.ia-timeline-retomada .ia-timeline-marca {
+  color: var(--nav-on-text);
+  background: var(--accent);
+}
+
+.ia-timeline-ativa {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ia-timeline-pulso {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulsar-ia 1.2s ease-in-out infinite;
+}
+
+/* Fallback gracioso do SSE (revisão U5): a queda para o pulso — sinal visual
+ * discreto de que o contador não avança mais, sem nenhum erro na tela. */
+.ia-timeline-pulso-pausado {
+  animation: none;
+  opacity: 0.4;
+}
+
+@keyframes pulsar-ia {
+  0%,
+  100% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ia-timeline-pulso {
+    animation: none;
+  }
+}
+
 /* Exportações */
 .export-linha {
   display: flex;

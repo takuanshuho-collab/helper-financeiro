@@ -514,6 +514,53 @@ export interface ConfigLLMIn {
   gpu_offload?: 'auto' | 'cpu' | number
 }
 
+// --- Eventos SSE da linha do tempo (T-2604, ADR-0023) -------------------------
+// Espelham os frames `event: <nome>\ndata: {...}` de `GET /analise/ia/{job_id}
+// /eventos` (`sidecar/app.py::_rotular_evento`) — o rótulo em pt-BR já vem
+// pronto do backend (REQ-NF-005); o front só exibe, nunca decide.
+
+export interface SseEventoFase {
+  /** Nome do nó do grafo (ou `"retomada"`, evento informativo do T-2604/item
+   * B) — usado só para diferenciar visualmente, nunca exibido cru. */
+  no: string
+  rotulo: string
+}
+
+export interface SseEventoProgresso {
+  n: number
+  /** `>= 2` = conserto dirigido do T-2505 em curso; o `rotulo` já vem neutro
+   * ("refinando a resposta") — a GUI nunca monta "tentativa N" (revisão U3). */
+  tentativa: number
+  rotulo: string
+}
+
+/** Mesmo payload de `IaStatusOut` (sem o `job_id` do topo do frame) — o
+ * stream ENCERRA neste evento. */
+export interface SseEventoTerminal {
+  job_id: string
+  status: 'rodando' | 'pronto' | 'erro'
+  secao: SecaoIaOut | null
+  erro: string
+  aviso_runtime: string | null
+}
+
+export interface SseEventoErroJob {
+  /** Job sumiu (auto-lock/descarte) — nunca é uma falha da análise em si. */
+  erro: string
+}
+
+/** Envelope entregue pelo `electron/main.ts` via IPC push (`hf:sse-evento`) —
+ * o renderer nunca fala com o sidecar diretamente (REQ-SEC-004). `fim` e
+ * `queda` são sintéticos do MAIN (fim normal do stream / queda de rede,
+ * ver `main.ts`), sem espelho no backend. */
+export type SseEventoRecebido =
+  | { jobId: string; evento: 'fase'; dados: SseEventoFase }
+  | { jobId: string; evento: 'progresso'; dados: SseEventoProgresso }
+  | { jobId: string; evento: 'terminal'; dados: SseEventoTerminal }
+  | { jobId: string; evento: 'erro'; dados: SseEventoErroJob }
+  | { jobId: string; evento: 'fim' }
+  | { jobId: string; evento: 'queda' }
+
 // --- Estado de uma chamada assíncrona (para as telas) ------------------------
 
 export type Estado<T> =

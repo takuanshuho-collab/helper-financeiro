@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import CampoMoeda from '../components/CampoMoeda'
 import CampoPercent from '../components/CampoPercent'
 import { hf } from '../hf/client'
 import type {
   AnaliseOut,
+  IaStatusOut,
   OportunidadeOut,
   PerfilIn,
   SecaoIaOut,
+  SseEventoFase,
   UltimaAnaliseOut,
 } from '../hf/contract'
 import type { Analise as AnaliseApp } from '../hf/useAnalise'
@@ -17,6 +19,10 @@ type EstadoIa =
   | { fase: 'ocioso' }
   | { fase: 'rodando' }
   | { fase: 'erro'; msg: string }
+
+/** Payload do evento `terminal` (SSE) e do `GET /analise/ia/{id}` (poll de
+ * fallback) são o MESMO shape — uma função só trata os dois (T-2604). */
+type ResultadoTerminal = Pick<IaStatusOut, 'status' | 'secao' | 'erro' | 'aviso_runtime'>
 
 /**
  * Tela Análise (T-902, REQ-F-015): estratégias e portabilidade recalculadas ao
@@ -50,8 +56,100 @@ export default function Analise({
   // VIVOS (calculada no backend — a GUI só COMPARA strings, REQ-NF-005).
   const [analiseSalva, setAnaliseSalva] = useState<UltimaAnaliseOut | null>(null)
   const [assinaturaAtual, setAssinaturaAtual] = useState('')
+  // Linha do tempo da análise sênior (T-2604, ADR-0023): fases CONCLUÍDAS na
+  // ordem de chegada do SSE (a GUI não conhece a ordem do grafo, só renderiza
+  // o que chega) + o contador de tokens do progresso corrente. `jobIdRef`
+  // guarda o job em curso para o listener global (assinado uma vez, no mount)
+  // filtrar os eventos certos sem reassinar a cada render.
+  const [linhaDoTempo, setLinhaDoTempo] = useState<SseEventoFase[]>([])
+  const [progresso, setProgresso] = useState<{ n: number; rotulo: string } | null>(null)
+  // `true` = o SSE caiu e o polling assumiu (revisão U5): a linha do tempo
+  // congela na última fase visível, sem erro na tela.
+  const [quedaSse, setQuedaSse] = useState(false)
+  const jobIdRef = useRef<string | null>(null)
+  // Espelha `secaoIa` num ref (sem entrar nas deps do efeito de hidratação
+  // abaixo — evitaria refetch em loop a cada `setSecaoIa` que o PRÓPRIO
+  // efeito dispara) só para a checagem de prioridade da correção do T-2602.
+  const secaoIaRef = useRef(secaoIa)
+  useEffect(() => {
+    secaoIaRef.current = secaoIa
+  }, [secaoIa])
 
   const d = analise.diagnostico
+
+  // Aplica o resultado terminal (SSE `terminal` OU poll de fallback) — mesma
+  // regra dos dois caminhos: pronto+seção ⇒ exibe; senão ⇒ erro na tela.
+  function finalizarResultado(r: ResultadoTerminal): void {
+    if (r.status === 'pronto' && r.secao) {
+      setSecaoIa(r.secao)
+      setAvisoRuntime(r.aviso_runtime)
+      setIa({ fase: 'ocioso' })
+    } else {
+      setIa({ fase: 'erro', msg: r.erro || 'falha desconhecida' })
+    }
+  }
+
+  // Fallback gracioso (revisão U5): só entra em ação quando o SSE caiu
+  // (`queda`) — nunca roda em paralelo com o stream ativo (a leitura final do
+  // poll DELETA o job; se o stream ainda estivesse vivo, ele veria `erro` em
+  // vez de `terminal`, conforme a nota da revisão do T-2603).
+  async function pollarStatus(jobId: string): Promise<void> {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1200))
+      try {
+        const st = await hf.analiseIaStatus(jobId)
+        if (st.status === 'rodando') continue
+        finalizarResultado(st)
+      } catch (e) {
+        setIa({ fase: 'erro', msg: e instanceof Error ? e.message : String(e) })
+      }
+      return
+    }
+  }
+
+  // Assina os eventos SSE UMA vez (deps vazias): o handler lê `jobIdRef` (não
+  // estado reativo) para filtrar o job corrente, e só chama setters estáveis
+  // (`useState`/props), então não precisa reassinar a cada render. Cobre
+  // unmount/troca de aba: remove o listener E para o stream do job ativo.
+  useEffect(() => {
+    const remover = hf.onSseEvento((payload) => {
+      if (payload.jobId !== jobIdRef.current) return
+      switch (payload.evento) {
+        case 'fase':
+          setLinhaDoTempo((atual) => [...atual, payload.dados])
+          setProgresso(null) // nova fase começou: o contador da anterior não vale mais
+          break
+        case 'progresso':
+          setProgresso({ n: payload.dados.n, rotulo: payload.dados.rotulo })
+          break
+        case 'terminal':
+          jobIdRef.current = null
+          void hf.sseParar(payload.jobId)
+          finalizarResultado(payload.dados)
+          break
+        case 'erro':
+          // Job sumido/auto-lock (revisão): SEM mensagem de erro alarmante —
+          // o overlay de bloqueio já explica; a tela volta ao estado ocioso.
+          jobIdRef.current = null
+          void hf.sseParar(payload.jobId)
+          setIa({ fase: 'ocioso' })
+          break
+        case 'queda':
+          // U5: preserva a linha do tempo congelada, sem erro na tela — o
+          // polling assume até o resultado.
+          setQuedaSse(true)
+          void pollarStatus(payload.jobId)
+          break
+        case 'fim':
+          break // fim normal do stream (já tratado por terminal/erro acima)
+      }
+    })
+    return () => {
+      remover()
+      if (jobIdRef.current) void hf.sseParar(jobIdRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Hidrata a última análise salva ao montar e sempre que perfil/extra mudarem
   // (mesmo padrão de debounce do `pacote` acima) — nunca enquanto uma geração
@@ -75,8 +173,12 @@ export default function Analise({
             // A seção exibida (se houver) referia-se aos dados ANTERIORES —
             // some daqui para o bloco esmaecido assumir (`analiseSalva` com
             // assinatura divergente), em vez de continuar exibida como se
-            // ainda valesse para os dados vivos atuais.
-            setSecaoIa(null)
+            // ainda valesse para os dados vivos atuais. CORREÇÃO (revisão do
+            // T-2602, aplicada no T-2604): se a seção CORRENTE é degradada, o
+            // aviso de degradação tem PRIORIDADE sobre o bloco esmaecido — o
+            // refetch não pode engolir a mensagem que acabou de aparecer.
+            const atual = secaoIaRef.current
+            if (!atual || atual.modo === 'completo') setSecaoIa(null)
           }
         })
         .catch(() => {
@@ -109,26 +211,23 @@ export default function Analise({
     }
   }, [perfil, extra, alvo])
 
+  // Dispara o job e abre o SSE — SEM polling em paralelo (nota da revisão do
+  // T-2603: a leitura-final do poll DELETA o job; se o stream ainda estivesse
+  // vivo ele veria `erro` em vez de `terminal`). O polling só entra pelo
+  // evento `queda` (fallback gracioso, U5).
   async function gerarIa() {
     setIa({ fase: 'rodando' })
     setSecaoIa(null)
     setAvisoRuntime(null)
+    setLinhaDoTempo([])
+    setProgresso(null)
+    setQuedaSse(false)
     try {
       const { job_id } = await hf.analiseIaIniciar(perfil, extra)
-      for (;;) {
-        await new Promise((r) => setTimeout(r, 1200))
-        const st = await hf.analiseIaStatus(job_id)
-        if (st.status === 'rodando') continue
-        if (st.status === 'pronto' && st.secao) {
-          setSecaoIa(st.secao)
-          setAvisoRuntime(st.aviso_runtime)
-          setIa({ fase: 'ocioso' })
-        } else {
-          setIa({ fase: 'erro', msg: st.erro || 'falha desconhecida' })
-        }
-        return
-      }
+      jobIdRef.current = job_id
+      await hf.sseIniciar(job_id)
     } catch (e) {
+      jobIdRef.current = null
       setIa({ fase: 'erro', msg: e instanceof Error ? e.message : String(e) })
     }
   }
@@ -344,11 +443,7 @@ export default function Analise({
         </div>
 
         {ia.fase === 'rodando' && (
-          <div className="ia-status">
-            <span className="spinner" aria-hidden="true" />
-            Consultando o modelo local — os fatos vão anonimizados (CREDOR_n) e os
-            números continuam vindo do núcleo determinístico.
-          </div>
+          <LinhaDoTempoIa linhaDoTempo={linhaDoTempo} progresso={progresso} congelada={quedaSse} />
         )}
         {ia.fase === 'erro' && (
           <div className="aviso-erro">Erro ao gerar a análise: {ia.msg}</div>
@@ -405,6 +500,59 @@ export default function Analise({
         </span>
       </div>
     </>
+  )
+}
+
+/**
+ * Linha do tempo da análise sênior (T-2604, ADR-0023): substitui o spinner
+ * mudo. Fases CONCLUÍDAS (✓) na ordem de chegada do SSE + um item ATIVO
+ * pulsando com o rótulo corrente — durante o silêncio entre fases mostra o
+ * último `progresso` recebido ("o modelo está escrevendo… N tokens"); sem
+ * progresso ainda, "processando" (REQ-NF-005: os rótulos só vêm do backend).
+ * O evento `retomada` (informativo, revisão U1) ganha destaque visual (ℹ em
+ * vez de ✓). `congelada` (U5): o SSE caiu e o polling assumiu — o pulso para,
+ * sem nenhuma mensagem de erro.
+ */
+function LinhaDoTempoIa({
+  linhaDoTempo,
+  progresso,
+  congelada,
+}: {
+  linhaDoTempo: SseEventoFase[]
+  progresso: { n: number; rotulo: string } | null
+  congelada: boolean
+}) {
+  return (
+    <div className="ia-timeline-wrap">
+      <p className="sub ia-timeline-legenda">
+        Consultando o modelo local — os fatos vão anonimizados (CREDOR_n) e os
+        números continuam vindo do núcleo determinístico.
+      </p>
+      <ul className="ia-timeline" aria-label="Progresso da análise sênior">
+        {linhaDoTempo.map((f, i) => (
+          <li
+            key={`${f.no}-${i}`}
+            className={
+              f.no === 'retomada' ? 'ia-timeline-item ia-timeline-retomada' : 'ia-timeline-item'
+            }
+          >
+            <span className="ia-timeline-marca" aria-hidden="true">
+              {f.no === 'retomada' ? 'ℹ' : '✓'}
+            </span>
+            {f.rotulo}
+          </li>
+        ))}
+        <li className="ia-timeline-item ia-timeline-ativa" aria-current="step">
+          <span
+            className={
+              congelada ? 'ia-timeline-pulso ia-timeline-pulso-pausado' : 'ia-timeline-pulso'
+            }
+            aria-hidden="true"
+          />
+          {progresso ? `${progresso.rotulo}… ${progresso.n} tokens` : 'processando'}
+        </li>
+      </ul>
+    </div>
   )
 }
 

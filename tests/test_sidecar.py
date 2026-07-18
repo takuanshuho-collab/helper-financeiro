@@ -966,6 +966,17 @@ def test_rotulos_cobrem_os_nos_do_grafo():
     assert not faltando, f"nós sem rótulo: {faltando}"
 
 
+def test_sse_retomada_vira_fase_informativa():
+    """T-2604 (ADR-0023, item B/revisão U1): o evento cru `retomada` do grafo
+    vira um evento SSE `fase` com rótulo em linguagem clara — a GUI não
+    recebe um `no` cru sem explicação."""
+    from sidecar import app as app_mod
+
+    evento, payload = app_mod._rotular_evento("retomada", {})
+    assert evento == "fase"
+    assert payload == {"no": "retomada", "rotulo": "retomando a análise interrompida"}
+
+
 def test_sse_progresso_com_tentativa_2_e_refinando():
     """Progresso com `tentativa >= 2` (fallback/conserto do T-2505) vira o rótulo
     neutro 'refinando a resposta' — NUNCA expõe o retry como falha (revisão U3)."""

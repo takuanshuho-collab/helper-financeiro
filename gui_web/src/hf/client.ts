@@ -38,6 +38,7 @@ import type {
   RubricaNovaIn,
   SaudeOut,
   SecaoIaOut,
+  SseEventoRecebido,
 } from './contract'
 
 export class HfErro extends Error {
@@ -171,6 +172,15 @@ export const hf = {
     chamar('/analise/ia', { perfil, extra }),
   analiseIaStatus: (jobId: string): Promise<IaStatusOut> =>
     chamar(`/analise/ia/${jobId}`),
+  /** Linha do tempo (T-2604, ADR-0023): abre o SSE no main (token não passa
+   * pelo renderer); os frames chegam por `onSseEvento`. */
+  sseIniciar: (jobId: string): Promise<void> => ponte().sseIniciar(jobId),
+  /** Aborta a leitura do stream — unmount/troca de aba/nova geração. */
+  sseParar: (jobId: string): Promise<void> => ponte().sseParar(jobId),
+  /** Assina os eventos de TODOS os jobs SSE em curso; a tela filtra pelo
+   * `jobId` que ela mesma disparou. Devolve a função de remoção. */
+  onSseEvento: (cb: (payload: SseEventoRecebido) => void): (() => void) =>
+    ponte().onSseEvento(cb),
   /** Hidratação da última análise sênior salva (T-2602, ADR-0023). POST (não
    * GET, desvio deliberado): o backend precisa do perfil+extra VIVOS no corpo
    * para calcular `assinatura_atual` sem a GUI reimplementar o cálculo

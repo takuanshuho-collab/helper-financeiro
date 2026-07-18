@@ -628,6 +628,11 @@ def executar_analise(fatos: FatosFinanceiros, mapa: MapaAnonimizacao,
     entrada: EstadoAnalise | None = entrada_fresca
     if retomar:
         entrada = _entrada_da_retomada(grafo, config, tid, entrada_fresca)
+        if entrada is None and ao_evento is not None:
+            # T-2604 (ADR-0023): retomada REAL (thread inacabado) ⇒ avisa a
+            # GUI ANTES do stream, para a linha do tempo explicar em
+            # linguagem clara (revisão U1) — nunca um rótulo cru surpresa.
+            ao_evento("retomada", {})
     contexto = ContextoAnalise(cfg=cfg, mapa=mapa, provider=provider,
                                emitir_progresso=ao_evento is not None)
     if ao_evento is None:
